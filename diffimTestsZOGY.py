@@ -36,6 +36,7 @@ def gaussian2d(grid, m=None, s=None):
     var = scipy.stats.multivariate_normal(mean=m, cov=cov)
     return var.pdf(grid)
 
+display = False
 #g1 = gaussian2d(grid) + gaussian2d(grid, [5,5], [3,1])
 #plt.imshow(g1)
 
@@ -78,15 +79,16 @@ for i in range(n_sources):
         im2 += (fluxes[i]/50.) * gaussian2d(imgrid, m=[xposns[i]+offset,yposns[i]+offset], s=[psf2, psf2*1.5])
 
 from mpl_toolkits.axes_grid1 import ImageGrid
-fig = plt.figure(1, (9, 3))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 3), axes_pad=0.0, share_all=True, label_mode="L",
-                    cbar_location="top", cbar_mode="single")
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[1].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[2].imshow((im2-im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-10,10))
-igrid.cbar_axes[0].colorbar(gim)
+if display:
+    fig = plt.figure(1, (9, 3))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 3), axes_pad=0.0, share_all=True, label_mode="L",
+                        cbar_location="top", cbar_mode="single")
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[1].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[2].imshow((im2-im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-10,10))
+    igrid.cbar_axes[0].colorbar(gim)
 print scipy.stats.describe(im2 - im1, axis=None)
 
 
@@ -110,14 +112,15 @@ im1_ft = fft2(im1)
 im2_ft = fft2(im2)
 
 # Just a sanity check:
-fig = plt.figure(1, (8, 4))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.0, share_all=True, label_mode="L",
-                    cbar_location="top", cbar_mode="single")
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[1].imshow(ifft2(im1_ft).real[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid.cbar_axes[0].colorbar(gim)
+if display:
+    fig = plt.figure(1, (8, 4))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.0, share_all=True, label_mode="L",
+                        cbar_location="top", cbar_mode="single")
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[1].imshow(ifft2(im1_ft).real[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid.cbar_axes[0].colorbar(gim)
 print scipy.stats.describe(im1, axis=None)
 print scipy.stats.describe(ifft2(im1_ft).real, axis=None)
 
@@ -145,7 +148,8 @@ d_hat = d_hat_numerator / d_hat_denom
 
 d = ifft2(d_hat)
 D = np.fft.ifftshift(d.real)
-plt.imshow(D[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-4, 4))
+if display:
+    plt.imshow(D[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-4, 4))
 print scipy.stats.describe(D, axis=None)
 
 
@@ -174,7 +178,8 @@ P_d = ifft2(P_d_hat)
 P_D = np.fft.ifftshift(P_d.real)
 extent = (x0im.min()+240, x0im.max()-240, y0im.min()+240, y0im.max()-240)
 x1p, x2p, y1p, y2p = 240, 511-240, 240, 511-240   # limits for display
-plt.imshow(P_D[x1p:x2p,y1p:y2p], origin='lower', interpolation='none', cmap='gray', extent=extent) #, clim=(0, 0.67))
+if display:
+    plt.imshow(P_D[x1p:x2p,y1p:y2p], origin='lower', interpolation='none', cmap='gray', extent=extent) #, clim=(0, 0.67))
 print scipy.stats.describe(P_D, axis=None)
 
 

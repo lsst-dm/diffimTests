@@ -13,6 +13,7 @@ matplotlib.style.use('ggplot')
 import pandas as pd
 from mpl_toolkits.axes_grid1 import ImageGrid
 
+display = False
 
 # In[2]:
 
@@ -241,15 +242,16 @@ print scipy.stats.describe(im2 - im1, axis=None)
 
 # In[12]:
 
-fig = plt.figure(1, (9, 3))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 3), axes_pad=0.0, share_all=True, label_mode="L",
-                    cbar_location="top", cbar_mode="single")
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-0.1,1000))
-igrid[1].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(im2background-0.1,im2background+1000))
-igrid[2].imshow((im2-im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(im2background-1,im2background+1))
-igrid.cbar_axes[0].colorbar(gim)
+if display:
+    fig = plt.figure(1, (9, 3))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 3), axes_pad=0.0, share_all=True, label_mode="L",
+                        cbar_location="top", cbar_mode="single")
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-0.1,1000))
+    igrid[1].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(im2background-0.1,im2background+1000))
+    igrid[2].imshow((im2-im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(im2background-1,im2background+1))
+    igrid.cbar_axes[0].colorbar(gim)
 
 
 # Convolve im1 (template) with the basis functions, and make these the *new* bases.
@@ -316,14 +318,15 @@ if spatialKernelOrder > 0:
     #basis2m = [b * cheb2d(x0im, y0im, ord=[spatialInds[0][i], spatialInds[1][i]], verbose=False) for i in range(1,len(spatialInds[0])) for b in basis2]
     print len(basis2), len(spatialBasis)
 
-fig = plt.figure(1, (12, 4))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0, share_all=True, label_mode="L",
-                    cbar_location="top", cbar_mode="single")
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(basis2[0][x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
-if spatialBasis is not None:
-    igrid[1].imshow((spatialBasis[64][0]*spatialBasis[64][1])[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
+if display:
+    fig = plt.figure(1, (12, 4))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0, share_all=True, label_mode="L",
+                        cbar_location="top", cbar_mode="single")
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(basis2[0][x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
+    if spatialBasis is not None:
+        igrid[1].imshow((spatialBasis[64][0]*spatialBasis[64][1])[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
 
 spatialBgInds = get_valid_inds(spatialBackgroundOrder)
 print spatialBgInds
@@ -333,18 +336,20 @@ if spatialBackgroundOrder > 0:
     bgBasis = [cheb2d(x0im, y0im, ord=[spatialBgInds[0][i], spatialBgInds[1][i]], verbose=False) for i in range(len(spatialBgInds[0]))]
     print len(bgBasis), bgBasis[0].mean()
 
-igrid[2].imshow(bgBasis[5][x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
-if spatialBasis is not None:
-    igrid[3].imshow(spatialBasis[0][0][x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
+if display:
+    igrid[2].imshow(bgBasis[5][x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
+    if spatialBasis is not None:
+        igrid[3].imshow(spatialBasis[0][0][x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
 
-fig = plt.figure(1, (22., 22.))
-igrid = ImageGrid(fig, 111,  # similar to subplot(111)
-                    nrows_ncols=(9, 9), axes_pad=0.0,
-                    share_all=True, label_mode="L")
-extent = (x0im.min()+200, x0im.max()-200, y0im.min()+200, y0im.max()-200)
-x1d, x2d, y1d, y2d = 200, 512-200, 200, 512-200   # limits for display
-for i in range(81):
-    gim = igrid[i].imshow((spatialBasis[i][0]*spatialBasis[i][1])[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
+    fig = plt.figure(1, (22., 22.))
+    igrid = ImageGrid(fig, 111,  # similar to subplot(111)
+                        nrows_ncols=(9, 9), axes_pad=0.0,
+                        share_all=True, label_mode="L")
+    extent = (x0im.min()+200, x0im.max()-200, y0im.min()+200, y0im.max()-200)
+    x1d, x2d, y1d, y2d = 200, 512-200, 200, 512-200   # limits for display
+    for i in range(81):
+        gim = igrid[i].imshow((spatialBasis[i][0]*spatialBasis[i][1])[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', extent=extent)
+
 # In[15]:
 
 # Collect the bases into a single matrix
@@ -395,15 +400,16 @@ fit = (pars * basis2a).sum(1).reshape(im2.shape)
 print resid, np.sum((im2 - fit.reshape(im2.shape))**2), np.sum((im2 - im1)**2)
 #print basis2a.shape, fit.shape
 
-fig = plt.figure(1, (12, 3))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[1].imshow(fit[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[3].imshow((im2 - fit)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1))
-#igrid.cbar_axes[0].colorbar(gim)
+if display:
+    fig = plt.figure(1, (12, 3))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[1].imshow(fit[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[3].imshow((im2 - fit)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1))
+    #igrid.cbar_axes[0].colorbar(gim)
 print scipy.stats.describe(im2 - fit, axis=None)
 
 
@@ -434,14 +440,15 @@ plt.colorbar()
 # In[18]:
 
 conv_im1 = scipy.ndimage.filters.convolve(im1, kfit, mode='constant')
-fig = plt.figure(1, (12, 3))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # original template (red)
-igrid[1].imshow(conv_im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # convolved template (blue)
-igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # science image (dotted, purple)
-igrid[3].imshow((im2 - conv_im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(im2background-1,im2background+1)) # diffim (grey)
+if display:
+    fig = plt.figure(1, (12, 3))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # original template (red)
+    igrid[1].imshow(conv_im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # convolved template (blue)
+    igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # science image (dotted, purple)
+    igrid[3].imshow((im2 - conv_im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(im2background-1,im2background+1)) # diffim (grey)
 print scipy.stats.describe(im2 - conv_im1, axis=None)
 
 
@@ -465,15 +472,16 @@ fit2 = (pars2 * basis2a).sum(1).reshape(im1.shape)
 #print basis2a.shape, fit2.shape
 print resid, np.sum((im2 - fit.reshape(im2.shape))**2), np.sum((im2 - im1)**2)
 
-fig = plt.figure(1, (12, 3))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[1].imshow(fit2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
-igrid[3].imshow((im2 - fit2)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1))
-#igrid.cbar_axes[0].colorbar(gim)
+if display:
+    fig = plt.figure(1, (12, 3))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[1].imshow(fit2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent)
+    igrid[3].imshow((im2 - fit2)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1))
+    #igrid.cbar_axes[0].colorbar(gim)
 print scipy.stats.describe(im2 - fit2, axis=None)
 
 
@@ -502,14 +510,15 @@ print conv_im1.shape, conv_im1.min(), conv_im1.max()
 print scipy.stats.describe((im2 - im1)**2, axis=None)
 print scipy.stats.describe((im2 - conv_im1)**2, axis=None)
 
-fig = plt.figure(1, (12, 3))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # original template (red)
-igrid[1].imshow(conv_im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # convolved template (blue)
-igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # science image (dotted, purple)
-igrid[3].imshow((im2 - conv_im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(9,11)) # diffim (grey)
+if display:
+    fig = plt.figure(1, (12, 3))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 4), axes_pad=0.0)
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # original template (red)
+    igrid[1].imshow(conv_im1[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # convolved template (blue)
+    igrid[2].imshow(im2[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent) # science image (dotted, purple)
+    igrid[3].imshow((im2 - conv_im1)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(9,11)) # diffim (grey)
 print scipy.stats.describe(im2 - conv_im1, axis=None)
 
 
@@ -581,12 +590,13 @@ print pck.sum(), pck.max(), pck.min()
 #pck /= pck.sum()
 pci = scipy.ndimage.filters.convolve(im2-fit2, pck, mode='constant')
 
-fig = plt.figure(1, (8, 4))
-igrid = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.0)
-extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
-x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
-gim = igrid[0].imshow(pci[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1)) # corrected diffim
-igrid[1].imshow((im2 - fit2)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1)) # original diffim
+if display:
+    fig = plt.figure(1, (8, 4))
+    igrid = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.0)
+    extent = (x0im.min()+150, x0im.max()-150, y0im.min()+150, y0im.max()-150)
+    x1d, x2d, y1d, y2d = 150, 512-150, 150, 512-150   # limits for display
+    gim = igrid[0].imshow(pci[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1)) # corrected diffim
+    igrid[1].imshow((im2 - fit2)[x1d:x2d,y1d:y2d], origin='lower', interpolation='none', cmap='gray', extent=extent, clim=(-1,1)) # original diffim
 print scipy.stats.describe(pci, axis=None)
 print scipy.stats.describe(im2 - conv_im1, axis=None)
 
@@ -601,8 +611,9 @@ _, low, upp = scipy.stats.sigmaclip([pci, im2-fit2])
 print low, upp
 tmp1a = pci[(pci>low) & (pci<upp) & (im2-fit2>low) & (im2-fit2<upp)]
 tmp2a = (im2-fit2)[(pci>low) & (pci<upp) & (im2-fit2>low) & (im2-fit2<upp)]
-df = pd.DataFrame({'corr': tmp1a.flatten(), 'orig': tmp2a.flatten()})
-df.plot.hist(alpha=0.5, bins=200)
+if display:
+    df = pd.DataFrame({'corr': tmp1a.flatten(), 'orig': tmp2a.flatten()})
+    df.plot.hist(alpha=0.5, bins=200)
 
 print 'Corrected:', np.mean(tmp1a), np.std(tmp1a)
 print 'Original: ', np.mean(tmp2a), np.std(tmp2a)
@@ -663,8 +674,9 @@ _, low, upp = scipy.stats.sigmaclip([tmp1, tmp2])
 print low, upp
 tmp1a = tmp1[(tmp1>low) & (tmp1<upp) & (tmp2>low) & (tmp2<upp)]
 tmp2a = tmp2[(tmp1>low) & (tmp1<upp) & (tmp2>low) & (tmp2<upp)]
-df = pd.DataFrame({'corr': tmp1a.flatten(), 'orig': tmp2a.flatten()})
-df.plot.hist(alpha=0.5, bins=200)
+if display:
+    df = pd.DataFrame({'corr': tmp1a.flatten(), 'orig': tmp2a.flatten()})
+    df.plot.hist(alpha=0.5, bins=200)
 
 print tmp1.std()*5., tmp2.std()*5.
 print np.sum(np.abs(tmp1) > tmp1.std()*5.), np.sum(np.abs(tmp2) > tmp2.std()*5.)
@@ -688,21 +700,22 @@ if len(det2) > 0:
 else:
     print '2:', len(det2)
 
-xaxs = np.linspace(df.min()[0], df.max()[0])
-#plt.plot(xaxs, 200*gaussian(xaxs, s=tmp1a.std()), color='r')
-#plt.plot(xaxs, 200*gaussian(xaxs, s=tmp2a.std()), color='b')
-plt.plot(tmp1a.mean()+np.repeat(tmp1a.std()*5., 2), [-0, 5000], color='r')
-plt.plot(tmp1a.mean()-np.repeat(tmp1a.std()*5., 2), [-0, 5000], color='r')
-plt.plot(tmp2a.mean()+np.repeat(tmp2a.std()*5., 2), [-0, 5000], color='b')
-plt.plot(tmp2a.mean()-np.repeat(tmp2a.std()*5., 2), [-0, 5000], color='b')
+if display:
+    xaxs = np.linspace(df.min()[0], df.max()[0])
+    #plt.plot(xaxs, 200*gaussian(xaxs, s=tmp1a.std()), color='r')
+    #plt.plot(xaxs, 200*gaussian(xaxs, s=tmp2a.std()), color='b')
+    plt.plot(tmp1a.mean()+np.repeat(tmp1a.std()*5., 2), [-0, 5000], color='r')
+    plt.plot(tmp1a.mean()-np.repeat(tmp1a.std()*5., 2), [-0, 5000], color='r')
+    plt.plot(tmp2a.mean()+np.repeat(tmp2a.std()*5., 2), [-0, 5000], color='b')
+    plt.plot(tmp2a.mean()-np.repeat(tmp2a.std()*5., 2), [-0, 5000], color='b')
 
-# plt.plot(xim, tmp1)  # red - corrected
-# plt.plot(det1, np.repeat(tmp1.max(), len(det1)), '|', color='r')
-# plt.plot([xim.min(), xim.max()], np.repeat(tmp1a.std()*5., 2), color='r')
-# plt.plot(xim, tmp2)  # blue - original
-# plt.plot(det2, np.repeat(tmp2.max(), len(det2)), '|', color='b')
-# plt.plot([xim.min(), xim.max()], np.repeat(tmp2a.std()*5., 2), color='b')
-# plt.xlim(xcen-200, xcen+200)
+    # plt.plot(xim, tmp1)  # red - corrected
+    # plt.plot(det1, np.repeat(tmp1.max(), len(det1)), '|', color='r')
+    # plt.plot([xim.min(), xim.max()], np.repeat(tmp1a.std()*5., 2), color='r')
+    # plt.plot(xim, tmp2)  # blue - original
+    # plt.plot(det2, np.repeat(tmp2.max(), len(det2)), '|', color='b')
+    # plt.plot([xim.min(), xim.max()], np.repeat(tmp2a.std()*5., 2), color='b')
+    # plt.xlim(xcen-200, xcen+200)
 # Dump the results for comparison with constant-PSF results L(ZOGY) from notebook #11 and ZOGY from notebook #12.
 
 # In[29]:
