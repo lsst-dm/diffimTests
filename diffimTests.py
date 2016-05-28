@@ -226,26 +226,29 @@ def makeSpatialBases(im1, basis, basis2, spatialKernelOrder=2, spatialBackground
 
 # Collect the bases into a single matrix
 # ITMT, let's make sure all the bases are on a reasonable scale.
-def collectAllBases(basis2, spatialBasis, bgBasis):
+def collectAllBases(basis2, spatialBasis, bgBasis, verbose=False):
 
     basis2a = np.vstack([b.flatten() for b in basis2]).T
 
     constKernelIndices = np.arange(0, basis2a.shape[1])
-    print constKernelIndices
+    if verbose:
+        print constKernelIndices
 
     nonConstKernelIndices = None
     if spatialBasis is not None:
         b1 = np.vstack([(b[0]*b[1]).flatten() for b in spatialBasis]).T
         nonConstKernelIndices = np.arange(basis2a.shape[1], basis2a.shape[1]+b1.shape[1])
         basis2a = np.hstack([basis2a, b1])
-        print nonConstKernelIndices
+        if verbose:
+            print nonConstKernelIndices
 
     bgIndices = None
     if bgBasis is not None:
         b1 = np.vstack([b.flatten() for b in bgBasis]).T
         bgIndices = np.arange(basis2a.shape[1], basis2a.shape[1]+b1.shape[1])
         basis2a = np.hstack([basis2a, b1])
-        print bgIndices
+        if verbose:
+            print bgIndices
 
     # Rescale the bases so that the "standard" A&L linear fit will work (i.e. when squared, not too large!)
     basisOffset = 0.  # basis2a.mean(0) + 0.1
@@ -303,11 +306,47 @@ def getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices, 
     kfit /= kfit.sum()  # this is necessary if the variable source changes a lot - prevent the kernel from incorporating that change in flux
     return kfit
 
+
+# Compute the "L(ZOGY)" post-conv. kernel from kfit
+
+# Note unlike previous notebooks, here because the PSF is varying,
+# we'll just use `fit2` rather than `im2-conv_im1` as the diffim,
+# since `fit2` already incorporates the spatially varying PSF.
+# sig1 and sig2 are the same as those input to makeFakeImages().
+
+def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
+    from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
+
+    def kernel_ft2(kernel):
+        FFT = fft2(kernel)
+        return FFT
+    def post_conv_kernel_ft2(kernel, sig1=1., sig2=1.):
+        kft = kernel_ft2(kernel)
+        return np.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kft**2))
+    def post_conv_kernel2(kernel, sig1=1., sig2=1.):
+        kft = post_conv_kernel_ft2(kernel, sig1, sig2)
+        out = ifft2(kft)
+        return out
+
+    pck = post_conv_kernel2(kappa, sig1=sig2, sig2=sig1)
+    pck = np.fft.ifftshift(pck.real)
+    #print np.unravel_index(np.argmax(pck), pck.shape)
+
+    # I think we actually need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers... let's try it.
+    # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
+    if False:
+        # I still think we need to flip it in one axis (TBD: figure this out!)
+        pck = pck[::-1,:]
+
+    return pck
+
+
 def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
-                       spatialKernelOrder=2, spatialBackgroundOrder=2, verbose=False):
+                       spatialKernelOrder=2, spatialBackgroundOrder=2, doALZCcorrection=True,
+                       sig1=None, sig2=None, verbose=False):
     x = np.arange(-16, 16, 1)
     y = x.copy()
-    y0, x0 = np.meshgrid(x, y)
+    x0, y0 = np.meshgrid(x, y)
 
     basis = getALChebGaussBases(x0, y0, verbose=verbose)
     basis2 = makeImageBases(im1, basis)
@@ -322,4 +361,52 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
     kfit = getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices,
                                spatialBasis, basisScale, basisOffset, xcen=xcen, ycen=ycen,
                                verbose=verbose)
-    return im2-fit, kfit
+    diffim = im2 - fit
+    if doALZCcorrection:
+        import scipy
+        if sig1 is None:
+            _, low, upp = scipy.stats.sigmaclip(im1, low=3, high=3)
+            tmp = im1[(im1>low) & (im1<upp)]
+            sig1 = np.nanstd(tmp)
+        if sig2 is None:
+            _, low, upp = scipy.stats.sigmaclip(im2, low=3, high=3)
+            tmp = im2[(im2>low) & (im2<upp)]
+            sig2 = np.nanstd(tmp)
+
+        print sig1, sig2
+        pck = computeCorrectionKernelALZC(kfit, sig1, sig2)
+        pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
+        diffim = pci
+
+    return diffim, kfit
+
+# Compute the (corrected) diffim's new PSF
+# post_conv_psf = phi_1(k) * sym.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kappa_ft(k)**2))
+# we'll parameterize phi_1(k) as a gaussian with sigma "psfsig1".
+# psf2 is the sigma of the psf of im2 (default is 2.2)
+
+def computeCorrectedDiffimPsfALZC(kappa, psf2=2.2, sig1=0.2, sig2=0.2):
+    from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
+
+    def kernel_ft2(kernel):
+        FFT = fft2(kernel)
+        return FFT
+    def post_conv_psf_ft2(psf, kernel, sig1=1., sig2=1.):
+        psf_ft = kernel_ft2(psf)
+        kft = kernel_ft2(kernel)
+        out = psf_ft * np.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kft**2))
+        return out
+    def post_conv_psf(psf, kernel, sig1=1., sig2=1.):
+        kft = post_conv_psf_ft2(psf, kernel, sig1, sig2)
+        out = ifft2(kft)
+        return out
+
+    # First compute the science image's (im2's) psf -- easy since we parameterized it above when we made the image
+    x = np.arange(-16, 16, 1)
+    y = x.copy()
+    x0, y0 = np.meshgrid(x, y)
+    im2_psf = singleGaussian2d(x0, y0, 0, 0, psf2, psf2*1.5)
+
+    pcf = post_conv_psf(psf=im2_psf, kernel=kappa, sig1=sig2, sig2=sig1)
+    pcf = pcf.real / pcf.real.sum()
+    return pcf
