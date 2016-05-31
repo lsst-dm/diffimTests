@@ -66,10 +66,13 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
     # psf1 = 1.6 # sigma in pixels im1 will be template
     # psf2 = 2.2 # sigma in pixels im2 will be science image. make the psf in this image slighly offset and elongated
     psf1 = [1.6, 1.6] if psf1 is None else psf1
+    print 'Template PSF:', psf1, theta1
     psf2 = [1.8, 2.2] if psf2 is None else psf2
+    print 'Science PSF:', psf2, theta2
     print np.sqrt(psf2[0]**2 - psf1[1]**2)
     # offset = 0.2  # astrometric offset (pixels) between the two images
     offset = [0.2, 0.2] if offset is None else offset
+    print 'Offset:', offset
 
     xim = np.arange(-256, 256, 1) if xim is None else xim
     yim = xim.copy() if yim is None else yim
@@ -86,6 +89,7 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
     im2 = np.random.normal(scale=sig2, size=x0im.shape)  # sigma of science image
 
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()  # variation in y-width of psf in science image across (x-dim of) image
+    print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
 
     for i in range(n_sources):
@@ -100,6 +104,7 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
 
     # Add a (constant, for now) background offset to im2
     if im2background != 0.:  # im2background = 10.
+        print 'Background:', im2background
         im2 += im2background
 
     im1_psf = singleGaussian2d(x0im, y0im, 0, 0, psf1[0], psf1[1], theta=theta1)
@@ -468,3 +473,27 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
     D = ifftshift(d.real)
     return D
 
+
+def computePixelCovariance(diffim):
+    diffim = diffim/diffim.std()
+    shifted_imgs = [
+        diffim,
+        np.roll(diffim, 1, 0), np.roll(diffim, -1, 0), np.roll(diffim, 1, 1), np.roll(diffim, -1, 1),
+        np.roll(np.roll(diffim, 1, 0), 1, 1), np.roll(np.roll(diffim, 1, 0), -1, 1),
+        np.roll(np.roll(diffim, -1, 0), 1, 1), np.roll(np.roll(diffim, -1, 0), -1, 1),
+        np.roll(diffim, 2, 0), np.roll(diffim, -2, 0), np.roll(diffim, 2, 1), np.roll(diffim, -2, 1),
+        np.roll(diffim, 3, 0), np.roll(diffim, -3, 0), np.roll(diffim, 3, 1), np.roll(diffim, -3, 1),
+        np.roll(diffim, 4, 0), np.roll(diffim, -4, 0), np.roll(diffim, 4, 1), np.roll(diffim, -4, 1),
+        np.roll(diffim, 5, 0), np.roll(diffim, -5, 0), np.roll(diffim, 5, 1), np.roll(diffim, -5, 1),
+    ]
+    shifted_imgs = np.vstack([i.flatten() for i in shifted_imgs])
+    out = np.corrcoef(shifted_imgs)
+    out = np.cov(shifted_imgs, bias=1)
+    tmp2 = out.copy()
+    np.fill_diagonal(tmp2, np.NaN)
+    print np.nansum(tmp2)/np.sum(np.diag(out))  ## print sum of off-diag / sum of diag
+    #np.fill_diagonal(out, np.NaN)
+    #inds = np.argsort(out[0,:])[::-1]  # sort (decreasing) by cov with center pixel
+    #np.fill_diagonal(out, 0)
+    #inds = np.argsort(out.sum(0))[::-1]
+    return out#[inds, :][:, inds]
