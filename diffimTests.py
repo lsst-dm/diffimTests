@@ -2,24 +2,45 @@ import numpy as np
 import scipy
 
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
-                  cmap='gray', imScale=2.):
+                  cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r','y']):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
     from mpl_toolkits.axes_grid1 import ImageGrid
+
+    def add_inner_title(ax, title, loc, size=None, **kwargs):
+        from matplotlib.offsetbox import AnchoredText
+        from matplotlib.patheffects import withStroke
+        if size is None:
+            size = dict(size=plt.rcParams['legend.fontsize'], color=titlecol[0])
+        at = AnchoredText(title, loc=loc, prop=size,
+                          pad=0., borderpad=0.5,
+                          frameon=False, **kwargs)
+        ax.add_artist(at)
+        at.txt._text.set_path_effects([withStroke(foreground=titlecol[1], linewidth=3)])
+        return at
+
     tmp = np.sqrt(len(images))
     nrows_ncols = (np.int(np.floor(tmp)), np.int(np.ceil(len(images)/np.int(np.floor(tmp))))) if nrows_ncols is None else nrows_ncols
     size = (nrows_ncols[1]*imScale, nrows_ncols[0]*imScale)
     fig = plt.figure(1, size)
     igrid = ImageGrid(fig, 111,  # similar to subplot(111)
-                      nrows_ncols=nrows_ncols,  # creates 2x2 grid of axes
+                      nrows_ncols=nrows_ncols, direction='row',  # creates 2x2 grid of axes
                       axes_pad=0.1,  # pad between axes in inch.
-                      #share_all=True,
-                      label_mode="L",
-                      cbar_location="top") #, cbar_mode="single")
+                      label_mode="L",  # share_all=True,
+                      cbar_location="right", cbar_mode="single", cbar_size='7%')
     for i in range(len(images)):
-        igrid[i].imshow(images[i], origin='lower', interpolation=interpolation, cmap=cmap,
+        ii = images[i]
+        if cbar and clim is not None:
+            ii = np.clip(ii, clim[0], clim[1])
+        im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
                         extent=extent, clim=clim)
+        if cbar:
+            igrid[i].cax.colorbar(im)
+        if titles is not None:  # assume titles is an array or tuple of same length as images.
+            t = add_inner_title(igrid[i], titles[i], loc=2)
+            t.patch.set_ec("none")
+            t.patch.set_alpha(0.5)
     return igrid
 
 def gaussian2d(grid, m=None, s=None):
