@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
                   cmap='gray', imScale=2.):
@@ -57,10 +58,18 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 # overfitting -- perhaps to the source itself). This might be fixed by
 # adding more constant sources.
 
-def makeFakeImages(xim=None, yim=None, n_sources=500, sig1=0.2, sig2=0.2, psf1=1.6, psf2=2.2, offset=0.2,
-                   psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=45., im2background=10.,
-                   seed=66):
+def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None, offset=None,
+                   psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
+                   n_sources=500, seed=66):
     np.random.seed(seed)
+
+    # psf1 = 1.6 # sigma in pixels im1 will be template
+    # psf2 = 2.2 # sigma in pixels im2 will be science image. make the psf in this image slighly offset and elongated
+    psf1 = [1.6, 1.6] if psf1 is None else psf1
+    psf2 = [1.8, 2.2] if psf2 is None else psf2
+    print np.sqrt(psf2[0]**2 - psf1[1]**2)
+    # offset = 0.2  # astrometric offset (pixels) between the two images
+    offset = [0.2, 0.2] if offset is None else offset
 
     xim = np.arange(-256, 256, 1) if xim is None else xim
     yim = xim.copy() if yim is None else yim
@@ -73,30 +82,29 @@ def makeFakeImages(xim=None, yim=None, n_sources=500, sig1=0.2, sig2=0.2, psf1=1
     ind = np.argmin(xposns**2. + yposns**2.)
     #print ind, xposns[ind], yposns[ind]
 
-    #sig1 = 0.2  # sigma of template
-    #sig2 = 0.2  # sigma of science image
-    im1 = np.random.normal(scale=sig1, size=x0im.shape)
-    im2 = np.random.normal(scale=sig2, size=x0im.shape)
+    im1 = np.random.normal(scale=sig1, size=x0im.shape)  # sigma of template
+    im2 = np.random.normal(scale=sig2, size=x0im.shape)  # sigma of science image
 
-    #psf1 = 1.6 # sigma in pixels im1 will be template
-    #psf2 = 2.2 # sigma in pixels im2 will be science image. make the psf in this image slighly offset and elongated
-    #print np.sqrt(psf2**2 - psf1**2)
-    #offset = 0.2  # astrometric offset (pixels) between the two images
-    psf2_yvary = psf_yvary_factor + (yim.mean() - yposns) / yim.max() * psf_yvary_factor  # variation in y-width of psf in science image across (x-dim of) image
-    #psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
+    psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()  # variation in y-width of psf in science image across (x-dim of) image
+    # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
 
     for i in range(n_sources):
         flux = fluxes[i]
-        im1 += flux * singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1, psf1, theta=theta1)
+        tmp1 = flux * singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
+        im1 += tmp1
         if i == ind:
-            flux += flux * varSourceChange #/ 50.
-        im2 += flux * singleGaussian2d(x0im, y0im, xposns[i]+offset, yposns[i]+offset,
-                                       psf2, psf2+psf2_yvary[i], theta=theta2)
+            flux += flux * varSourceChange  # / 50.
+        tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
+                                       psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
+        im2 += tmp2
 
     # Add a (constant, for now) background offset to im2
-    #im2background = 10.
-    im2 += im2background
-    return im1, im2, x0im, y0im
+    if im2background != 0.:  # im2background = 10.
+        im2 += im2background
+
+    im1_psf = singleGaussian2d(x0im, y0im, 0, 0, psf1[0], psf1[1], theta=theta1)
+    im2_psf = singleGaussian2d(x0im, y0im, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
+    return im1, im2, im1_psf, im2_psf
 
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
@@ -117,7 +125,7 @@ def chebGauss2d(x, y, m=None, s=None, ord=[0,0], beta=1., verbose=False):
     coef1 = np.zeros(coefLen)
     coef1[ord[1]] = 1
     if verbose:
-        print s, ord, coef0, coef1
+        print s, beta, ord, coef0, coef1
     ga = singleGaussian2d(x, y, 0, 0, s[0]/beta, s[1]/beta)
     ch = chebval2d(x, y, c=np.outer(coef0, coef1))
     return ch * ga
@@ -154,7 +162,7 @@ def getALChebGaussBases(x0, y0, sigGauss=None, degGauss=None, betaGauss=1, verbo
     if verbose:
         for i in inds:
             print i
-    basis = [chebGauss2d(x0, y0, m=[0,0], s=[sig,sig], ord=[inds[i][0][ind], inds[i][1][ind]], beta=betaGauss, verbose=False) for i,sig in enumerate(sigGauss) for ind in range(len(inds[i][0]))]
+    basis = [chebGauss2d(x0, y0, m=[0,0], s=[sig,sig], ord=[inds[i][0][ind], inds[i][1][ind]], beta=betaGauss, verbose=verbose) for i,sig in enumerate(sigGauss) for ind in range(len(inds[i][0]))]
     return basis
 
 # Convolve im1 (template) with the basis functions, and make these the *new* bases.
@@ -202,9 +210,9 @@ def makeSpatialBases(im1, basis, basis2, spatialKernelOrder=2, spatialBackground
     if verbose:
         print spatialInds
 
-    xim = np.arange(np.int(-np.floor(im1.shape[0]/2.)), np.int(np.floor(im1.shape[0]/2)))
-    yim = np.arange(np.int(-np.floor(im1.shape[1]/2.)), np.int(np.floor(im1.shape[1]/2)))
-    x0im, y0im = np.meshgrid(xim, yim)
+    #xim = np.arange(np.int(-np.floor(im1.shape[0]/2.)), np.int(np.floor(im1.shape[0]/2)))
+    #yim = np.arange(np.int(-np.floor(im1.shape[1]/2.)), np.int(np.floor(im1.shape[1]/2)))
+    x0im, y0im = getImageGrid(im1) #np.meshgrid(xim, yim)
 
     # Note the ordering of the loop is important! Make the basis2 the last one so the first set of values
     # that are returned are all of the original (basis2) unmodified bases.
@@ -341,51 +349,12 @@ def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
     return pck
 
 
-def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
-                       spatialKernelOrder=2, spatialBackgroundOrder=2, doALZCcorrection=True,
-                       sig1=None, sig2=None, verbose=False):
-    x = np.arange(-16, 16, 1)
-    y = x.copy()
-    x0, y0 = np.meshgrid(x, y)
-
-    basis = getALChebGaussBases(x0, y0, verbose=verbose)
-    basis2 = makeImageBases(im1, basis)
-    spatialBasis, bgBasis = makeSpatialBases(im1, basis, basis2, verbose=verbose)
-    basis2a, (constKernelIndices, nonConstKernelIndices, bgIndices), (basisOffset, basisScale) \
-        = collectAllBases(basis2, spatialBasis, bgBasis)
-
-    pars, fit, resid = doTheLinearFitAL(basis2a, im2)
-    xcen = np.int(np.floor(im1.shape[0]/2.))
-    ycen = np.int(np.floor(im1.shape[1]/2.))
-
-    kfit = getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices,
-                               spatialBasis, basisScale, basisOffset, xcen=xcen, ycen=ycen,
-                               verbose=verbose)
-    diffim = im2 - fit
-    if doALZCcorrection:
-        import scipy
-        if sig1 is None:
-            _, low, upp = scipy.stats.sigmaclip(im1, low=3, high=3)
-            tmp = im1[(im1>low) & (im1<upp)]
-            sig1 = np.nanstd(tmp)
-        if sig2 is None:
-            _, low, upp = scipy.stats.sigmaclip(im2, low=3, high=3)
-            tmp = im2[(im2>low) & (im2<upp)]
-            sig2 = np.nanstd(tmp)
-
-        print sig1, sig2
-        pck = computeCorrectionKernelALZC(kfit, sig1, sig2)
-        pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
-        diffim = pci
-
-    return diffim, kfit
-
 # Compute the (corrected) diffim's new PSF
 # post_conv_psf = phi_1(k) * sym.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kappa_ft(k)**2))
 # we'll parameterize phi_1(k) as a gaussian with sigma "psfsig1".
-# psf2 is the sigma of the psf of im2 (default is 2.2)
+# im2_psf is the the psf of im2
 
-def computeCorrectedDiffimPsfALZC(kappa, psf2=2.2, sig1=0.2, sig2=0.2):
+def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
     from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
 
     def kernel_ft2(kernel):
@@ -401,12 +370,101 @@ def computeCorrectedDiffimPsfALZC(kappa, psf2=2.2, sig1=0.2, sig2=0.2):
         out = ifft2(kft)
         return out
 
-    # First compute the science image's (im2's) psf -- easy since we parameterized it above when we made the image
+    # First compute the science image's (im2's) psf, subset on -16:15 coords
+    x0im, y0im = getImageGrid(im2_psf)
     x = np.arange(-16, 16, 1)
     y = x.copy()
     x0, y0 = np.meshgrid(x, y)
-    im2_psf = singleGaussian2d(x0, y0, 0, 0, psf2, psf2*1.5)
 
-    pcf = post_conv_psf(psf=im2_psf, kernel=kappa, sig1=sig2, sig2=sig1)
+    im2_psf_small = im2_psf[(x0im.max()+x.min()+1):(x0im.max()-x.min()+1),
+                            (y0im.max()+y.min()+1):(y0im.max()-y.min()+1)]
+    print im2_psf_small.shape
+    pcf = post_conv_psf(psf=im2_psf_small, kernel=kappa, sig1=sig2, sig2=sig1)
     pcf = pcf.real / pcf.real.sum()
     return pcf
+
+def computeImageSigma(im):
+    _, low, upp = scipy.stats.sigmaclip(im, low=3, high=3)
+    tmp = im[(im>low) & (im<upp)]
+    sig1 = np.nanstd(tmp)
+    return sig1
+
+def getImageGrid(im):
+    xim = np.arange(np.int(-np.floor(im.shape[0]/2.)), np.int(np.floor(im.shape[0]/2)))
+    yim = np.arange(np.int(-np.floor(im.shape[1]/2.)), np.int(np.floor(im.shape[1]/2)))
+    x0im, y0im = np.meshgrid(xim, yim)
+    return x0im, y0im
+
+def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
+                       spatialKernelOrder=2, spatialBackgroundOrder=2, doALZCcorrection=True,
+                       sig1=None, sig2=None, verbose=False):
+    x = np.arange(-16, 16, 1)
+    y = x.copy()
+    x0, y0 = np.meshgrid(x, y)
+
+    basis = getALChebGaussBases(x0, y0, sigGauss=sigGauss, degGauss=degGauss,
+                                betaGauss=betaGauss, verbose=verbose)
+    basis2 = makeImageBases(im1, basis)
+    spatialBasis, bgBasis = makeSpatialBases(im1, basis, basis2, verbose=verbose)
+    basis2a, (constKernelIndices, nonConstKernelIndices, bgIndices), (basisOffset, basisScale) \
+        = collectAllBases(basis2, spatialBasis, bgBasis)
+
+    pars, fit, resid = doTheLinearFitAL(basis2a, im2)
+    xcen = np.int(np.floor(im1.shape[0]/2.))
+    ycen = np.int(np.floor(im1.shape[1]/2.))
+
+    kfit = getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices,
+                               spatialBasis, basisScale, basisOffset, xcen=xcen, ycen=ycen,
+                               verbose=verbose)
+    diffim = im2 - fit
+    if doALZCcorrection:
+        if sig1 is None:
+            sig1 = computeImageSigma(im1)
+        if sig2 is None:
+            sig2 = computeImageSigma(im2)
+
+        print sig1, sig2
+        pck = computeCorrectionKernelALZC(kfit, sig1, sig2)
+        pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
+        diffim = pci
+
+    return diffim, kfit
+
+# Compute the ZOGY eqn. (13):
+# $$
+# \widehat{D} = \frac{F_r\widehat{P_r}\widehat{N} -
+# F_n\widehat{P_n}\widehat{R}}{\sqrt{\sigma_n^2 F_r^2
+# |\widehat{P_r}|^2 + \sigma_r^2 F_n^2 |\widehat{P_n}|^2}}
+# $$
+# where $D$ is the optimal difference image, $R$ and $N$ are the
+# reference and "new" image, respectively, $P_r$ and $P_n$ are their
+# PSFs, $F_r$ and $F_n$ are their flux-based zero-points (which we
+# will set to one here), $\sigma_r^2$ and $\sigma_n^2$ are their
+# variance, and $\widehat{D}$ denotes the FT of $D$.
+
+def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
+    from scipy.fftpack import fft2, ifft2, ifftshift
+
+    if sig1 is None:
+        sig1 = computeImageSigma(im1)
+    if sig2 is None:
+        sig2 = computeImageSigma(im2)
+
+    #xim = np.arange(np.int(-np.floor(im1.shape[0]/2.)), np.int(np.floor(im1.shape[0]/2)))
+    #yim = np.arange(np.int(-np.floor(im1.shape[1]/2.)), np.int(np.floor(im1.shape[1]/2)))
+    x0im, y0im = getImageGrid(im1) #np.meshgrid(xim, yim)
+    F_r = F_n = 1.
+    R_hat = fft2(im1)
+    N_hat = fft2(im2)
+    P_r = im1_psf #singleGaussian2d(x0im, y0im, 0, 0, psf1, psf1)
+    P_n = im2_psf #singleGaussian2d(x0im, y0im, 0, 0, psf2, psf2*1.5)
+    P_r_hat = fft2(P_r)
+    P_n_hat = fft2(P_n)
+    d_hat_numerator = (F_r * P_r_hat * N_hat - F_n * P_n_hat * R_hat)
+    d_hat_denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
+    d_hat = d_hat_numerator / d_hat_denom
+
+    d = ifft2(d_hat)
+    D = ifftshift(d.real)
+    return D
+
