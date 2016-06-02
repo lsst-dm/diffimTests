@@ -409,11 +409,12 @@ def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
     pcf = pcf.real / pcf.real.sum()
     return pcf
 
-def computeImageSigma(im):
-    _, low, upp = scipy.stats.sigmaclip(im, low=3, high=3)
+def computeClippedImageStats(im, low=3, high=3):
+    _, low, upp = scipy.stats.sigmaclip(im, low=low, high=high)
     tmp = im[(im>low) & (im<upp)]
+    mean1 = np.nanmean(tmp)
     sig1 = np.nanstd(tmp)
-    return sig1
+    return mean1, sig1
 
 def getImageGrid(im):
     xim = np.arange(np.int(-np.floor(im.shape[0]/2.)), np.int(np.floor(im.shape[0]/2)))
@@ -445,9 +446,9 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
     diffim = im2 - fit
     if doALZCcorrection:
         if sig1 is None:
-            sig1 = computeImageSigma(im1)
+            _, sig1 = computeClippedImageStats(im1)
         if sig2 is None:
-            sig2 = computeImageSigma(im2)
+            _, sig2 = computeClippedImageStats(im2)
 
         print sig1, sig2
         pck = computeCorrectionKernelALZC(kfit, sig1, sig2)
@@ -472,9 +473,9 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
     from scipy.fftpack import fft2, ifft2, ifftshift
 
     if sig1 is None:
-        sig1 = computeImageSigma(im1)
+        _, sig1 = computeClippedImageStats(im1)
     if sig2 is None:
-        sig2 = computeImageSigma(im2)
+        _, sig2 = computeClippedImageStats(im2)
 
     #xim = np.arange(np.int(-np.floor(im1.shape[0]/2.)), np.int(np.floor(im1.shape[0]/2)))
     #yim = np.arange(np.int(-np.floor(im1.shape[1]/2.)), np.int(np.floor(im1.shape[1]/2)))
