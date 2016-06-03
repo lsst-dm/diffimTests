@@ -383,12 +383,16 @@ def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
 def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
     from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
 
-    def kernel_ft2(kernel):
-        FFT = fft2(kernel)
-        return FFT
     def post_conv_psf_ft2(psf, kernel, sig1=1., sig2=1.):
-        psf_ft = kernel_ft2(psf)
-        kft = kernel_ft2(kernel)
+        # Pad psf or kernel symmetrically to make them the same size!
+        if psf.shape[0] < kernel.shape[0]:
+            while psf.shape[0] < kernel.shape[0]:
+                psf = np.pad(psf, (1, 1), mode='constant')
+        elif psf.shape[0] > kernel.shape[0]:
+            while psf.shape[0] > kernel.shape[0]:
+                kernel = np.pad(kernel, (1, 1), mode='constant')
+        psf_ft = fft2(psf)
+        kft = fft2(kernel)
         out = psf_ft * np.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kft**2))
         return out
     def post_conv_psf(psf, kernel, sig1=1., sig2=1.):
@@ -396,15 +400,15 @@ def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
         out = ifft2(kft)
         return out
 
+    im2_psf_small = im2_psf
     # First compute the science image's (im2's) psf, subset on -16:15 coords
-    x0im, y0im = getImageGrid(im2_psf)
-    x = np.arange(-16, 16, 1)
-    y = x.copy()
-    x0, y0 = np.meshgrid(x, y)
-
-    im2_psf_small = im2_psf[(x0im.max()+x.min()+1):(x0im.max()-x.min()+1),
-                            (y0im.max()+y.min()+1):(y0im.max()-y.min()+1)]
-    print im2_psf_small.shape
+    if im2_psf.shape[0] > 50:
+        x0im, y0im = getImageGrid(im2_psf)
+        x = np.arange(-16, 16, 1)
+        y = x.copy()
+        x0, y0 = np.meshgrid(x, y)
+        im2_psf_small = im2_psf[(x0im.max()+x.min()+1):(x0im.max()-x.min()+1),
+                                (y0im.max()+y.min()+1):(y0im.max()-y.min()+1)]
     pcf = post_conv_psf(psf=im2_psf_small, kernel=kappa, sig1=sig2, sig2=sig1)
     pcf = pcf.real / pcf.real.sum()
     return pcf
@@ -519,3 +523,44 @@ def computePixelCovariance(diffim):
     #np.fill_diagonal(out, 0)
     #inds = np.argsort(out.sum(0))[::-1]
     return out#[inds, :][:, inds]
+
+
+# Compute ALZC correction kernel from matching kernel
+# Here we use a constant kernel, just compute it for the center of the image.
+def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure, psfMatchingKernel, log):
+    import lsst.afw.image as afwImage
+    import lsst.meas.algorithms as measAlg
+    import lsst.afw.math as afwMath
+    from scipy.ndimage.filters import convolve
+
+    log.info("Running ALZC correction.")
+    spatialKernel = psfMatchingKernel
+    kimg = afwImage.ImageD(spatialKernel.getDimensions())
+    bbox = subtractedExposure.getBBox()
+    xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+    ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+    spatialKernel.computeImage(kimg, True, xcen, ycen)
+    # Compute the images' sigmas (sqrt of variance)
+    sig1 = templateExposure.getMaskedImage().getVariance().getArray()
+    sig2 = exposure.getMaskedImage().getVariance().getArray()
+    sig1squared, _ = computeClippedImageStats(sig1)
+    sig2squared, _ = computeClippedImageStats(sig2)
+    sig1 = np.sqrt(sig1squared)
+    sig2 = np.sqrt(sig2squared)
+    corrKernel = computeCorrectionKernelALZC(kimg.getArray(), sig1=sig1, sig2=sig2)
+    # Eventually, use afwMath.convolve(), but for now just use scipy.
+    log.info("ALZC: Convolving.")
+    pci = convolve(subtractedExposure.getMaskedImage().getImage().getArray(),
+                   corrKernel, mode='constant')
+    subtractedExposure.getMaskedImage().getImage().getArray()[:, :] = pci
+    log.info("ALZC: Finished with convolution.")
+
+    # Compute the subtracted exposure's updated psf
+    psf = subtractedExposure.getPsf().computeImage().getArray()
+    psfc = computeCorrectedDiffimPsfALZC(corrKernel, psf, sig1=sig1, sig2=sig2)
+    psfcI = afwImage.ImageD(subtractedExposure.getPsf().computeImage().getBBox())
+    psfcI.getArray()[:, :] = psfc
+    psfcK = afwMath.FixedKernel(psfcI)
+    psfNew = measAlg.KernelPsf(psfcK)
+    subtractedExposure.setPsf(psfNew)
+    return subtractedExposure, corrKernel
