@@ -1,5 +1,7 @@
 import numpy as np
 import scipy
+import scipy.stats
+from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
 
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
                   cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r','y']):
@@ -44,8 +46,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
     return igrid
 
 def gaussian2d(grid, m=None, s=None):
-    import scipy.stats
-    ## see https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.multivariate_normal.html
+    # see https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.multivariate_normal.html
 
     if m is None:
         m = [0., 0.]
@@ -349,8 +350,6 @@ def getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices, 
 # sig1 and sig2 are the same as those input to makeFakeImages().
 
 def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
-    from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
-
     def kernel_ft2(kernel):
         FFT = fft2(kernel)
         return FFT
@@ -370,7 +369,7 @@ def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
     # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
     if False:
         # I still think we need to flip it in one axis (TBD: figure this out!)
-        pck = pck[::-1,:]
+        pck = pck[::-1, :]
 
     return pck
 
@@ -381,8 +380,6 @@ def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
 # im2_psf is the the psf of im2
 
 def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
-    from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
-
     def post_conv_psf_ft2(psf, kernel, sig1=1., sig2=1.):
         # Pad psf or kernel symmetrically to make them the same size!
         if psf.shape[0] < kernel.shape[0]:
@@ -415,7 +412,7 @@ def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
 
 def computeClippedImageStats(im, low=3, high=3):
     _, low, upp = scipy.stats.sigmaclip(im, low=low, high=high)
-    tmp = im[(im>low) & (im<upp)]
+    tmp = im[(im > low) & (im < upp)]
     mean1 = np.nanmean(tmp)
     sig1 = np.nanstd(tmp)
     return mean1, sig1
@@ -481,14 +478,12 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
     if sig2 is None:
         _, sig2 = computeClippedImageStats(im2)
 
-    #xim = np.arange(np.int(-np.floor(im1.shape[0]/2.)), np.int(np.floor(im1.shape[0]/2)))
-    #yim = np.arange(np.int(-np.floor(im1.shape[1]/2.)), np.int(np.floor(im1.shape[1]/2)))
-    x0im, y0im = getImageGrid(im1) #np.meshgrid(xim, yim)
+    x0im, y0im = getImageGrid(im1)
     F_r = F_n = 1.
     R_hat = fft2(im1)
     N_hat = fft2(im2)
-    P_r = im1_psf #singleGaussian2d(x0im, y0im, 0, 0, psf1, psf1)
-    P_n = im2_psf #singleGaussian2d(x0im, y0im, 0, 0, psf2, psf2*1.5)
+    P_r = im1_psf
+    P_n = im2_psf
     P_r_hat = fft2(P_r)
     P_n_hat = fft2(P_n)
     d_hat_numerator = (F_r * P_r_hat * N_hat - F_n * P_n_hat * R_hat)
@@ -517,12 +512,8 @@ def computePixelCovariance(diffim):
     out = np.cov(shifted_imgs, bias=1)
     tmp2 = out.copy()
     np.fill_diagonal(tmp2, np.NaN)
-    print np.nansum(tmp2)/np.sum(np.diag(out))  ## print sum of off-diag / sum of diag
-    #np.fill_diagonal(out, np.NaN)
-    #inds = np.argsort(out[0,:])[::-1]  # sort (decreasing) by cov with center pixel
-    #np.fill_diagonal(out, 0)
-    #inds = np.argsort(out.sum(0))[::-1]
-    return out#[inds, :][:, inds]
+    print np.nansum(tmp2)/np.sum(np.diag(out))  # print sum of off-diag / sum of diag
+    return out
 
 
 # Compute ALZC correction kernel from matching kernel
@@ -533,7 +524,6 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     import lsst.afw.math as afwMath
     from scipy.ndimage.filters import convolve
 
-    log.info("Running ALZC correction.")
     spatialKernel = psfMatchingKernel
     kimg = afwImage.ImageD(spatialKernel.getDimensions())
     bbox = subtractedExposure.getBBox()

@@ -65,6 +65,9 @@ class ImageDifferenceConfig(pexConfig.Config):
         doc="Use a simple gaussian PSF model for pre-convolution (else use fit PSF)? "
             "Ignored if doPreConvolve false.")
     doDetection = pexConfig.Field(dtype=bool, default=True, doc="Detect sources?")
+    doZOGYCorrection = pexConfig.Field(dtype=bool, default=True, doc="""
+    Perform diffim decorrelation correction similar to Kaiser? If True, also updates the
+    diffim PSF.""")
     doMerge = pexConfig.Field(dtype=bool, default=True,
         doc="Merge positive and negative diaSources with grow radius set by growFootprint")
     doMatchSources = pexConfig.Field(dtype=bool, default=True,
@@ -495,35 +498,6 @@ class ImageDifferenceTask(pipeBase.CmdLineTask):
             )
             subtractedExposure = subtractRes.subtractedExposure
 
-            # Compute ALZC correction kernel from matching kernel
-            # Here we use a constant kernel, just compute it for the center of the image.
-            doZOGYCorrection = True
-            if doZOGYCorrection:
-                print "RUNNING ALZC CORRECTION!!!"
-                import lsst.ip.diffim.ALZCUtils as alzc
-                from lsst.afw.image import ImageD
-                from scipy.ndimage.filters import convolve
-                spatialKernel = subtractRes.psfMatchingKernel
-                kimg = ImageD(spatialKernel.getDimensions())
-                bbox = subtractedExposure.getBBox()
-                xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
-                ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
-                spatialKernel.computeImage(kimg, True, xcen, ycen)
-                sig1 = templateExposure.getMaskedImage().getVariance().getArray()
-                sig2 = exposure.getMaskedImage().getVariance().getArray()
-                sig1squared, _ = alzc.computeClippedImageStats(sig1)
-                sig2squared, _ = alzc.computeClippedImageStats(sig2)
-                corrKernel = alzc.computeCorrectionKernelALZC(kimg.getArray(),
-                                                              sig1=numpy.sqrt(sig1squared),
-                                                              sig2=numpy.sqrt(sig2squared))
-                # Eventually, use afwMath.convolve(), but for now just use scipy.
-                pci = convolve(subtractedExposure.getMaskedImage().getImage().getArray(),
-                               corrKernel, mode='constant')
-                #print subtractedExposure.getMaskedImage().getImage().getArray()[300, 300]
-                subtractedExposure.getMaskedImage().getImage().getArray()[:, :] = pci
-                #print subtractedExposure.getMaskedImage().getImage().getArray()[300, 300]
-                print "DONE!"
-
             if self.config.doWriteMatchedExp:
                 sensorRef.put(subtractRes.matchedExposure, self.config.coaddName + "Diff_matchedExp")
 
@@ -545,6 +519,18 @@ class ImageDifferenceTask(pipeBase.CmdLineTask):
             mask  = subtractedExposure.getMaskedImage().getMask()
             mask &= ~(mask.getPlaneBitMask("DETECTED") | mask.getPlaneBitMask("DETECTED_NEGATIVE"))
 
+        # Compute ALZC correction kernel from matching kernel
+        # Here we use a constant kernel, just compute it for the center of the image.
+        if self.config.doZOGYCorrection:
+            self.log.info("Running ALZC correction.")
+            import lsst.ip.diffim.ALZCUtils as alzc
+            subtractedExposure, _ = alzc.performALZCExposureCorrection(templateExposure, exposure,
+                                                                       subtractedExposure,
+                                                                       subtractRes.psfMatchingKernel,
+                                                                       self.log)
+            self.log.info("Finished running ALZC correction.")
+
+        if self.config.doDetection:
             table = afwTable.SourceTable.make(self.schema, idFactory)
             table.setMetadata(self.algMetadata)
             results = self.detection.makeSourceCatalog(
