@@ -65,9 +65,9 @@ class ImageDifferenceConfig(pexConfig.Config):
         doc="Use a simple gaussian PSF model for pre-convolution (else use fit PSF)? "
             "Ignored if doPreConvolve false.")
     doDetection = pexConfig.Field(dtype=bool, default=True, doc="Detect sources?")
-    doZOGYCorrection = pexConfig.Field(dtype=bool, default=True, doc="""
-    Perform diffim decorrelation correction similar to Kaiser? If True, also updates the
-    diffim PSF.""")
+    doDecorrelation = pexConfig.Field(dtype=bool, default=True,
+        doc="Perform diffim decorrelation correction similar to Kaiser? If True, also updates the "
+            "diffim PSF.")
     doMerge = pexConfig.Field(dtype=bool, default=True,
         doc="Merge positive and negative diaSources with grow radius set by growFootprint")
     doMatchSources = pexConfig.Field(dtype=bool, default=True,
@@ -521,14 +521,12 @@ class ImageDifferenceTask(pipeBase.CmdLineTask):
 
         # Compute ALZC correction kernel from matching kernel
         # Here we use a constant kernel, just compute it for the center of the image.
-        if self.config.doZOGYCorrection:
-            self.log.info("Running ALZC correction.")
-            import lsst.ip.diffim.ALZCUtils as alzc
-            subtractedExposure, _ = alzc.performALZCExposureCorrection(templateExposure, exposure,
-                                                                       subtractedExposure,
-                                                                       subtractRes.psfMatchingKernel,
-                                                                       self.log)
-            self.log.info("Finished running ALZC correction.")
+        if self.config.doDecorrelation:
+            self.log.info("Running decorrelation correction.")
+            from lsst.ip.diffim.imageDecorrelation import performExposureDecorrelation as doDecor
+            subtractedExposure, _ = doDecor(templateExposure, exposure, subtractedExposure,
+                                            subtractRes.psfMatchingKernel, self.log)
+            self.log.info("Finished running decorrelation correction.")
 
         if self.config.doDetection:
             table = afwTable.SourceTable.make(self.schema, idFactory)
