@@ -65,7 +65,7 @@ class ImageDifferenceConfig(pexConfig.Config):
         doc="Use a simple gaussian PSF model for pre-convolution (else use fit PSF)? "
             "Ignored if doPreConvolve false.")
     doDetection = pexConfig.Field(dtype=bool, default=True, doc="Detect sources?")
-    doDecorrelation = pexConfig.Field(dtype=bool, default=True,
+    doDecorrelation = pexConfig.Field(dtype=bool, default=False,
         doc="Perform diffim decorrelation correction similar to Kaiser? If True, also updates the "
             "diffim PSF.")
     doMerge = pexConfig.Field(dtype=bool, default=True,
@@ -521,6 +521,7 @@ class ImageDifferenceTask(pipeBase.CmdLineTask):
 
         # Compute ALZC correction kernel from matching kernel
         # Here we use a constant kernel, just compute it for the center of the image.
+        # Investigating correction for spatially varying kernels is a subject of other tickets.
         if self.config.doDecorrelation:
             self.log.info("Running decorrelation correction.")
             from lsst.ip.diffim.imageDecorrelation import performExposureDecorrelation as doDecor
