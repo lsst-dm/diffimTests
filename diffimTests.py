@@ -22,8 +22,13 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
         at.txt._text.set_path_effects([withStroke(foreground=titlecol[1], linewidth=3)])
         return at
 
-    tmp = np.sqrt(len(images))
-    nrows_ncols = (np.int(np.floor(tmp)), np.int(np.ceil(len(images)/np.int(np.floor(tmp))))) if nrows_ncols is None else nrows_ncols
+    if nrows_ncols is None:
+        tmp = np.sqrt(len(images))
+        nrows_ncols = (np.int(np.floor(tmp)), np.int(np.ceil(len(images)/np.int(np.floor(tmp)))))
+    if nrows_ncols[0] <= 0:
+        nrows_ncols[0] = 1
+    if nrows_ncols[1] <= 0:
+        nrows_ncols[1] = 1
     size = (nrows_ncols[1]*imScale, nrows_ncols[0]*imScale)
     fig = plt.figure(1, size)
     igrid = ImageGrid(fig, 111,  # similar to subplot(111)
@@ -31,10 +36,25 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
                       axes_pad=0.1,  # pad between axes in inch.
                       label_mode="L",  # share_all=True,
                       cbar_location="right", cbar_mode="single", cbar_size='7%')
+    extentWasNone = False
     for i in range(len(images)):
         ii = images[i]
+        if hasattr(ii, 'computeImage'):
+            ii = ii.computeImage()
+        if hasattr(ii, 'getImage'):
+            ii = ii.getImage()
+        if hasattr(ii, 'getMaskedImage'):
+            ii = ii.getMaskedImage().getImage()
+        if hasattr(ii, 'getArray'):
+            bbox = ii.getBBox()
+            if extent is None:
+                extentWasNone = True
+                extent = (bbox.getBeginX(), bbox.getEndX(), bbox.getBeginY(), bbox.getEndY())
+            ii = ii.getArray()
         if cbar and clim is not None:
             ii = np.clip(ii, clim[0], clim[1])
+        if extent is not None:
+            ii = ii[extent[0]:extent[1], extent[2]:extent[3]]
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
                         extent=extent, clim=clim)
         if cbar:
@@ -43,6 +63,9 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
             t = add_inner_title(igrid[i], titles[i], loc=2)
             t.patch.set_ec("none")
             t.patch.set_alpha(0.5)
+        if extentWasNone:
+            extent = None
+        extentWasNone = False
     return igrid
 
 def gaussian2d(grid, m=None, s=None):
@@ -495,8 +518,9 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
     return D
 
 
-def computePixelCovariance(diffim):
+def computePixelCovariance(diffim, diffim2=None):
     diffim = diffim/diffim.std()
+    shifted_imgs2 = None
     shifted_imgs = [
         diffim,
         np.roll(diffim, 1, 0), np.roll(diffim, -1, 0), np.roll(diffim, 1, 1), np.roll(diffim, -1, 1),
@@ -508,8 +532,20 @@ def computePixelCovariance(diffim):
         np.roll(diffim, 5, 0), np.roll(diffim, -5, 0), np.roll(diffim, 5, 1), np.roll(diffim, -5, 1),
     ]
     shifted_imgs = np.vstack([i.flatten() for i in shifted_imgs])
-    out = np.corrcoef(shifted_imgs)
-    out = np.cov(shifted_imgs, bias=1)
+    #out = np.corrcoef(shifted_imgs)
+    if diffim2 is not None:
+        shifted_imgs2 = [
+            diffim2,
+            np.roll(diffim2, 1, 0), np.roll(diffim2, -1, 0), np.roll(diffim2, 1, 1), np.roll(diffim2, -1, 1),
+            np.roll(np.roll(diffim2, 1, 0), 1, 1), np.roll(np.roll(diffim2, 1, 0), -1, 1),
+            np.roll(np.roll(diffim2, -1, 0), 1, 1), np.roll(np.roll(diffim2, -1, 0), -1, 1),
+            np.roll(diffim2, 2, 0), np.roll(diffim2, -2, 0), np.roll(diffim2, 2, 1), np.roll(diffim2, -2, 1),
+            np.roll(diffim2, 3, 0), np.roll(diffim2, -3, 0), np.roll(diffim2, 3, 1), np.roll(diffim2, -3, 1),
+            np.roll(diffim2, 4, 0), np.roll(diffim2, -4, 0), np.roll(diffim2, 4, 1), np.roll(diffim2, -4, 1),
+            np.roll(diffim2, 5, 0), np.roll(diffim2, -5, 0), np.roll(diffim2, 5, 1), np.roll(diffim2, -5, 1),
+        ]
+        shifted_imgs2 = np.vstack([i.flatten() for i in shifted_imgs2])
+    out = np.cov(shifted_imgs, shifted_imgs2, bias=1)
     tmp2 = out.copy()
     np.fill_diagonal(tmp2, np.NaN)
     print np.nansum(tmp2)/np.sum(np.diag(out))  # print sum of off-diag / sum of diag
