@@ -39,6 +39,7 @@ from lsst.ip.diffim import ImagePsfMatchTask, DipoleAnalysis, \
     GetCoaddAsTemplateTask, GetCalexpAsTemplateTask, DipoleFitTask
 import lsst.ip.diffim.diffimTools as diffimTools
 import lsst.ip.diffim.utils as diUtils
+from lsst.ip.diffim.imageDecorrelation import decorrelateExposure
 
 FwhmPerSigma = 2 * math.sqrt(2 * math.log(2))
 IqrToSigma = 0.741
@@ -66,8 +67,8 @@ class ImageDifferenceConfig(pexConfig.Config):
             "Ignored if doPreConvolve false.")
     doDetection = pexConfig.Field(dtype=bool, default=True, doc="Detect sources?")
     doDecorrelation = pexConfig.Field(dtype=bool, default=False,
-        doc="Perform diffim decorrelation correction similar to Kaiser? If True, also updates the "
-            "diffim PSF.")
+        doc="Perform diffim decorrelation to undo pixel correlation due to convolution? "
+            "If True, also update the diffim PSF.")
     doMerge = pexConfig.Field(dtype=bool, default=True,
         doc="Merge positive and negative diaSources with grow radius set by growFootprint")
     doMatchSources = pexConfig.Field(dtype=bool, default=True,
@@ -502,7 +503,7 @@ class ImageDifferenceTask(pipeBase.CmdLineTask):
                 sensorRef.put(subtractRes.matchedExposure, self.config.coaddName + "Diff_matchedExp")
 
         if self.config.doDetection:
-            self.log.info("Running diaSource detection")
+            self.log.info("Computing diffim PSF")
             if subtractedExposure is None:
                 subtractedExposure = sensorRef.get(subtractedExposureName)
 
@@ -515,21 +516,17 @@ class ImageDifferenceTask(pipeBase.CmdLineTask):
                         template = self.getTemplate.run(exposure, sensorRef, templateIdList=templateIdList)
                     subtractedExposure.setPsf(template.exposure.getPsf())
 
+        if self.config.doDecorrelation and self.config.doSubtract:
+            self.log.info("Running diffim decorrelation; updating diffim PSF.")
+            subtractedExposure, _ = decorrelateExposure(templateExposure, exposure, subtractedExposure,
+                                                        subtractRes.psfMatchingKernel, self.log)
+
+        if self.config.doDetection:
+            self.log.info("Running diaSource detection")
             # Erase existing detection mask planes
             mask  = subtractedExposure.getMaskedImage().getMask()
             mask &= ~(mask.getPlaneBitMask("DETECTED") | mask.getPlaneBitMask("DETECTED_NEGATIVE"))
 
-        # Compute ALZC correction kernel from matching kernel
-        # Here we use a constant kernel, just compute it for the center of the image.
-        # Investigating correction for spatially varying kernels is a subject of other tickets.
-        if self.config.doDecorrelation:
-            self.log.info("Running decorrelation correction.")
-            from lsst.ip.diffim.imageDecorrelation import performExposureDecorrelation as doDecor
-            subtractedExposure, _ = doDecor(templateExposure, exposure, subtractedExposure,
-                                            subtractRes.psfMatchingKernel, self.log)
-            self.log.info("Finished running decorrelation correction.")
-
-        if self.config.doDetection:
             table = afwTable.SourceTable.make(self.schema, idFactory)
             table.setMetadata(self.algMetadata)
             results = self.detection.makeSourceCatalog(
