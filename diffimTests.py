@@ -558,7 +558,6 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     import lsst.afw.image as afwImage
     import lsst.meas.algorithms as measAlg
     import lsst.afw.math as afwMath
-    from scipy.ndimage.filters import convolve
 
     spatialKernel = psfMatchingKernel
     kimg = afwImage.ImageD(spatialKernel.getDimensions())
@@ -576,8 +575,8 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     corrKernel = computeCorrectionKernelALZC(kimg.getArray(), sig1=sig1, sig2=sig2)
     # Eventually, use afwMath.convolve(), but for now just use scipy.
     log.info("ALZC: Convolving.")
-    pci = convolve(subtractedExposure.getMaskedImage().getImage().getArray(),
-                   corrKernel, mode='constant')
+    pci, _ = doConvolve(subtractedExposure.getMaskedImage().getImage().getArray(),
+                     corrKernel)
     subtractedExposure.getMaskedImage().getImage().getArray()[:, :] = pci
     log.info("ALZC: Finished with convolution.")
 
@@ -590,3 +589,80 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     psfNew = measAlg.KernelPsf(psfcK)
     subtractedExposure.setPsf(psfNew)
     return subtractedExposure, corrKernel
+
+import lsst.afw.image as afwImage
+import lsst.afw.math as afwMath
+
+def computeClippedAfwStats(im, numSigmaClip=3., numIter=3):
+    """! Utility function for sigma-clipped array statistics on an image or exposure.
+    @param im An afw.Exposure, masked image, or image.
+    @return sigma-clipped mean, std, and variance of input array
+    """
+    statsControl = afwMath.StatisticsControl()
+    statsControl.setNumSigmaClip(numSigmaClip)
+    statsControl.setNumIter(numIter)
+    statsControl.setAndMask(afwImage.MaskU.getPlaneBitMask(["INTRP", "EDGE",
+                                                            "DETECTED", "BAD",
+                                                            "NO_DATA", "DETECTED_NEGATIVE"]))
+    statObj = afwMath.makeStatistics(im, afwMath.MEANCLIP | afwMath.STDEVCLIP | afwMath.VARIANCECLIP,
+                                     statsControl)
+    mean = statObj.getValue(afwMath.MEANCLIP)
+    std = statObj.getValue(afwMath.STDEVCLIP)
+    var = statObj.getValue(afwMath.VARIANCECLIP)
+    return mean, std, var
+
+def doConvolve(exposure, kernel, use_scipy=False):
+    """! Convolve an Exposure with a decorrelation convolution kernel.
+    @param exposure Input afw.image.Exposure to be convolved.
+    @param kernel Input 2-d numpy.array to convolve the image with
+    @param use_scipy Use scipy to do convolution instead of afwMath
+    @return a new Exposure with the convolved pixels and the (possibly
+    re-centered) kernel.
+
+    @note We use afwMath.convolve() but keep scipy.convolve for debugging.
+    @note We re-center the kernel if necessary and return the possibly re-centered kernel
+    """
+    def _fixEvenKernel(kernel):
+        """! Take a kernel with even dimensions and make them odd, centered correctly.
+        @param kernel a numpy.array
+        @return a fixed kernel numpy.array
+        """
+        # Make sure the peak (close to a delta-function) is in the center!
+        maxloc = np.unravel_index(np.argmax(kernel), kernel.shape)
+        out = np.roll(kernel, kernel.shape[0]//2 - maxloc[0], axis=0)
+        out = np.roll(out, out.shape[1]//2 - maxloc[1], axis=1)
+        # Make sure it is odd-dimensioned by trimming it.
+        if (out.shape[0] % 2) == 0:
+            maxloc = np.unravel_index(np.argmax(out), out.shape)
+            if out.shape[0] - maxloc[0] > maxloc[0]:
+                out = out[:-1, :]
+            else:
+                out = out[1:, :]
+            if out.shape[1] - maxloc[1] > maxloc[1]:
+                out = out[:, :-1]
+            else:
+                out = out[:, 1:]
+        return out
+
+    outExp = kern = None
+    fkernel = _fixEvenKernel(kernel)
+    if use_scipy:
+        from scipy.ndimage.filters import convolve
+        pci = convolve(exposure.getMaskedImage().getImage().getArray(),
+                       fkernel, mode='constant', cval=np.nan)
+        outExp = exposure.clone()
+        outExp.getMaskedImage().getImage().getArray()[:, :] = pci
+        kern = fkernel
+
+    else:
+        kernelImg = afwImage.ImageD(fkernel.shape[0], fkernel.shape[1])
+        kernelImg.getArray()[:, :] = fkernel
+        kern = afwMath.FixedKernel(kernelImg)
+        maxloc = np.unravel_index(np.argmax(fkernel), fkernel.shape)
+        kern.setCtrX(maxloc[0])
+        kern.setCtrY(maxloc[1])
+        outExp = exposure.clone()  # Do this to keep WCS, PSF, masks, etc.
+        convCntrl = afwMath.ConvolutionControl(False, True, 0)
+        afwMath.convolve(outExp.getMaskedImage(), exposure.getMaskedImage(), kern, convCntrl)
+
+    return outExp, kern
