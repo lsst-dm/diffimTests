@@ -3,6 +3,9 @@ import scipy
 import scipy.stats
 from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
 
+import lsst.afw.image as afwImage
+import lsst.afw.math as afwMath
+
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
                   cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r','y']):
     import matplotlib.pyplot as plt
@@ -590,10 +593,8 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     subtractedExposure.setPsf(psfNew)
     return subtractedExposure, corrKernel
 
-import lsst.afw.image as afwImage
-import lsst.afw.math as afwMath
 
-def computeClippedAfwStats(im, numSigmaClip=3., numIter=3):
+def computeClippedAfwStats(im, numSigmaClip=3., numIter=3, maskIm=None):
     """! Utility function for sigma-clipped array statistics on an image or exposure.
     @param im An afw.Exposure, masked image, or image.
     @return sigma-clipped mean, std, and variance of input array
@@ -604,8 +605,14 @@ def computeClippedAfwStats(im, numSigmaClip=3., numIter=3):
     statsControl.setAndMask(afwImage.MaskU.getPlaneBitMask(["INTRP", "EDGE",
                                                             "DETECTED", "BAD",
                                                             "NO_DATA", "DETECTED_NEGATIVE"]))
-    statObj = afwMath.makeStatistics(im, afwMath.MEANCLIP | afwMath.STDEVCLIP | afwMath.VARIANCECLIP,
-                                     statsControl)
+    if maskIm is None:
+        statObj = afwMath.makeStatistics(im,
+                                         afwMath.MEANCLIP | afwMath.STDEVCLIP | afwMath.VARIANCECLIP,
+                                         statsControl)
+    else:
+        statObj = afwMath.makeStatistics(im, maskIm,
+                                         afwMath.MEANCLIP | afwMath.STDEVCLIP | afwMath.VARIANCECLIP,
+                                         statsControl)
     mean = statObj.getValue(afwMath.MEANCLIP)
     std = statObj.getValue(afwMath.STDEVCLIP)
     var = statObj.getValue(afwMath.VARIANCECLIP)
