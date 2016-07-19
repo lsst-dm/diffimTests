@@ -673,3 +673,109 @@ def doConvolve(exposure, kernel, use_scipy=False):
         afwMath.convolve(outExp.getMaskedImage(), exposure.getMaskedImage(), kern, convCntrl)
 
     return outExp, kern
+
+# Code taken from https://github.com/lsst-dm/dmtn-006/blob/master/python/diasource_mosaic.py
+def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
+                     template_catalog=None, xnear=None, ynear=None):
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.style.use('ggplot')
+    import matplotlib.gridspec as gridspec
+    import lsst.daf.persistence as dafPersist
+
+    def zscale_image(input_img, contrast=0.25):
+        """This emulates ds9's zscale feature. Returns the suggested minimum and
+        maximum values to display."""
+
+        samples = input_img.flatten()[::500]
+        samples.sort()
+        chop_size = int(0.10*len(samples))
+        subset = samples[chop_size:-chop_size]
+
+        i_midpoint = int(len(subset)/2)
+        I_mid = subset[i_midpoint]
+
+        fit = np.polyfit(np.arange(len(subset)) - i_midpoint, subset, 1)
+        # fit = [ slope, intercept]
+
+        z1 = I_mid + fit[0]/contrast * (1-i_midpoint)/1.0
+        z2 = I_mid + fit[0]/contrast * (len(subset)-i_midpoint)/1.0
+        return z1, z2
+
+    #
+    # This matches up which exposures were differenced against which templates,
+    # and is purely specific to this particular set of data.
+    if template_catalog is None:
+        template_catalog = {197790: [197802, 198372, 198376, 198380, 198384],
+                            197662: [198668, 199009, 199021, 199033],
+                            197408: [197400, 197404, 197412],
+                            197384: [197388, 197392],
+                            197371: [197367, 197375, 197379]}
+    # Need to invert this to template_visit_catalog[exposure] = template
+    template_visit_catalog = {}
+    for templateid, visits in template_catalog.iteritems():
+        for visit in visits:
+            template_visit_catalog[visit] = templateid
+
+    def make_cutout(img, x, y, cutout_size=20):
+        return img[(x-cutout_size/2):(x+cutout_size/2), (y-cutout_size/2):(y+cutout_size/2)]
+
+    def group_items(items, group_length):
+        for n in xrange(0, len(items), group_length):
+            yield items[n:(n+group_length)]
+
+    b = dafPersist.Butler(repo_dir)
+
+    template_visit = template_visit_catalog[visitid]
+    templateExposure = b.get("calexp", visit=template_visit, ccdnum=ccdnum, immediate=True)
+    template_img, _, _ = templateExposure.getMaskedImage().getArrays()
+    template_wcs = templateExposure.getWcs()
+
+    sourceExposure = b.get("calexp", visit=visitid, ccdnum=ccdnum, immediate=True)
+    source_img, _, _ = sourceExposure.getMaskedImage().getArrays()
+
+    subtractedExposure = b.get("deepDiff_differenceExp", visit=visitid, ccdnum=ccdnum, immediate=True)
+    subtracted_img, _, _ = subtractedExposure.getMaskedImage().getArrays()
+    subtracted_wcs = subtractedExposure.getWcs()
+
+    diaSources = b.get("deepDiff_diaSrc", visit=visitid, ccdnum=ccdnum, immediate=True)
+
+    masked_img = subtractedExposure.getMaskedImage()
+    img_arr, mask_arr, var_arr = masked_img.getArrays()
+    z1, z2 = zscale_image(img_arr)
+
+    top_level_grid = gridspec.GridSpec(7, 4)
+
+    source_ind = 0
+    for source_n, source in enumerate(diaSources):
+
+        source_x = source.get("ip_diffim_NaiveDipoleCentroid_x")
+        source_y = source.get("ip_diffim_NaiveDipoleCentroid_y")
+        if xnear is not None and not np.any(np.abs(source_x - xnear) <= cutout_size):
+            continue
+        if ynear is not None and not np.any(np.abs(source_y - ynear) <= cutout_size):
+            continue
+
+        ## 'classification_dipole'
+        is_dipole = source.get("ip_diffim_DipoleFit_flag_classification") == 1
+        template_xycoord = template_wcs.skyToPixel(subtracted_wcs.pixelToSky(source_x, source_y))
+        cutouts = [make_cutout(template_img, template_xycoord.getY(), template_xycoord.getX(),
+                               cutout_size=cutout_size),
+                   make_cutout(source_img, source_y, source_x, cutout_size=cutout_size),
+                   make_cutout(subtracted_img, source_y, source_x, cutout_size=cutout_size)]
+
+        try:
+            subgrid = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=top_level_grid[source_ind],
+                                                       wspace=0)
+        except:
+            continue
+        for cutout_n, cutout in enumerate(cutouts):
+            plt.subplot(subgrid[0, cutout_n])
+            plt.imshow(cutout, vmin=z1, vmax=z2, cmap=plt.cm.gray)
+            plt.gca().xaxis.set_ticklabels([])
+            plt.gca().yaxis.set_ticklabels([])
+
+        plt.subplot(subgrid[0, 0])
+        source_ind += 1
+        if is_dipole:
+            plt.ylabel("Dipole")
