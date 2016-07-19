@@ -744,7 +744,7 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
     img_arr, mask_arr, var_arr = masked_img.getArrays()
     z1, z2 = zscale_image(img_arr)
 
-    top_level_grid = gridspec.GridSpec(len(diaSources)//4, 4)
+    top_level_grid = gridspec.GridSpec(7, 4)
 
     source_ind = 0
     for source_n, source in enumerate(diaSources):
