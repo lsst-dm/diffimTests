@@ -676,7 +676,7 @@ def doConvolve(exposure, kernel, use_scipy=False):
 
 # Code taken from https://github.com/lsst-dm/dmtn-006/blob/master/python/diasource_mosaic.py
 def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
-                     template_catalog=None, xnear=None, ynear=None):
+                     template_catalog=None, xnear=None, ynear=None, sourceIds=None):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
@@ -748,6 +748,10 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
 
     source_ind = 0
     for source_n, source in enumerate(diaSources):
+
+        source_id = source.getId()
+        if sourceIds is not None and not np.in1d(source_id, sourceIds)[0]:
+            continue
 
         source_x = source.get("ip_diffim_NaiveDipoleCentroid_x")
         source_y = source.get("ip_diffim_NaiveDipoleCentroid_y")
