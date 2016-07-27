@@ -26,8 +26,8 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
         return at
 
     if nrows_ncols is None:
-        tmp = np.sqrt(len(images))
-        nrows_ncols = (np.int(np.floor(tmp)), np.int(np.ceil(len(images)/np.int(np.floor(tmp)))))
+        tmp = np.int(np.floor(np.sqrt(len(images))))
+        nrows_ncols = (tmp, np.int(np.ceil(np.float(len(images))/tmp)))
     if nrows_ncols[0] <= 0:
         nrows_ncols[0] = 1
     if nrows_ncols[1] <= 0:
@@ -551,8 +551,8 @@ def computePixelCovariance(diffim, diffim2=None):
     out = np.cov(shifted_imgs, shifted_imgs2, bias=1)
     tmp2 = out.copy()
     np.fill_diagonal(tmp2, np.NaN)
-    print np.nansum(tmp2)/np.sum(np.diag(out))  # print sum of off-diag / sum of diag
-    return out
+    stat = np.nansum(tmp2)/np.sum(np.diag(out))  # print sum of off-diag / sum of diag
+    return out, stat
 
 
 # Compute ALZC correction kernel from matching kernel
