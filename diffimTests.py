@@ -602,9 +602,8 @@ def computeClippedAfwStats(im, numSigmaClip=3., numIter=3, maskIm=None):
     statsControl = afwMath.StatisticsControl()
     statsControl.setNumSigmaClip(numSigmaClip)
     statsControl.setNumIter(numIter)
-    statsControl.setAndMask(afwImage.MaskU.getPlaneBitMask(["INTRP", "EDGE",
-                                                            "DETECTED", "BAD",
-                                                            "NO_DATA", "DETECTED_NEGATIVE"]))
+    ignoreMaskPlanes = ["INTRP", "EDGE", "DETECTED", "SAT", "CR", "BAD", "NO_DATA", "DETECTED_NEGATIVE"]
+    statsControl.setAndMask(afwImage.MaskU.getPlaneBitMask(ignoreMaskPlanes))
     if maskIm is None:
         statObj = afwMath.makeStatistics(im,
                                          afwMath.MEANCLIP | afwMath.STDEVCLIP | afwMath.VARIANCECLIP,
