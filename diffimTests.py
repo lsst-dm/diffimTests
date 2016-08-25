@@ -58,6 +58,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
             ii = np.clip(ii, clim[0], clim[1])
         if extent is not None:
             ii = ii[extent[0]:extent[1], extent[2]:extent[3]]
+        ii = zscale_image(ii)
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
                              extent=extent, clim=clim)
         if cbar:
@@ -673,6 +674,25 @@ def doConvolve(exposure, kernel, use_scipy=False):
 
     return outExp, kern
 
+def zscale_image(input_img, contrast=0.25):
+    """This emulates ds9's zscale feature. Returns the suggested minimum and
+    maximum values to display."""
+
+    samples = input_img.flatten()[::500]
+    samples.sort()
+    chop_size = int(0.10*len(samples))
+    subset = samples[chop_size:-chop_size]
+
+    i_midpoint = int(len(subset)/2)
+    I_mid = subset[i_midpoint]
+
+    fit = np.polyfit(np.arange(len(subset)) - i_midpoint, subset, 1)
+    # fit = [ slope, intercept]
+
+    z1 = I_mid + fit[0]/contrast * (1-i_midpoint)/1.0
+    z2 = I_mid + fit[0]/contrast * (len(subset)-i_midpoint)/1.0
+    return z1, z2
+
 # Code taken from https://github.com/lsst-dm/dmtn-006/blob/master/python/diasource_mosaic.py
 def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
                      template_catalog=None, xnear=None, ynear=None, sourceIds=None, gridSpec=[7, 4],
@@ -682,25 +702,6 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
     matplotlib.style.use('ggplot')
     import matplotlib.gridspec as gridspec
     import lsst.daf.persistence as dafPersist
-
-    def zscale_image(input_img, contrast=0.25):
-        """This emulates ds9's zscale feature. Returns the suggested minimum and
-        maximum values to display."""
-
-        samples = input_img.flatten()[::500]
-        samples.sort()
-        chop_size = int(0.10*len(samples))
-        subset = samples[chop_size:-chop_size]
-
-        i_midpoint = int(len(subset)/2)
-        I_mid = subset[i_midpoint]
-
-        fit = np.polyfit(np.arange(len(subset)) - i_midpoint, subset, 1)
-        # fit = [ slope, intercept]
-
-        z1 = I_mid + fit[0]/contrast * (1-i_midpoint)/1.0
-        z2 = I_mid + fit[0]/contrast * (len(subset)-i_midpoint)/1.0
-        return z1, z2
 
     #
     # This matches up which exposures were differenced against which templates,
@@ -786,4 +787,5 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
         plt.subplot(subgrid[0, 0])
         source_ind += 1
         #if is_dipole:
-        plt.ylabel(dipoleLabel)
+        #print(source_n, source_id)
+        plt.ylabel(str(source_n) + dipoleLabel)
