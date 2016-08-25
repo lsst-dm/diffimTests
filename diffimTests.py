@@ -59,7 +59,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
         if extent is not None:
             ii = ii[extent[0]:extent[1], extent[2]:extent[3]]
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
-                        extent=extent, clim=clim)
+                             extent=extent, clim=clim)
         if cbar:
             igrid[i].cax.colorbar(im)
         if titles is not None:  # assume titles is an array or tuple of same length as images.
@@ -675,7 +675,8 @@ def doConvolve(exposure, kernel, use_scipy=False):
 
 # Code taken from https://github.com/lsst-dm/dmtn-006/blob/master/python/diasource_mosaic.py
 def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
-                     template_catalog=None, xnear=None, ynear=None, sourceIds=None):
+                     template_catalog=None, xnear=None, ynear=None, sourceIds=None, gridSpec=[7, 4],
+                     dipoleFlag='ip_diffim_ClassificationDipole_value'):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
@@ -717,7 +718,7 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
             template_visit_catalog[visit] = templateid
 
     def make_cutout(img, x, y, cutout_size=20):
-        return img[(x-cutout_size/2):(x+cutout_size/2), (y-cutout_size/2):(y+cutout_size/2)]
+        return img[(x-cutout_size//2):(x+cutout_size//2), (y-cutout_size//2):(y+cutout_size//2)]
 
     def group_items(items, group_length):
         for n in xrange(0, len(items), group_length):
@@ -743,7 +744,7 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
     img_arr, mask_arr, var_arr = masked_img.getArrays()
     z1, z2 = zscale_image(img_arr)
 
-    top_level_grid = gridspec.GridSpec(7, 4)
+    top_level_grid = gridspec.GridSpec(gridSpec[0], gridSpec[1])
 
     source_ind = 0
     for source_n, source in enumerate(diaSources):
@@ -759,8 +760,12 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
         if ynear is not None and not np.any(np.abs(source_y - ynear) <= cutout_size):
             continue
 
-        ## 'classification_dipole'
-        is_dipole = source.get("ip_diffim_DipoleFit_flag_classification") == 1
+        #is_dipole = source.get("ip_diffim_ClassificationDipole_value") == 1
+        dipoleLabel = ''
+        if source.get(dipoleFlag) == 1:
+            dipoleLabel = 'Dipole'
+        if source.get("ip_diffim_DipoleFit_flag_classificationAttempted") == 1:
+            dipoleLabel += ' *'
         template_xycoord = template_wcs.skyToPixel(subtracted_wcs.pixelToSky(source_x, source_y))
         cutouts = [make_cutout(template_img, template_xycoord.getY(), template_xycoord.getX(),
                                cutout_size=cutout_size),
@@ -780,5 +785,5 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
 
         plt.subplot(subgrid[0, 0])
         source_ind += 1
-        if is_dipole:
-            plt.ylabel("Dipole")
+        #if is_dipole:
+        plt.ylabel(dipoleLabel)
