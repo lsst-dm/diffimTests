@@ -6,6 +6,26 @@ from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
 import lsst.afw.image as afwImage
 import lsst.afw.math as afwMath
 
+def zscale_image(input_img, contrast=0.25):
+    """This emulates ds9's zscale feature. Returns the suggested minimum and
+    maximum values to display."""
+
+    samples = input_img.flatten()
+    samples = samples[~np.isnan(samples)]
+    samples.sort()
+    chop_size = int(0.10*len(samples))
+    subset = samples[chop_size:-chop_size]
+
+    i_midpoint = int(len(subset)/2)
+    I_mid = subset[i_midpoint]
+
+    fit = np.polyfit(np.arange(len(subset)) - i_midpoint, subset, 1)
+    # fit = [ slope, intercept]
+
+    z1 = I_mid + fit[0]/contrast * (1-i_midpoint)/1.0
+    z2 = I_mid + fit[0]/contrast * (len(subset)-i_midpoint)/1.0
+    return z1, z2
+
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
                   cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r','y']):
     import matplotlib.pyplot as plt
@@ -40,6 +60,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
                       label_mode="L",  # share_all=True,
                       cbar_location="right", cbar_mode="single", cbar_size='7%')
     extentWasNone = False
+    clim_orig = clim
     for i in range(len(images)):
         ii = images[i]
         if hasattr(ii, 'computeImage'):
@@ -54,11 +75,12 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
                 extentWasNone = True
                 extent = (bbox.getBeginX(), bbox.getEndX(), bbox.getBeginY(), bbox.getEndY())
             ii = ii.getArray()
-        if cbar and clim is not None:
-            ii = np.clip(ii, clim[0], clim[1])
-        if extent is not None:
+        if extent is not None and not extentWasNone:
             ii = ii[extent[0]:extent[1], extent[2]:extent[3]]
-        ii = zscale_image(ii)
+        if clim_orig is None:
+            clim = zscale_image(ii)
+        if cbar and clim_orig is not None:
+            ii = np.clip(ii, clim[0], clim[1])
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
                              extent=extent, clim=clim)
         if cbar:
@@ -505,7 +527,6 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
     if sig2 is None:
         _, sig2 = computeClippedImageStats(im2)
 
-    x0im, y0im = getImageGrid(im1)
     F_r = F_n = 1.
     R_hat = fft2(im1)
     N_hat = fft2(im2)
@@ -673,25 +694,6 @@ def doConvolve(exposure, kernel, use_scipy=False):
         afwMath.convolve(outExp.getMaskedImage(), exposure.getMaskedImage(), kern, convCntrl)
 
     return outExp, kern
-
-def zscale_image(input_img, contrast=0.25):
-    """This emulates ds9's zscale feature. Returns the suggested minimum and
-    maximum values to display."""
-
-    samples = input_img.flatten()[::500]
-    samples.sort()
-    chop_size = int(0.10*len(samples))
-    subset = samples[chop_size:-chop_size]
-
-    i_midpoint = int(len(subset)/2)
-    I_mid = subset[i_midpoint]
-
-    fit = np.polyfit(np.arange(len(subset)) - i_midpoint, subset, 1)
-    # fit = [ slope, intercept]
-
-    z1 = I_mid + fit[0]/contrast * (1-i_midpoint)/1.0
-    z2 = I_mid + fit[0]/contrast * (len(subset)-i_midpoint)/1.0
-    return z1, z2
 
 # Code taken from https://github.com/lsst-dm/dmtn-006/blob/master/python/diasource_mosaic.py
 def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
