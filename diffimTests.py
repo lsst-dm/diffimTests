@@ -3,8 +3,11 @@ import scipy
 import scipy.stats
 from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
 
-import lsst.afw.image as afwImage
-import lsst.afw.math as afwMath
+try:
+    import lsst.afw.image as afwImage
+    import lsst.afw.math as afwMath
+except:
+    print "LSSTSW has not been set up."
 
 def zscale_image(input_img, contrast=0.25):
     """This emulates ds9's zscale feature. Returns the suggested minimum and
@@ -27,7 +30,7 @@ def zscale_image(input_img, contrast=0.25):
     return z1, z2
 
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
-                  cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r','y']):
+                  cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r','y'], **kwds):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
@@ -84,7 +87,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
         if cbar and clim_orig is not None:
             ii = np.clip(ii, clim[0], clim[1])
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
-                             extent=extent, clim=clim)
+                             extent=extent, clim=clim, **kwds)
         if cbar:
             igrid[i].cax.colorbar(im)
         if titles is not None:  # assume titles is an array or tuple of same length as images.
@@ -133,7 +136,7 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 
 def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None, offset=None,
                    psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
-                   n_sources=500, seed=66):
+                   n_sources=500, seed=66, psfSize=None):
     np.random.seed(seed)
 
     # psf1 = 1.6 # sigma in pixels im1 will be template
@@ -160,6 +163,8 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
 
     im1 = np.random.normal(scale=sig1, size=x0im.shape)  # sigma of template
     im2 = np.random.normal(scale=sig2, size=x0im.shape)  # sigma of science image
+    var_im1 = np.zeros_like(im1) + sig1**2.
+    var_im2 = np.zeros_like(im2) + sig2**2.
 
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()  # variation in y-width of psf in science image across (x-dim of) image
     print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
@@ -169,20 +174,28 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
         flux = fluxes[i]
         tmp1 = flux * singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
         im1 += tmp1
+        var_im1 += tmp1
         if i == ind:
             flux += flux * varSourceChange  # / 50.
         tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
                                        psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
         im2 += tmp2
+        var_im2 += tmp2
 
     # Add a (constant, for now) background offset to im2
     if im2background != 0.:  # im2background = 10.
         print 'Background:', im2background
         im2 += im2background
 
-    im1_psf = singleGaussian2d(x0im, y0im, 0, 0, psf1[0], psf1[1], theta=theta1)
-    im2_psf = singleGaussian2d(x0im, y0im, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
-    return im1, im2, im1_psf, im2_psf
+    x0, y0 = x0im, y0im
+    if psfSize is not None:
+        x = np.arange(-psfSize+1, psfSize, 1)
+        y = x.copy()
+        y0, x0 = np.meshgrid(x, y)
+
+    im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
+    im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
+    return im1, im2, im1_psf, im2_psf, var_im1, var_im2
 
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
@@ -521,7 +534,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
 # will set to one here), $\sigma_r^2$ and $\sigma_n^2$ are their
 # variance, and $\widehat{D}$ denotes the FT of $D$.
 
-def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
+def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     from scipy.fftpack import fft2, ifft2, ifftshift
 
     if sig1 is None:
@@ -529,7 +542,6 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
     if sig2 is None:
         _, sig2 = computeClippedImageStats(im2)
 
-    F_r = F_n = 1.
     R_hat = fft2(im1)
     N_hat = fft2(im2)
     P_r = im1_psf
@@ -542,7 +554,55 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None):
 
     d = ifft2(d_hat)
     D = ifftshift(d.real)
-    return D
+
+    ## Also compute the diffim's PSF (eq. 14)
+    F_D_numerator = F_r * F_n
+    F_D_denom = np.sqrt(sig1**2 * F_r**2 + sig2**2 * F_n**2)
+    F_D = F_D_numerator / F_D_denom
+
+    P_d_hat_numerator = (F_r * F_n * P_r_hat * P_n_hat)
+    P_d_hat = P_d_hat_numerator / (F_D * d_hat_denom)
+
+    P_d = ifft2(P_d_hat)
+    P_D = np.fft.ifftshift(P_d.real)
+
+    return D, P_D
+
+
+def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
+    from scipy.fftpack import fft2, ifft2 #, ifftshift
+    import scipy.ndimage.filters
+
+    if sig1 is None:
+        _, sig1 = computeClippedImageStats(im1)
+    if sig2 is None:
+        _, sig2 = computeClippedImageStats(im2)
+
+    P_r = im1_psf
+    P_n = im2_psf
+    P_r_hat = fft2(P_r)
+    P_n_hat = fft2(P_n)
+    denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
+    K_r_hat = P_r_hat / denom
+    K_n_hat = P_n_hat / denom
+    K_r = ifft2(K_r_hat).real
+    K_n = ifft2(K_n_hat).real
+
+    im1c = scipy.ndimage.filters.convolve(im1, K_n.real, mode='constant')
+    im2c = scipy.ndimage.filters.convolve(im2, K_r.real, mode='constant')
+    D = im2c - im1c
+
+    ## Also compute the diffim's PSF (eq. 14)
+    F_D_numerator = F_r * F_n
+    F_D_denom = np.sqrt(sig1**2 * F_r**2 + sig2**2 * F_n**2)
+    F_D = F_D_numerator / F_D_denom
+
+    P_d_hat_numerator = (F_r * F_n * P_r_hat * P_n_hat)
+    P_d_hat = P_d_hat_numerator / (F_D * denom)
+
+    P_d = ifft2(P_d_hat)
+    P_D = np.fft.ifftshift(P_d.real)
+    return D, P_D
 
 
 def computePixelCovariance(diffim, diffim2=None):
@@ -793,3 +853,5 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
         #if is_dipole:
         #print(source_n, source_id)
         plt.ylabel(str(source_n) + dipoleLabel)
+
+
