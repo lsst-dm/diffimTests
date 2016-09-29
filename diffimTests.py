@@ -406,7 +406,7 @@ def getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices, 
     return kfit
 
 
-# Compute the "L(ZOGY)" post-conv. kernel from kfit
+# Compute the "ALZC" post-conv. kernel from kfit
 
 # Note unlike previous notebooks, here because the PSF is varying,
 # we'll just use `fit2` rather than `im2-conv_im1` as the diffim,
@@ -534,20 +534,29 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
 # will set to one here), $\sigma_r^2$ and $\sigma_n^2$ are their
 # variance, and $\widehat{D}$ denotes the FT of $D$.
 
-def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
+
+def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     from scipy.fftpack import fft2, ifft2, ifftshift
 
-    if sig1 is None:
+    if sig1 is None and im1 is not None:
         _, sig1 = computeClippedImageStats(im1)
-    if sig2 is None:
+    if sig2 is None and im2 is not None:
         _, sig2 = computeClippedImageStats(im2)
 
-    R_hat = fft2(im1)
-    N_hat = fft2(im2)
     P_r = im1_psf
     P_n = im2_psf
     P_r_hat = fft2(P_r)
     P_n_hat = fft2(P_n)
+    return sig1, sig2, P_r_hat, P_n_hat
+
+
+def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
+    from numpy.fft import fft2, ifft2, ifftshift
+
+    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+
+    R_hat = fft2(im1)
+    N_hat = fft2(im2)
     d_hat_numerator = (F_r * P_r_hat * N_hat - F_n * P_n_hat * R_hat)
     d_hat_denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
     d_hat = d_hat_numerator / d_hat_denom
@@ -555,44 +564,31 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
     d = ifft2(d_hat)
     D = ifftshift(d.real)
 
-    ## Also compute the diffim's PSF (eq. 14)
-    F_D_numerator = F_r * F_n
-    F_D_denom = np.sqrt(sig1**2 * F_r**2 + sig2**2 * F_n**2)
-    F_D = F_D_numerator / F_D_denom
-
-    P_d_hat_numerator = (F_r * F_n * P_r_hat * P_n_hat)
-    P_d_hat = P_d_hat_numerator / (F_D * d_hat_denom)
-
-    P_d = ifft2(P_d_hat)
-    P_D = np.fft.ifftshift(P_d.real)
-
-    return D, P_D
+    return D
 
 
 def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    from scipy.fftpack import fft2, ifft2 #, ifftshift
     import scipy.ndimage.filters
 
-    if sig1 is None:
-        _, sig1 = computeClippedImageStats(im1)
-    if sig2 is None:
-        _, sig2 = computeClippedImageStats(im2)
-
-    P_r = im1_psf
-    P_n = im2_psf
-    P_r_hat = fft2(P_r)
-    P_n_hat = fft2(P_n)
+    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
     K_r_hat = P_r_hat / denom
     K_n_hat = P_n_hat / denom
-    K_r = ifft2(K_r_hat).real
-    K_n = ifft2(K_n_hat).real
+    K_r = np.fft.ifft2(K_r_hat).real
+    K_n = np.fft.ifft2(K_n_hat).real
 
     im1c = scipy.ndimage.filters.convolve(im1, K_n.real, mode='constant')
     im2c = scipy.ndimage.filters.convolve(im2, K_r.real, mode='constant')
     D = im2c - im1c
 
-    ## Also compute the diffim's PSF (eq. 14)
+    return D
+
+
+## Also compute the diffim's PSF (eq. 14)
+def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
+    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
+
     F_D_numerator = F_r * F_n
     F_D_denom = np.sqrt(sig1**2 * F_r**2 + sig2**2 * F_n**2)
     F_D = F_D_numerator / F_D_denom
@@ -600,9 +596,41 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     P_d_hat_numerator = (F_r * F_n * P_r_hat * P_n_hat)
     P_d_hat = P_d_hat_numerator / (F_D * denom)
 
-    P_d = ifft2(P_d_hat)
-    P_D = np.fft.ifftshift(P_d.real)
-    return D, P_D
+    P_d = np.fft.ifft2(P_d_hat)
+    P_D = np.fft.ifftshift(P_d).real
+
+    return P_D, F_D
+
+
+# Compute the corrected ZOGY "S_corr" (eq. 25)
+def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
+                      sig1=None, sig2=None, F_r=1., F_n=1.):
+    import scipy.ndimage.filters
+
+    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    print P_D.shape, np.unravel_index(np.argmax(P_D), P_D.shape)
+
+    # Adjust the variance planes of the two images to contribute to the final detection
+    # (eq's 26-29).
+    denom = (sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2)
+    k_r_hat = F_r * F_n**2 * np.conj(P_r_hat) * np.abs(P_n_hat)**2 / denom
+    k_n_hat = F_n * F_r**2 * np.conj(P_n_hat) * np.abs(P_r_hat)**2 / denom
+
+    k_r = np.fft.ifft2(k_r_hat)
+    k_r = np.fft.ifftshift(k_r).real
+    k_n = np.fft.ifft2(k_n_hat)
+    k_n = np.fft.ifftshift(k_n).real
+    print k_r.shape, np.unravel_index(np.argmax(k_r), k_r.shape)
+    print k_n.shape, np.unravel_index(np.argmax(k_n), k_n.shape)
+    var1c = scipy.ndimage.filters.convolve(var_im1, k_n.real**2, mode='constant')
+    var2c = scipy.ndimage.filters.convolve(var_im2, k_r.real**2, mode='constant')
+
+    PD_bar = np.fliplr(np.flipud(P_D))
+    S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant') * F_D
+    S_corr = S / np.sqrt(var1c + var2c)
+    return S_corr
 
 
 def computePixelCovariance(diffim, diffim2=None):
@@ -663,7 +691,7 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     # Eventually, use afwMath.convolve(), but for now just use scipy.
     log.info("ALZC: Convolving.")
     pci, _ = doConvolve(subtractedExposure.getMaskedImage().getImage().getArray(),
-                     corrKernel)
+                        corrKernel)
     subtractedExposure.getMaskedImage().getImage().getArray()[:, :] = pci
     log.info("ALZC: Finished with convolution.")
 
@@ -701,6 +729,7 @@ def computeClippedAfwStats(im, numSigmaClip=3., numIter=3, maskIm=None):
     var = statObj.getValue(afwMath.VARIANCECLIP)
     return mean, std, var
 
+
 def doConvolve(exposure, kernel, use_scipy=False):
     """! Convolve an Exposure with a decorrelation convolution kernel.
     @param exposure Input afw.image.Exposure to be convolved.
@@ -712,30 +741,8 @@ def doConvolve(exposure, kernel, use_scipy=False):
     @note We use afwMath.convolve() but keep scipy.convolve for debugging.
     @note We re-center the kernel if necessary and return the possibly re-centered kernel
     """
-    def _fixEvenKernel(kernel):
-        """! Take a kernel with even dimensions and make them odd, centered correctly.
-        @param kernel a numpy.array
-        @return a fixed kernel numpy.array
-        """
-        # Make sure the peak (close to a delta-function) is in the center!
-        maxloc = np.unravel_index(np.argmax(kernel), kernel.shape)
-        out = np.roll(kernel, kernel.shape[0]//2 - maxloc[0], axis=0)
-        out = np.roll(out, out.shape[1]//2 - maxloc[1], axis=1)
-        # Make sure it is odd-dimensioned by trimming it.
-        if (out.shape[0] % 2) == 0:
-            maxloc = np.unravel_index(np.argmax(out), out.shape)
-            if out.shape[0] - maxloc[0] > maxloc[0]:
-                out = out[:-1, :]
-            else:
-                out = out[1:, :]
-            if out.shape[1] - maxloc[1] > maxloc[1]:
-                out = out[:, :-1]
-            else:
-                out = out[:, 1:]
-        return out
-
     outExp = kern = None
-    fkernel = _fixEvenKernel(kernel)
+    fkernel = fixEvenKernel(kernel)
     if use_scipy:
         from scipy.ndimage.filters import convolve
         pci = convolve(exposure.getMaskedImage().getImage().getArray(),
@@ -855,3 +862,105 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
         plt.ylabel(str(source_n) + dipoleLabel)
 
 
+## Updated ALZC kernel and PSF computation (from ip_diffim.imageDecorrelation)
+## This should eventually replace computeCorrectionKernelALZC and
+## computeCorrectedDiffimPsfALZC
+
+def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04):
+    """! Compute the Lupton/ZOGY post-conv. kernel for decorrelating an
+    image difference, based on the PSF-matching kernel.
+    @param kappa  A matching kernel 2-d numpy.array derived from Alard & Lupton PSF matching
+    @param svar   Average variance of science image used for PSF matching
+    @param tvar   Average variance of template image used for PSF matching
+    @return a 2-d numpy.array containing the correction kernel
+
+    @note As currently implemented, kappa is a static (single, non-spatially-varying) kernel.
+    """
+    kappa = fixOddKernel(kappa)
+    kft = scipy.fftpack.fft2(kappa)
+    kft = np.sqrt((svar + tvar) / (svar + tvar * kft**2))
+    pck = scipy.fftpack.ifft2(kft)
+    pck = scipy.fftpack.ifftshift(pck.real)
+    fkernel = fixEvenKernel(pck)
+
+    # I think we may need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers...
+    # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
+    if False:  # TBD: figure this out. For now, we are turning it off.
+        fkernel = fkernel[::-1, :]
+
+    return fkernel
+
+def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
+    """! Compute the (decorrelated) difference image's new PSF.
+    new_psf = psf(k) * sqrt((svar + tvar) / (svar + tvar * kappa_ft(k)**2))
+
+    @param kappa  A matching kernel array derived from Alard & Lupton PSF matching
+    @param psf    The uncorrected psf array of the science image (and also of the diffim)
+    @param svar   Average variance of science image used for PSF matching
+    @param tvar   Average variance of template image used for PSF matching
+    @return a 2-d numpy.array containing the new PSF
+    """
+    def post_conv_psf_ft2(psf, kernel, svar, tvar):
+        # Pad psf or kernel symmetrically to make them the same size!
+        # Note this assumes they are both square (width == height)
+        if psf.shape[0] < kernel.shape[0]:
+            diff = (kernel.shape[0] - psf.shape[0]) // 2
+            psf = np.pad(psf, (diff, diff), mode='constant')
+        elif psf.shape[0] > kernel.shape[0]:
+            diff = (psf.shape[0] - kernel.shape[0]) // 2
+            kernel = np.pad(kernel, (diff, diff), mode='constant')
+        psf_ft = scipy.fftpack.fft2(psf)
+        kft = scipy.fftpack.fft2(kernel)
+        out = psf_ft * np.sqrt((svar + tvar) / (svar + tvar * kft**2))
+        return out
+
+    def post_conv_psf(psf, kernel, svar, tvar):
+        kft = post_conv_psf_ft2(psf, kernel, svar, tvar)
+        out = scipy.fftpack.ifft2(kft)
+        return out
+
+    pcf = post_conv_psf(psf=psf, kernel=kappa, svar=svar, tvar=tvar)
+    pcf = pcf.real / pcf.real.sum()
+    return pcf
+
+def fixOddKernel(kernel):
+    """! Take a kernel with odd dimensions and make them even for FFT
+
+    @param kernel a numpy.array
+    @return a fixed kernel numpy.array. Returns a copy if the dimensions needed to change;
+    otherwise just return the input kernel.
+    """
+    # Note this works best for the FFT if we left-pad
+    out = kernel
+    changed = False
+    if (out.shape[0] % 2) == 1:
+        out = np.pad(out, ((1, 0), (0, 0)), mode='constant')
+        changed = True
+    if (out.shape[1] % 2) == 1:
+        out = np.pad(out, ((0, 0), (1, 0)), mode='constant')
+        changed = True
+    if changed:
+        out *= (np.mean(kernel) / np.mean(out))  # need to re-scale to same mean for FFT
+    return out
+
+def fixEvenKernel(kernel):
+    """! Take a kernel with even dimensions and make them odd, centered correctly.
+    @param kernel a numpy.array
+    @return a fixed kernel numpy.array
+    """
+    # Make sure the peak (close to a delta-function) is in the center!
+    maxloc = np.unravel_index(np.argmax(kernel), kernel.shape)
+    out = np.roll(kernel, kernel.shape[0]//2 - maxloc[0], axis=0)
+    out = np.roll(out, out.shape[1]//2 - maxloc[1], axis=1)
+    # Make sure it is odd-dimensioned by trimming it.
+    if (out.shape[0] % 2) == 0:
+        maxloc = np.unravel_index(np.argmax(out), out.shape)
+        if out.shape[0] - maxloc[0] > maxloc[0]:
+            out = out[:-1, :]
+        else:
+            out = out[1:, :]
+        if out.shape[1] - maxloc[1] > maxloc[1]:
+            out = out[:, :-1]
+        else:
+            out = out[:, 1:]
+    return out
