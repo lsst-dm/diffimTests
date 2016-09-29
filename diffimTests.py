@@ -134,9 +134,9 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 # overfitting -- perhaps to the source itself). This might be fixed by
 # adding more constant sources.
 
-def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None, offset=None,
+def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
                    psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
-                   n_sources=500, seed=66, psfSize=None):
+                   n_sources=500, sourceFluxRange=(50, 30000), seed=66, psfSize=None, sky=2000.):
     np.random.seed(seed)
 
     # psf1 = 1.6 # sigma in pixels im1 will be template
@@ -153,7 +153,7 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
     xim = np.arange(-256, 256, 1) if xim is None else xim
     yim = xim.copy() if yim is None else yim
     x0im, y0im = np.meshgrid(xim, yim)
-    fluxes = np.random.uniform(50, 30000, n_sources)
+    fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
     xposns = np.random.uniform(xim.min()+16, xim.max()-5, n_sources)
     yposns = np.random.uniform(yim.min()+16, yim.max()-5, n_sources)
 
@@ -161,10 +161,10 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
     ind = np.argmin(xposns**2. + yposns**2.)
     #print ind, xposns[ind], yposns[ind]
 
-    im1 = np.random.normal(scale=sig1, size=x0im.shape)  # sigma of template
-    im2 = np.random.normal(scale=sig2, size=x0im.shape)  # sigma of science image
-    var_im1 = np.zeros_like(im1) + sig1**2.
-    var_im2 = np.zeros_like(im2) + sig2**2.
+    im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
+    im2 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of science image
+    #var_im1 = np.zeros_like(im1) + sky #sig1**2.
+    #var_im2 = np.zeros_like(im2) + sky #sig2**2.
 
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()  # variation in y-width of psf in science image across (x-dim of) image
     print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
@@ -174,13 +174,20 @@ def makeFakeImages(xim=None, yim=None, sig1=0.2, sig2=0.2, psf1=None, psf2=None,
         flux = fluxes[i]
         tmp1 = flux * singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
         im1 += tmp1
-        var_im1 += tmp1
+        #var_im1 += tmp1
+
         if i == ind:
+            print 'Variable source:', xposns[i], yposns[i], flux, flux * (1.+varSourceChange)
             flux += flux * varSourceChange  # / 50.
         tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
                                        psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
         im2 += tmp2
-        var_im2 += tmp2
+        #var_im2 += tmp2
+
+    var_im1 = im1.copy()
+    var_im2 = im2.copy()
+    im1 -= sky
+    im2 -= sky
 
     # Add a (constant, for now) background offset to im2
     if im2background != 0.:  # im2background = 10.
@@ -475,11 +482,13 @@ def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
     return pcf
 
 def computeClippedImageStats(im, low=3, high=3):
-    _, low, upp = scipy.stats.sigmaclip(im, low=low, high=high)
-    tmp = im[(im > low) & (im < upp)]
+    tmp = im
+    if low != 0 and high != 0:
+        _, low, upp = scipy.stats.sigmaclip(im, low=low, high=high)
+        tmp = im[(im > low) & (im < upp)]
     mean1 = np.nanmean(tmp)
     sig1 = np.nanstd(tmp)
-    return mean1, sig1
+    return mean1, sig1, np.nanmin(tmp), np.nanmax(tmp)
 
 def getImageGrid(im):
     xim = np.arange(np.int(-np.floor(im.shape[0]/2.)), np.int(np.floor(im.shape[0]/2)))
@@ -511,9 +520,9 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
     diffim = im2 - fit
     if doALZCcorrection:
         if sig1 is None:
-            _, sig1 = computeClippedImageStats(im1)
+            _, sig1, _, _ = computeClippedImageStats(im1)
         if sig2 is None:
-            _, sig2 = computeClippedImageStats(im2)
+            _, sig2, _, _ = computeClippedImageStats(im2)
 
         print sig1, sig2
         pck = computeCorrectionKernelALZC(kfit, sig1, sig2)
@@ -539,27 +548,30 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     from scipy.fftpack import fft2, ifft2, ifftshift
 
     if sig1 is None and im1 is not None:
-        _, sig1 = computeClippedImageStats(im1)
+        _, sig1, _, _ = computeClippedImageStats(im1)
     if sig2 is None and im2 is not None:
-        _, sig2 = computeClippedImageStats(im2)
+        _, sig2, _, _ = computeClippedImageStats(im2)
 
     P_r = im1_psf
     P_n = im2_psf
+    sigR = sig1
+    sigN = sig2
     P_r_hat = fft2(P_r)
     P_n_hat = fft2(P_n)
-    return sig1, sig2, P_r_hat, P_n_hat
+    denom = np.sqrt((sigN**2 * F_r**2 * np.abs(P_r_hat)**2) + (sigR**2 * F_n**2 * np.abs(P_n_hat)**2))
+
+    return sigR, sigN, P_r_hat, P_n_hat, denom
 
 
 def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     from numpy.fft import fft2, ifft2, ifftshift
 
-    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
 
     R_hat = fft2(im1)
     N_hat = fft2(im2)
-    d_hat_numerator = (F_r * P_r_hat * N_hat - F_n * P_n_hat * R_hat)
-    d_hat_denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
-    d_hat = d_hat_numerator / d_hat_denom
+    numerator = (F_r * P_r_hat * N_hat - F_n * P_n_hat * R_hat)
+    d_hat = numerator / denom
 
     d = ifft2(d_hat)
     D = ifftshift(d.real)
@@ -570,8 +582,7 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
 def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     import scipy.ndimage.filters
 
-    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
-    denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     K_r_hat = P_r_hat / denom
     K_n_hat = P_n_hat / denom
     K_r = np.fft.ifft2(K_r_hat).real
@@ -586,11 +597,10 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
 
 ## Also compute the diffim's PSF (eq. 14)
 def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
-    denom = np.sqrt((sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2))
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
 
     F_D_numerator = F_r * F_n
-    F_D_denom = np.sqrt(sig1**2 * F_r**2 + sig2**2 * F_n**2)
+    F_D_denom = np.sqrt(sigN**2 * F_r**2 + sigR**2 * F_n**2)
     F_D = F_D_numerator / F_D_denom
 
     P_d_hat_numerator = (F_r * F_n * P_r_hat * P_n_hat)
@@ -604,33 +614,38 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 
 # Compute the corrected ZOGY "S_corr" (eq. 25)
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
-                      sig1=None, sig2=None, F_r=1., F_n=1.):
+                      sig1=None, sig2=None, F_r=1., F_n=1., D=None):
     import scipy.ndimage.filters
 
-    sig1, sig2, P_r_hat, P_n_hat = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
-    D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
-    P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
-    print P_D.shape, np.unravel_index(np.argmax(P_D), P_D.shape)
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    #denom = np.sqrt((sigN**2 * F_r**2 * np.abs(P_r_hat)**2) + (sigR**2 * F_n**2 * np.abs(P_n_hat)**2))
+    if D is None:
+        D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sigR, sigN, F_r, F_n)
+    P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sigR, sigN, F_r, F_n)
+    #P_r_hat = np.fft.fftshift(P_r_hat)  # Not sure why I need to do this but it seems that I do.
+    #P_n_hat = np.fft.fftshift(P_n_hat)
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
-    denom = (sig1**2 * F_r**2 * np.abs(P_r_hat)**2) + (sig2**2 * F_n**2 * np.abs(P_n_hat)**2)
-    k_r_hat = F_r * F_n**2 * np.conj(P_r_hat) * np.abs(P_n_hat)**2 / denom
-    k_n_hat = F_n * F_r**2 * np.conj(P_n_hat) * np.abs(P_r_hat)**2 / denom
+    k_r_hat = F_r * F_n**2 * np.conj(P_r_hat) * np.abs(P_n_hat)**2 / denom**2.
+    k_n_hat = F_n * F_r**2 * np.conj(P_n_hat) * np.abs(P_r_hat)**2 / denom**2.
 
     k_r = np.fft.ifft2(k_r_hat)
-    k_r = np.fft.ifftshift(k_r).real
+    k_r = k_r.real #np.abs(k_r).real #np.fft.ifftshift(k_r).real
+    k_r = np.roll(np.roll(k_r, -1, 0), -1, 1)
     k_n = np.fft.ifft2(k_n_hat)
-    k_n = np.fft.ifftshift(k_n).real
-    print k_r.shape, np.unravel_index(np.argmax(k_r), k_r.shape)
-    print k_n.shape, np.unravel_index(np.argmax(k_n), k_n.shape)
-    var1c = scipy.ndimage.filters.convolve(var_im1, k_n.real**2, mode='constant')
-    var2c = scipy.ndimage.filters.convolve(var_im2, k_r.real**2, mode='constant')
+    k_n = k_n.real #np.abs(k_n).real #np.fft.ifftshift(k_n).real
+    k_n = np.roll(np.roll(k_n, -1, 0), -1, 1)
+    #print k_r.shape, np.unravel_index(np.argmax(k_r), k_r.shape)
+    #print k_n.shape, np.unravel_index(np.argmax(k_n), k_n.shape)
+    var1c = scipy.ndimage.filters.convolve(var_im1, k_n**2., mode='constant')
+    var2c = scipy.ndimage.filters.convolve(var_im2, k_r**2., mode='constant')
 
     PD_bar = np.fliplr(np.flipud(P_D))
     S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant') * F_D
+    #print PD_bar.shape, np.unravel_index(np.argmax(PD_bar), PD_bar.shape)
     S_corr = S / np.sqrt(var1c + var2c)
-    return S_corr
+    return S_corr, S, var1c, var2c, k_r, k_n
 
 
 def computePixelCovariance(diffim, diffim2=None):
@@ -683,8 +698,8 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     # Compute the images' sigmas (sqrt of variance)
     sig1 = templateExposure.getMaskedImage().getVariance().getArray()
     sig2 = exposure.getMaskedImage().getVariance().getArray()
-    sig1squared, _ = computeClippedImageStats(sig1)
-    sig2squared, _ = computeClippedImageStats(sig2)
+    sig1squared, _, _, _ = computeClippedImageStats(sig1)
+    sig2squared, _, _, _ = computeClippedImageStats(sig2)
     sig1 = np.sqrt(sig1squared)
     sig2 = np.sqrt(sig2squared)
     corrKernel = computeCorrectionKernelALZC(kimg.getArray(), sig1=sig1, sig2=sig2)
