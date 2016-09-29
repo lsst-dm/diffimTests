@@ -163,8 +163,6 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
 
     im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
     im2 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of science image
-    #var_im1 = np.zeros_like(im1) + sky #sig1**2.
-    #var_im2 = np.zeros_like(im2) + sky #sig2**2.
 
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()  # variation in y-width of psf in science image across (x-dim of) image
     print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
@@ -174,15 +172,15 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
         flux = fluxes[i]
         tmp1 = flux * singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
         im1 += tmp1
-        #var_im1 += tmp1
 
         if i == ind:
-            print 'Variable source:', xposns[i], yposns[i], flux, flux * (1.+varSourceChange)
-            flux += flux * varSourceChange  # / 50.
+            if varSourceChange < 1:  # option to input it as fractional flux change
+                varSourceChange = flux * varSourceChange
+            print 'Variable source:', xposns[i], yposns[i], flux, flux + varSourceChange
+            flux += varSourceChange
         tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
                                        psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
         im2 += tmp2
-        #var_im2 += tmp2
 
     var_im1 = im1.copy()
     var_im2 = im2.copy()
@@ -488,7 +486,7 @@ def computeClippedImageStats(im, low=3, high=3):
         tmp = im[(im > low) & (im < upp)]
     mean1 = np.nanmean(tmp)
     sig1 = np.nanstd(tmp)
-    return mean1, sig1, np.nanmin(tmp), np.nanmax(tmp)
+    return mean1, sig1, np.nanmin(im), np.nanmax(im)
 
 def getImageGrid(im):
     xim = np.arange(np.int(-np.floor(im.shape[0]/2.)), np.int(np.floor(im.shape[0]/2)))
