@@ -1,7 +1,10 @@
 import numpy as np
+from numpy.polynomial.chebyshev import chebval2d
 import scipy
 import scipy.stats
-from scipy.fftpack import fft2, ifft2, fftfreq, fftshift
+from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
+import scipy.ndimage.filters
+import scipy.signal
 
 try:
     import lsst.afw.image as afwImage
@@ -118,7 +121,7 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
     b = -(np.sin(2.*theta))/(4.*sigma_x2) + (np.sin(2.*theta))/(4.*sigma_y2)
     c = sin_theta2/(2.*sigma_x2) + cos_theta2/(2.*sigma_y2)
     xxc, yyc = x-xc, y-yc
-    out = np.exp( - (a*(xxc**2.) + 2.*b*xxc*yyc + c*(yyc**2.)))
+    out = np.exp(-(a*(xxc**2.) + 2.*b*xxc*yyc + c*(yyc**2.)))
     if offset != 0.:
         out += offset
     out /= out.sum()
@@ -164,7 +167,8 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
     im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
     im2 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of science image
 
-    psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()  # variation in y-width of psf in science image across (x-dim of) image
+    # variation in y-width of psf in science image across (x-dim of) image
+    psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()
     print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
     changedCentroid = (-1, -1)
@@ -211,7 +215,6 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
 # Here beta is a rescale factor but this is NOT what it is really used for.
 # Can be used to rescale so that sigGauss[1] = sqrt(sigmaPsf_I^2 - sigmaPsf_T^2)
 def chebGauss2d(x, y, m=None, s=None, ord=[0,0], beta=1., verbose=False):
-    from numpy.polynomial.chebyshev import chebval2d
     if m is None:
         m = [0., 0.]
     if s is None:
@@ -260,14 +263,15 @@ def getALChebGaussBases(x0, y0, sigGauss=None, degGauss=None, betaGauss=1, verbo
     if verbose:
         for i in inds:
             print i
-    basis = [chebGauss2d(x0, y0, m=[0,0], s=[sig,sig], ord=[inds[i][0][ind], inds[i][1][ind]], beta=betaGauss, verbose=verbose) for i,sig in enumerate(sigGauss) for ind in range(len(inds[i][0]))]
+    basis = [chebGauss2d(x0, y0, m=[0,0], s=[sig,sig], ord=[inds[i][0][ind], inds[i][1][ind]],
+                         beta=betaGauss, verbose=verbose) for i,sig in enumerate(sigGauss) for
+             ind in range(len(inds[i][0]))]
     return basis
 
 # Convolve im1 (template) with the basis functions, and make these the *new* bases.
 # Input 'basis' is the output of getALChebGaussBases().
 
 def makeImageBases(im1, basis):
-    import scipy.signal
     #basis2 = [scipy.signal.fftconvolve(im1, b, mode='same') for b in basis]
     basis2 = [scipy.ndimage.filters.convolve(im1, b, mode='constant') for b in basis]
     return basis2
@@ -287,7 +291,6 @@ def makeSpatialBases(im1, basis, basis2, spatialKernelOrder=2, spatialBackground
     #spatialBackgroundOrder = 2
 
     def cheb2d(x, y, ord=[0,0], verbose=False):
-        from numpy.polynomial.chebyshev import chebval2d
         coefLen = np.max(ord)+1
         coef0 = np.zeros(coefLen)
         coef0[ord[0]] = 1
@@ -317,8 +320,10 @@ def makeSpatialBases(im1, basis, basis2, spatialKernelOrder=2, spatialBackground
     # Store "spatialBasis" which is the kernel basis and the spatial basis separated so we can recompute the
     # final kernel at the end. Include in index 2 the "original" kernel basis as well.
     if spatialKernelOrder > 0:
-        spatialBasis = [[basis2[bi], cheb2d(x0im, y0im, ord=[spatialInds[0][i], spatialInds[1][i]], verbose=False), basis[bi]] for i in range(1,len(spatialInds[0])) for bi in range(len(basis2))]
-        #basis2m = [b * cheb2d(x0im, y0im, ord=[spatialInds[0][i], spatialInds[1][i]], verbose=False) for i in range(1,len(spatialInds[0])) for b in basis2]
+        spatialBasis = [[basis2[bi], cheb2d(x0im, y0im, ord=[spatialInds[0][i], spatialInds[1][i]], verbose=False),
+                         basis[bi]] for i in range(1,len(spatialInds[0])) for bi in range(len(basis2))]
+        # basis2m = [b * cheb2d(x0im, y0im, ord=[spatialInds[0][i], spatialInds[1][i]], verbose=False) for
+        # i in range(1,len(spatialInds[0])) for b in basis2]
 
     spatialBgInds = get_valid_inds(spatialBackgroundOrder)
     if verbose:
@@ -326,7 +331,8 @@ def makeSpatialBases(im1, basis, basis2, spatialKernelOrder=2, spatialBackground
 
     # Then make the spatial background part
     if spatialBackgroundOrder > 0:
-        bgBasis = [cheb2d(x0im, y0im, ord=[spatialBgInds[0][i], spatialBgInds[1][i]], verbose=False) for i in range(len(spatialBgInds[0]))]
+        bgBasis = [cheb2d(x0im, y0im, ord=[spatialBgInds[0][i], spatialBgInds[1][i]], verbose=False) for
+                   i in range(len(spatialBgInds[0]))]
 
     return spatialBasis, bgBasis
 
@@ -409,7 +415,8 @@ def getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices, 
     kfit = kfit1 + kfit2
     if verbose:
         print kfit1.sum(), kfit2.sum(), kfit.sum()
-    kfit /= kfit.sum()  # this is necessary if the variable source changes a lot - prevent the kernel from incorporating that change in flux
+    # this is necessary if the source changes a lot - prevent the kernel from incorporating that change in flux
+    kfit /= kfit.sum()
     return kfit
 
 
@@ -544,8 +551,6 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
 
 
 def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    from scipy.fftpack import fft2, ifft2, ifftshift
-
     if sig1 is None and im1 is not None:
         _, sig1, _, _ = computeClippedImageStats(im1)
     if sig2 is None and im2 is not None:
@@ -563,8 +568,6 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
 
 
 def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    from numpy.fft import fft2, ifft2, ifftshift
-
     sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
 
     R_hat = fft2(im1)
@@ -579,7 +582,6 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
 
 
 def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    import scipy.ndimage.filters
 
     sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     K_r_hat = P_r_hat / denom
@@ -614,8 +616,6 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 # Compute the corrected ZOGY "S_corr" (eq. 25)
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
                       sig1=None, sig2=None, F_r=1., F_n=1., D=None):
-    import scipy.ndimage.filters
-
     sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     #denom = np.sqrt((sigN**2 * F_r**2 * np.abs(P_r_hat)**2) + (sigR**2 * F_n**2 * np.abs(P_n_hat)**2))
     if D is None:
@@ -758,9 +758,8 @@ def doConvolve(exposure, kernel, use_scipy=False):
     outExp = kern = None
     fkernel = fixEvenKernel(kernel)
     if use_scipy:
-        from scipy.ndimage.filters import convolve
-        pci = convolve(exposure.getMaskedImage().getImage().getArray(),
-                       fkernel, mode='constant', cval=np.nan)
+        pci = scipy.ndimage.filters.convolve(exposure.getMaskedImage().getImage().getArray(),
+                                             fkernel, mode='constant', cval=np.nan)
         outExp = exposure.clone()
         outExp.getMaskedImage().getImage().getArray()[:, :] = pci
         kern = fkernel
@@ -876,9 +875,9 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
         plt.ylabel(str(source_n) + dipoleLabel)
 
 
-## Updated ALZC kernel and PSF computation (from ip_diffim.imageDecorrelation)
-## This should eventually replace computeCorrectionKernelALZC and
-## computeCorrectedDiffimPsfALZC
+# Updated ALZC kernel and PSF computation (from ip_diffim.imageDecorrelation)
+# This should eventually replace computeCorrectionKernelALZC and
+# computeCorrectedDiffimPsfALZC
 
 def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04):
     """! Compute the Lupton/ZOGY post-conv. kernel for decorrelating an
