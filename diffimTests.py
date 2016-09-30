@@ -167,6 +167,7 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()  # variation in y-width of psf in science image across (x-dim of) image
     print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
+    changedCentroid = (-1, -1)
 
     for i in range(n_sources):
         flux = fluxes[i]
@@ -176,7 +177,8 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
         if i == ind:
             if varSourceChange < 1:  # option to input it as fractional flux change
                 varSourceChange = flux * varSourceChange
-            print 'Variable source:', xposns[i], yposns[i], flux, flux + varSourceChange
+            changedCentroid = (xposns[i]+256, yposns[i]+256)
+            print 'Variable source:', changedCentroid[0], changedCentroid[1], flux, flux + varSourceChange
             flux += varSourceChange
         tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
                                        psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
@@ -200,7 +202,7 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
 
     im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
     im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
-    return im1, im2, im1_psf, im2_psf, var_im1, var_im2
+    return im1, im2, im1_psf, im2_psf, var_im1, var_im2, changedCentroid
 
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
@@ -418,29 +420,29 @@ def getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices, 
 # since `fit2` already incorporates the spatially varying PSF.
 # sig1 and sig2 are the same as those input to makeFakeImages().
 
-def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
-    def kernel_ft2(kernel):
-        FFT = fft2(kernel)
-        return FFT
-    def post_conv_kernel_ft2(kernel, sig1=1., sig2=1.):
-        kft = kernel_ft2(kernel)
-        return np.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kft**2))
-    def post_conv_kernel2(kernel, sig1=1., sig2=1.):
-        kft = post_conv_kernel_ft2(kernel, sig1, sig2)
-        out = ifft2(kft)
-        return out
+# def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
+#     def kernel_ft2(kernel):
+#         FFT = fft2(kernel)
+#         return FFT
+#     def post_conv_kernel_ft2(kernel, sig1=1., sig2=1.):
+#         kft = kernel_ft2(kernel)
+#         return np.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kft**2))
+#     def post_conv_kernel2(kernel, sig1=1., sig2=1.):
+#         kft = post_conv_kernel_ft2(kernel, sig1, sig2)
+#         out = ifft2(kft)
+#         return out
 
-    pck = post_conv_kernel2(kappa, sig1=sig2, sig2=sig1)
-    pck = np.fft.ifftshift(pck.real)
-    #print np.unravel_index(np.argmax(pck), pck.shape)
+#     pck = post_conv_kernel2(kappa, sig1=sig2, sig2=sig1)
+#     pck = np.fft.ifftshift(pck.real)
+#     #print np.unravel_index(np.argmax(pck), pck.shape)
 
-    # I think we actually need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers... let's try it.
-    # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
-    if False:
-        # I still think we need to flip it in one axis (TBD: figure this out!)
-        pck = pck[::-1, :]
+#     # I think we actually need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers... let's try it.
+#     # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
+#     if False:
+#         # I still think we need to flip it in one axis (TBD: figure this out!)
+#         pck = pck[::-1, :]
 
-    return pck
+#     return pck
 
 
 # Compute the (corrected) diffim's new PSF
@@ -448,36 +450,36 @@ def computeCorrectionKernelALZC(kappa, sig1=0.2, sig2=0.2):
 # we'll parameterize phi_1(k) as a gaussian with sigma "psfsig1".
 # im2_psf is the the psf of im2
 
-def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
-    def post_conv_psf_ft2(psf, kernel, sig1=1., sig2=1.):
-        # Pad psf or kernel symmetrically to make them the same size!
-        if psf.shape[0] < kernel.shape[0]:
-            while psf.shape[0] < kernel.shape[0]:
-                psf = np.pad(psf, (1, 1), mode='constant')
-        elif psf.shape[0] > kernel.shape[0]:
-            while psf.shape[0] > kernel.shape[0]:
-                kernel = np.pad(kernel, (1, 1), mode='constant')
-        psf_ft = fft2(psf)
-        kft = fft2(kernel)
-        out = psf_ft * np.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kft**2))
-        return out
-    def post_conv_psf(psf, kernel, sig1=1., sig2=1.):
-        kft = post_conv_psf_ft2(psf, kernel, sig1, sig2)
-        out = ifft2(kft)
-        return out
+# def computeCorrectedDiffimPsfALZC(kappa, im2_psf, sig1=0.2, sig2=0.2):
+#     def post_conv_psf_ft2(psf, kernel, sig1=1., sig2=1.):
+#         # Pad psf or kernel symmetrically to make them the same size!
+#         if psf.shape[0] < kernel.shape[0]:
+#             while psf.shape[0] < kernel.shape[0]:
+#                 psf = np.pad(psf, (1, 1), mode='constant')
+#         elif psf.shape[0] > kernel.shape[0]:
+#             while psf.shape[0] > kernel.shape[0]:
+#                 kernel = np.pad(kernel, (1, 1), mode='constant')
+#         psf_ft = fft2(psf)
+#         kft = fft2(kernel)
+#         out = psf_ft * np.sqrt((sig1**2 + sig2**2) / (sig1**2 + sig2**2 * kft**2))
+#         return out
+#     def post_conv_psf(psf, kernel, sig1=1., sig2=1.):
+#         kft = post_conv_psf_ft2(psf, kernel, sig1, sig2)
+#         out = ifft2(kft)
+#         return out
 
-    im2_psf_small = im2_psf
-    # First compute the science image's (im2's) psf, subset on -16:15 coords
-    if im2_psf.shape[0] > 50:
-        x0im, y0im = getImageGrid(im2_psf)
-        x = np.arange(-16, 16, 1)
-        y = x.copy()
-        x0, y0 = np.meshgrid(x, y)
-        im2_psf_small = im2_psf[(x0im.max()+x.min()+1):(x0im.max()-x.min()+1),
-                                (y0im.max()+y.min()+1):(y0im.max()-y.min()+1)]
-    pcf = post_conv_psf(psf=im2_psf_small, kernel=kappa, sig1=sig2, sig2=sig1)
-    pcf = pcf.real / pcf.real.sum()
-    return pcf
+#     im2_psf_small = im2_psf
+#     # First compute the science image's (im2's) psf, subset on -16:15 coords
+#     if im2_psf.shape[0] > 50:
+#         x0im, y0im = getImageGrid(im2_psf)
+#         x = np.arange(-16, 16, 1)
+#         y = x.copy()
+#         x0, y0 = np.meshgrid(x, y)
+#         im2_psf_small = im2_psf[(x0im.max()+x.min()+1):(x0im.max()-x.min()+1),
+#                                 (y0im.max()+y.min()+1):(y0im.max()-y.min()+1)]
+#     pcf = post_conv_psf(psf=im2_psf_small, kernel=kappa, sig1=sig2, sig2=sig1)
+#     pcf = pcf.real / pcf.real.sum()
+#     return pcf
 
 def computeClippedImageStats(im, low=3, high=3):
     tmp = im
@@ -522,8 +524,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
         if sig2 is None:
             _, sig2, _, _ = computeClippedImageStats(im2)
 
-        print sig1, sig2
-        pck = computeCorrectionKernelALZC(kfit, sig1, sig2)
+        pck = computeDecorrelationKernel(kfit, sig1**2, sig2**2)
         pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
         diffim = pci
 
@@ -643,7 +644,7 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
     S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant') * F_D
     #print PD_bar.shape, np.unravel_index(np.argmax(PD_bar), PD_bar.shape)
     S_corr = S / np.sqrt(var1c + var2c)
-    return S_corr, S, var1c, var2c, k_r, k_n
+    return S_corr, S, D, P_D, F_D
 
 
 def computePixelCovariance(diffim, diffim2=None):
@@ -700,7 +701,7 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     sig2squared, _, _, _ = computeClippedImageStats(sig2)
     sig1 = np.sqrt(sig1squared)
     sig2 = np.sqrt(sig2squared)
-    corrKernel = computeCorrectionKernelALZC(kimg.getArray(), sig1=sig1, sig2=sig2)
+    corrKernel = computeDecorrelationKernel(kimg.getArray(), sig1squared, sig2squared)
     # Eventually, use afwMath.convolve(), but for now just use scipy.
     log.info("ALZC: Convolving.")
     pci, _ = doConvolve(subtractedExposure.getMaskedImage().getImage().getArray(),
@@ -710,7 +711,7 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
 
     # Compute the subtracted exposure's updated psf
     psf = subtractedExposure.getPsf().computeImage().getArray()
-    psfc = computeCorrectedDiffimPsfALZC(corrKernel, psf, sig1=sig1, sig2=sig2)
+    psfc = computeCorrectedDiffimPsf(corrKernel, psf, sig1=sig1, sig2=sig2)
     psfcI = afwImage.ImageD(subtractedExposure.getPsf().computeImage().getBBox())
     psfcI.getArray()[:, :] = psfc
     psfcK = afwMath.FixedKernel(psfcI)
