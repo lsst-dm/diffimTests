@@ -503,12 +503,17 @@ def getImageGrid(im):
     x0im, y0im = np.meshgrid(xim, yim)
     return x0im, y0im
 
-def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
+
+def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kernelSize=16,
                        spatialKernelOrder=2, spatialBackgroundOrder=2, doALZCcorrection=True,
-                       sig1=None, sig2=None, verbose=False):
-    x = np.arange(-16, 16, 1)
+                       preConvKernel=None, sig1=None, sig2=None, verbose=False):
+    x = np.arange(-kernelSize+1, kernelSize, 1)
     y = x.copy()
     x0, y0 = np.meshgrid(x, y)
+
+    im1_orig = im1
+    if preConvKernel is not None:
+        im1 = scipy.ndimage.filters.convolve(im1, preConvKernel, mode='constant')
 
     basis = getALChebGaussBases(x0, y0, sigGauss=sigGauss, degGauss=degGauss,
                                 betaGauss=betaGauss, verbose=verbose)
@@ -531,7 +536,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1,
         if sig2 is None:
             _, sig2, _, _ = computeClippedImageStats(im2)
 
-        pck = computeDecorrelationKernel(kfit, sig1**2, sig2**2)
+        pck = computeDecorrelationKernel(kfit, sig1**2, sig2**2, preConvKernel=preConvKernel)
         pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
         diffim = pci
 
@@ -699,8 +704,6 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     sig2 = exposure.getMaskedImage().getVariance().getArray()
     sig1squared, _, _, _ = computeClippedImageStats(sig1)
     sig2squared, _, _, _ = computeClippedImageStats(sig2)
-    sig1 = np.sqrt(sig1squared)
-    sig2 = np.sqrt(sig2squared)
     corrKernel = computeDecorrelationKernel(kimg.getArray(), sig1squared, sig2squared)
     # Eventually, use afwMath.convolve(), but for now just use scipy.
     log.info("ALZC: Convolving.")
@@ -711,7 +714,7 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
 
     # Compute the subtracted exposure's updated psf
     psf = subtractedExposure.getPsf().computeImage().getArray()
-    psfc = computeCorrectedDiffimPsf(corrKernel, psf, sig1=sig1, sig2=sig2)
+    psfc = computeCorrectedDiffimPsf(corrKernel, psf, svar=sig1squared, tvar=sig2squared)
     psfcI = afwImage.ImageD(subtractedExposure.getPsf().computeImage().getBBox())
     psfcI.getArray()[:, :] = psfc
     psfcK = afwMath.FixedKernel(psfcI)
@@ -879,21 +882,27 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
 # This should eventually replace computeCorrectionKernelALZC and
 # computeCorrectedDiffimPsfALZC
 
-def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04):
+def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
     """! Compute the Lupton/ZOGY post-conv. kernel for decorrelating an
     image difference, based on the PSF-matching kernel.
     @param kappa  A matching kernel 2-d numpy.array derived from Alard & Lupton PSF matching
     @param svar   Average variance of science image used for PSF matching
     @param tvar   Average variance of template image used for PSF matching
+    @param preConvKernel   A pre-convolution kernel applied to im1 prior to A&L PSF matching
     @return a 2-d numpy.array containing the correction kernel
 
     @note As currently implemented, kappa is a static (single, non-spatially-varying) kernel.
     """
     kappa = fixOddKernel(kappa)
     kft = scipy.fftpack.fft2(kappa)
-    kft = np.sqrt((svar + tvar) / (svar + tvar * kft**2))
+    pcft = 1.0
+    if preConvKernel is not None:
+        pcft = fixOddKernel(preConvKernel)
+        pcft = scipy.fftpack.fft2(pcft)
+
+    kft = np.sqrt((svar + tvar) / (svar * pcft**2 + tvar * kft**2))
     pck = scipy.fftpack.ifft2(kft)
-    pck = scipy.fftpack.ifftshift(pck.real)
+    pck = scipy.fftpack.ifftshift(pck).real
     fkernel = fixEvenKernel(pck)
 
     # I think we may need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers...
