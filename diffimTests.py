@@ -901,6 +901,7 @@ def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
         pcft = scipy.fftpack.fft2(pcft)
 
     kft = np.sqrt((svar + tvar) / (svar * pcft**2 + tvar * kft**2))
+    #kft = scipy.fftpack.fftshift(kft)
     pck = scipy.fftpack.ifft2(kft)
     pck = scipy.fftpack.ifftshift(pck).real
     fkernel = fixEvenKernel(pck)
