@@ -137,7 +137,7 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 # overfitting -- perhaps to the source itself). This might be fixed by
 # adding more constant sources.
 
-def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
+def makeFakeImages(imSize=None, psf1=None, psf2=None, offset=None,
                    psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
                    n_sources=500, sourceFluxRange=(50, 30000), seed=66, psfSize=None, sky=2000.):
     np.random.seed(seed)
@@ -153,8 +153,9 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
     offset = [0.2, 0.2] if offset is None else offset
     print 'Offset:', offset
 
-    xim = np.arange(-256, 256, 1) if xim is None else xim
-    yim = xim.copy() if yim is None else yim
+    imSize = (512, 512) if imSize is None else imSize
+    xim = np.arange(-imSize[0]//2, imSize[0]//2, 1)
+    yim = np.arange(-imSize[1]//2, imSize[1]//2, 1)
     x0im, y0im = np.meshgrid(xim, yim)
     fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
     xposns = np.random.uniform(xim.min()+16, xim.max()-5, n_sources)
@@ -181,7 +182,7 @@ def makeFakeImages(xim=None, yim=None, psf1=None, psf2=None, offset=None,
         if i == ind:
             if varSourceChange < 1:  # option to input it as fractional flux change
                 varSourceChange = flux * varSourceChange
-            changedCentroid = (xposns[i]+256, yposns[i]+256)
+            changedCentroid = (xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2)
             print 'Variable source:', changedCentroid[0], changedCentroid[1], flux, flux + varSourceChange
             flux += varSourceChange
         tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
@@ -504,7 +505,7 @@ def getImageGrid(im):
     return x0im, y0im
 
 
-def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kernelSize=16,
+def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kernelSize=25,
                        spatialKernelOrder=2, spatialBackgroundOrder=2, doALZCcorrection=True,
                        preConvKernel=None, sig1=None, sig2=None, verbose=False):
     x = np.arange(-kernelSize+1, kernelSize, 1)
