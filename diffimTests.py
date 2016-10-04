@@ -1004,6 +1004,27 @@ class Exposure(object):
     def setMetaData(self, key, value):
         self.metaData[key] = value
 
+    def asAfwExposure(self):
+        try:
+            import lsst.afw.image as afwImage
+            import lsst.afw.geometry as afwGeom
+            import lsst.meas.algorithms as measAlg
+        except:
+            return None
+
+        bbox = afwGeom.Box2I(afwGeom.Point2I(0, 0), afwGeom.Point2I(self.im.shape[0]-1, self.im.shape[1]-1))
+        im1ex = afwImage.ExposureD(bbox)
+        im1ex.getMaskedImage().getImage().getArray()[:, :] = self.im
+        im1ex.getMaskedImage().getVariance().getArray()[:, :] = self.var
+        psfShape = self.psf.shape[0]//2
+        psfBox = afwGeom.Box2I(afwGeom.Point2I(-psfShape, psfShape), afwGeom.Point2I(-psfShape, psfShape))
+        psf = afwImage.ImageD(psfBox)
+        psf.getArray()[:, :] = self.psf
+        psfK = afwMath.FixedKernel(psf)
+        psfNew = measAlg.KernelPsf(psfK)
+        im1ex.setPsf(psfNew)
+        return im1ex
+
 
 class DiffimTest(object):
     def __init__(self, imSize=None, sky=300., psf1=None, psf2=None, offset=None,
