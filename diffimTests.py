@@ -172,7 +172,6 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()
     print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
-    changedCentroid = (-1, -1)
 
     for i in range(n_sources):
         flux = fluxes[i]
@@ -183,7 +182,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
             if varSourceChange < 1:  # option to input it as fractional flux change
                 varSourceChange = flux * varSourceChange
             changedCentroid = (xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2)
-            print 'Variable source:', changedCentroid[0], changedCentroid[1], flux, flux + varSourceChange
+            print 'Variable source:', ind, changedCentroid[0], changedCentroid[1], flux, flux + varSourceChange
             flux += varSourceChange
         tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
                                        psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
@@ -207,7 +206,8 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
 
     im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
     im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
-    return im1, im2, im1_psf, im2_psf, var_im1, var_im2, changedCentroid
+    centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2))
+    return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, ind
 
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
@@ -1007,24 +1007,48 @@ class Exposure(object):
     def asAfwExposure(self):
         try:
             import lsst.afw.image as afwImage
-            import lsst.afw.geometry as afwGeom
+            import lsst.afw.geom as afwGeom
             import lsst.meas.algorithms as measAlg
-        except:
+        except Exception as e:
+            print e
             return None
 
         bbox = afwGeom.Box2I(afwGeom.Point2I(0, 0), afwGeom.Point2I(self.im.shape[0]-1, self.im.shape[1]-1))
-        im1ex = afwImage.ExposureD(bbox)
+        im1ex = afwImage.ExposureF(bbox)
         im1ex.getMaskedImage().getImage().getArray()[:, :] = self.im
         im1ex.getMaskedImage().getVariance().getArray()[:, :] = self.var
         psfShape = self.psf.shape[0]//2
-        psfBox = afwGeom.Box2I(afwGeom.Point2I(-psfShape, psfShape), afwGeom.Point2I(-psfShape, psfShape))
+        psfBox = afwGeom.Box2I(afwGeom.Point2I(-psfShape, -psfShape), afwGeom.Point2I(psfShape, psfShape))
         psf = afwImage.ImageD(psfBox)
         psf.getArray()[:, :] = self.psf
         psfK = afwMath.FixedKernel(psf)
         psfNew = measAlg.KernelPsf(psfK)
         im1ex.setPsf(psfNew)
+        wcs = makeWcs()
+        im1ex.setWcs(wcs)
         return im1ex
 
+def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
+    import lsst.daf.base as dafBase
+    metadata = dafBase.PropertySet()
+    metadata.set("SIMPLE", "T")
+    metadata.set("BITPIX", -32)
+    metadata.set("NAXIS", 2)
+    metadata.set("NAXIS1", 1024)
+    metadata.set("NAXIS2", 1153)
+    metadata.set("RADECSYS", 'FK5')
+    metadata.set("EQUINOX", 2000.)
+    metadata.setDouble("CRVAL1", 215.604025685476)
+    metadata.setDouble("CRVAL2", 53.1595451514076)
+    metadata.setDouble("CRPIX1", 1109.99981456774 + offset)
+    metadata.setDouble("CRPIX2", 560.018167811613 + offset)
+    metadata.set("CTYPE1", 'RA---SIN')
+    metadata.set("CTYPE2", 'DEC--SIN')
+    metadata.setDouble("CD1_1", 5.10808596133527E-05)
+    metadata.setDouble("CD1_2", 1.85579539217196E-07)
+    metadata.setDouble("CD2_2", -5.10281493481982E-05)
+    metadata.setDouble("CD2_1", -8.27440751733828E-07)
+    return afwImage.makeWcs(metadata)
 
 class DiffimTest(object):
     def __init__(self, imSize=None, sky=300., psf1=None, psf2=None, offset=None,
@@ -1041,15 +1065,14 @@ class DiffimTest(object):
 
         if doInit:
             # Generate images and PSF's with the same dimension as the image (used for A&L)
-            im1, im2, P_r, P_n, im1_var, im2_var, \
-                self.changedCentroid = makeFakeImages(imSize, sky=sky, psf1=psf1, psf2=psf2, offset=offset,
-                                                      psf_yvary_factor=psf_yvary_factor,
-                                                      varSourceChange=varSourceChange,
-                                                      theta1=theta1, theta2=theta2,
-                                                      im2background=im2background,
-                                                      n_sources=n_sources,
-                                                      sourceFluxRange=sourceFluxRange, psfSize=psfSize,
-                                                      seed=seed)
+            im1, im2, P_r, P_n, im1_var, im2_var, self.centroids, \
+                self.changedCentroidInd = makeFakeImages(imSize, sky=sky, psf1=psf1, psf2=psf2,
+                                                         offset=offset, psf_yvary_factor=psf_yvary_factor,
+                                                         varSourceChange=varSourceChange,
+                                                         theta1=theta1, theta2=theta2,
+                                                         im2background=im2background, n_sources=n_sources,
+                                                         sourceFluxRange=sourceFluxRange, psfSize=psfSize,
+                                                         seed=seed)
 
             self.im1 = Exposure(im1, P_r, im1_var)
             self.im1.setMetaData('sky', sky)
@@ -1083,6 +1106,7 @@ class DiffimTest(object):
                          n_sources=self.n_sources, sourceFluxRange=self.im1.metaData['sourceFluxRange'],
                          psfSize=self.psfSize, seed=self.seed, doInit=False)
         out.im1, out.im2 = self.im1, self.im2
+        out.centroids, out.changedCentroidInd = self.centroids, self.changedCentroidInd
         out.D_AL, out.kappa, out.D_ZOGY, \
             out.S_corr_ZOGY, out.S_ZOGY = self.D_AL, self.kappa, self.D_ZOGY, \
                                           self.S_corr_ZOGY, self.S_ZOGY
@@ -1136,3 +1160,6 @@ class DiffimTest(object):
 
         self.D_ZOGY = Exposure(self.D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
         return self.D_ZOGY
+
+    def doALInStack(doDecorr=True, doPreConv=False):
+        None
