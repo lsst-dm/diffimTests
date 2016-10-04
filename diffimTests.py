@@ -650,7 +650,7 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
     S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant') * F_D
     #print PD_bar.shape, np.unravel_index(np.argmax(PD_bar), PD_bar.shape)
     S_corr = S / np.sqrt(var1c + var2c)
-    return S_corr, S, D, P_D, F_D
+    return S_corr, S, D, P_D, F_D, var1c, var2c
 
 
 def computePixelCovariance(diffim, diffim2=None):
@@ -896,10 +896,10 @@ def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
     """
     kappa = fixOddKernel(kappa)
     kft = scipy.fftpack.fft2(kappa)
-    pcft = 1.0
+    pc = pcft = 1.0
     if preConvKernel is not None:
-        pcft = fixOddKernel(preConvKernel)
-        pcft = scipy.fftpack.fft2(pcft)
+        pc = fixOddKernel(preConvKernel)
+        pcft = scipy.fftpack.fft2(pc)
 
     kft = np.sqrt((svar + tvar) / (svar * pcft**2 + tvar * kft**2))
     #kft = scipy.fftpack.fftshift(kft)
@@ -1008,7 +1008,7 @@ class Exposure(object):
 class DiffimTest(object):
     def __init__(self, imSize=None, sky=300., psf1=None, psf2=None, offset=None,
                  psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
-                 n_sources=500, sourceFluxRange=(50, 30000), psfSize=None, seed=66,
+                 n_sources=500, sourceFluxRange=(50, 30000), psfSize=25, seed=66,
                  doInit=True):
         self.offset = offset
         self.psf_yvary_factor = psf_yvary_factor
@@ -1020,37 +1020,29 @@ class DiffimTest(object):
 
         if doInit:
             # Generate images and PSF's with the same dimension as the image (used for A&L)
-            im1, im2, im1_psf, im2_psf, im1_var, im2_var, \
+            im1, im2, P_r, P_n, im1_var, im2_var, \
                 self.changedCentroid = makeFakeImages(imSize, sky=sky, psf1=psf1, psf2=psf2, offset=offset,
                                                       psf_yvary_factor=psf_yvary_factor,
                                                       varSourceChange=varSourceChange,
                                                       theta1=theta1, theta2=theta2,
                                                       im2background=im2background,
                                                       n_sources=n_sources,
-                                                      sourceFluxRange=sourceFluxRange, psfSize=None,
+                                                      sourceFluxRange=sourceFluxRange, psfSize=psfSize,
                                                       seed=seed)
 
-            self.im1 = Exposure(im1, im1_psf, im1_var)
+            self.im1 = Exposure(im1, P_r, im1_var)
             self.im1.setMetaData('sky', sky)
             self.im1.setMetaData('psfSigma', psf1)
             self.im1.setMetaData('thetaPsf', theta1)
             self.im1.setMetaData('nSources', n_sources)
             self.im1.setMetaData('sourceFluxRange', sourceFluxRange)
 
-            self.im2 = Exposure(im2, im2_psf, im2_var)
+            self.im2 = Exposure(im2, P_n, im2_var)
             self.im2.setMetaData('sky', sky)
             self.im2.setMetaData('psfSigma', psf2)
             self.im2.setMetaData('thetaPsf', theta2)
             self.im2.setMetaData('nSources', n_sources)
             self.im2.setMetaData('sourceFluxRange', sourceFluxRange)
-
-            # Hack to generate a pair of PSFs with size 50x50
-            _, _, self.P_r, self.P_n, _, _, \
-                _ = makeFakeImages(imSize, sky=sky, psf1=psf1, psf2=psf2, offset=offset,
-                                   psf_yvary_factor=psf_yvary_factor, varSourceChange=varSourceChange,
-                                   theta1=theta1, theta2=theta2, im2background=im2background,
-                                   n_sources=5, sourceFluxRange=sourceFluxRange, psfSize=25,
-                                   seed=seed)
 
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
@@ -1058,7 +1050,6 @@ class DiffimTest(object):
     # on im2-im1.
     def reverseImages(self):
         self.im1, self.im2 = self.im2, self.im1
-        self.P_r, self.P_n = self.P_n, self.P_r
         self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
     def clone(self):
@@ -1071,35 +1062,56 @@ class DiffimTest(object):
                          n_sources=self.n_sources, sourceFluxRange=self.im1.metaData['sourceFluxRange'],
                          psfSize=self.psfSize, seed=self.seed, doInit=False)
         out.im1, out.im2 = self.im1, self.im2
-        out.P_r, out.P_n = self.P_r, self.P_n
         out.D_AL, out.kappa, out.D_ZOGY, \
             out.S_corr_ZOGY, out.S_ZOGY = self.D_AL, self.kappa, self.D_ZOGY, \
                                           self.S_corr_ZOGY, self.S_ZOGY
         return out
 
-    def doAL(self, spatialKernelOrder=0, spatialBackgroundOrder=1, doPreConv=False):
+    def doAL(self, spatialKernelOrder=0, spatialBackgroundOrder=1, kernelSize=None, doDecorr=True,
+             doPreConv=False, betaGauss=1.):
+        if kernelSize is None:
+            #if not doPreConv:
+            kernelSize = self.im1.psf.shape[0]//2+1  # Hastily assume all PSFs are same sized and square
+            #else:
+            #    kernelSize = np.floor(self.im1.psf.shape[0] * np.sqrt(2.)).astype(int)//2
+            #    if kernelSize % 2 == 0:  # make odd-sized
+            #        kernelSize -= 1
         preConvKernel = None
         if doPreConv:
-            preConvKernel = self.P_r
-        self.D_AL, self.kappa = performAlardLupton(self.im1.im, self.im2.im,
-                                                   spatialKernelOrder=spatialKernelOrder,
-                                                   spatialBackgroundOrder=spatialBackgroundOrder,
-                                                   sig1=self.im1.sig, sig2=self.im2.sig,
-                                                   preConvKernel=preConvKernel)
-        self.D_AL /= np.sqrt(self.im1.metaData['sky'] * 2.)  # wrong, should use im2 also.
+            preConvKernel = self.im1.psf
+            if betaGauss == 1.:  # update default, resize the kernel appropriately
+                betaGauss = 1./np.sqrt(2.)
+        D_AL, self.kappa_AL = performAlardLupton(self.im1.im, self.im2.im,
+                                                 spatialKernelOrder=spatialKernelOrder,
+                                                 spatialBackgroundOrder=spatialBackgroundOrder,
+                                                 sig1=self.im1.sig, sig2=self.im2.sig,
+                                                 kernelSize=kernelSize,
+                                                 betaGauss=betaGauss,
+                                                 doALZCcorrection=doDecorr,
+                                                 preConvKernel=preConvKernel)
+        var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL, mode='constant')
+        self.D_AL = Exposure(D_AL, self.im1.psf, var)
+        self.D_AL.im /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
+        self.D_AL.var /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
         # TBD: make the returned D an Exposure.
-        return self.D_AL, self.kappa
+        return self.D_AL, self.kappa_AL
 
-    def doZOGY(self, inImageSpace=True):
-        if inImageSpace:
-            self.D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.P_r, self.P_n,
-                                                sig1=self.im1.sig, sig2=self.im2.sig)
-        else:
-            self.D_ZOGY = performZOGY(self.im1.im, self.im2.im, self.P_r, self.P_n,
-                                      sig1=self.im1.sig, sig2=self.im2.sig)
-        self.S_corr_ZOGY, _, self.S_ZOGY, _, _ = performZOGY_Scorr(self.im1.im, self.im2.im,
-                                                                self.im1.var, self.im2.var,
-                                                                sig1=self.im1.sig, sig2=self.im2.sig,
-                                                                im1_psf=self.P_r, im2_psf=self.P_n,
-                                                                D=self.D_ZOGY)
-        return self.D_ZOGY, self.S_corr_ZOGY
+    def doZOGY(self, computeScorr=True):
+        #if inImageSpace:  # Doesn't work anymore (needs image-sized PSFs)
+        self.D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
+                                            sig1=self.im1.sig, sig2=self.im2.sig)
+        #else:
+        #    self.D_ZOGY = performZOGY(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
+        #                              sig1=self.im1.sig, sig2=self.im2.sig)
+
+        if computeScorr:
+            self.S_corr_ZOGY, self.S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
+                var2c = performZOGY_Scorr(self.im1.im, self.im2.im, self.im1.var, self.im2.var,
+                                          sig1=self.im1.sig, sig2=self.im2.sig,
+                                          im1_psf=self.im1.psf, im2_psf=self.im2.psf,
+                                          D=self.D_ZOGY)
+            self.S_ZOGY = Exposure(self.S_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c))
+            self.S_corr_ZOGY = Exposure(self.S_corr_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c)/np.sqrt(var1c + var2c))
+
+        self.D_ZOGY = Exposure(self.D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
+        return self.D_ZOGY
