@@ -1161,5 +1161,26 @@ class DiffimTest(object):
         self.D_ZOGY = Exposure(self.D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
         return self.D_ZOGY
 
-    def doALInStack(doDecorr=True, doPreConv=False):
-        None
+    def doALInStack(self, doDecorr=True, doPreConv=False):
+        import lsst.ip.diffim as ipDiffim
+        im1 = self.im1.asAfwExposure()
+        im2 = self.im2.asAfwExposure()
+
+        preConvKernel = None
+        im2c = im2
+        if doPreConv:
+            preConvKernel = self.im1.psf
+            im2c, kern = doConvolve(im2, preConvKernel, use_scipy=False)
+
+        config = ipDiffim.ImagePsfMatchTask.ConfigClass()
+        config.kernel.name = "AL"
+        subconfig = config.kernel.active
+        subconfig.afwBackgroundConfig.useApprox = False
+        subconfig.constantVarianceWeighting = False
+        subconfig.singleKernelClipping = False
+        subconfig.spatialKernelClipping = False
+        subconfig.fitForBackground = False
+
+        task = ipDiffim.ImagePsfMatchTask(config=config)
+        result = task.subtractExposures(im1, im2c, doWarping=True)
+        return result
