@@ -690,9 +690,7 @@ def computePixelCovariance(diffim, diffim2=None):
 # Compute ALZC correction kernel from matching kernel
 # Here we use a constant kernel, just compute it for the center of the image.
 def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure, psfMatchingKernel, log):
-    import lsst.afw.image as afwImage
     import lsst.meas.algorithms as measAlg
-    import lsst.afw.math as afwMath
 
     spatialKernel = psfMatchingKernel
     kimg = afwImage.ImageD(spatialKernel.getDimensions())
@@ -1161,7 +1159,7 @@ class DiffimTest(object):
         self.D_ZOGY = Exposure(self.D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
         return self.D_ZOGY
 
-    def doALInStack(self, doDecorr=True, doPreConv=False):
+    def doALInStack(self, doDecorr=False, doPreConv=False):
         import lsst.ip.diffim as ipDiffim
         im1 = self.im1.asAfwExposure()
         im2 = self.im2.asAfwExposure()
@@ -1183,4 +1181,53 @@ class DiffimTest(object):
 
         task = ipDiffim.ImagePsfMatchTask(config=config)
         result = task.subtractExposures(im1, im2c, doWarping=True)
+
+        if doDecorr:
+            sig1squared = computeVarianceMean(im1)
+            sig2squared = computeVarianceMean(im2)
+
+            spatialKernel = result.psfMatchingKernel
+            kimg = afwImage.ImageD(spatialKernel.getDimensions())
+            bbox = im1.getBBox()
+            xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+            ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+            spatialKernel.computeImage(kimg, True, xcen, ycen)
+            kimg = kimg.getArray()
+            #return kimg
+            if preConvKernel is not None and kimg.shape[0] < preConvKernel.shape[0]:
+                # This is likely brittle and may only work if both kernels are odd-shaped.
+                kimg[np.abs(kimg) < 1e-4] = 1e-8
+                kimg -= kimg[0, 0]
+                padSize0 = preConvKernel.shape[0]//2 - kimg.shape[0]//2
+                padSize1 = preConvKernel.shape[1]//2 - kimg.shape[1]//2
+                #kimg = np.pad(kimg, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
+                #              constant_values=0)
+                kimg /= kimg.sum()
+
+                preConvKernel = preConvKernel[padSize0:-padSize0, padSize1:-padSize1]
+                print kimg.shape, preConvKernel.shape
+
+            pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
+                                             preConvKernel=preConvKernel)
+            #return kimg, preConvKernel, pck
+            diffim, pck = doConvolve(result.subtractedExposure, pck, use_scipy=False)
+            result.decorrelatedDiffim = diffim
+
         return result
+
+def computeVarianceMean(exposure):
+    try:
+        import lsst.afw.math as afwMath
+    except Exception as e:
+        print e
+        return None
+    statsControl = afwMath.StatisticsControl()
+    statsControl.setNumSigmaClip(3.)
+    statsControl.setNumIter(3)
+    ignoreMaskPlanes = ("INTRP", "EDGE", "DETECTED", "SAT", "CR", "BAD", "NO_DATA", "DETECTED_NEGATIVE")
+    statsControl.setAndMask(afwImage.MaskU.getPlaneBitMask(ignoreMaskPlanes))
+    statObj = afwMath.makeStatistics(exposure.getMaskedImage().getVariance(),
+                                     exposure.getMaskedImage().getMask(),
+                                     afwMath.MEANCLIP, statsControl)
+    var = statObj.getValue(afwMath.MEANCLIP)
+    return var
