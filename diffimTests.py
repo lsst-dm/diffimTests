@@ -1132,6 +1132,7 @@ class DiffimTest(object):
                                                  betaGauss=betaGauss,
                                                  doALZCcorrection=doDecorr,
                                                  preConvKernel=preConvKernel)
+        # This is not entirely correct, we also need to convolve var with the decorrelation kernel:
         var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL, mode='constant')
         self.D_AL = Exposure(D_AL, self.im1.psf, var)
         self.D_AL.im /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
@@ -1183,9 +1184,6 @@ class DiffimTest(object):
         result = task.subtractExposures(im1, im2c, doWarping=True)
 
         if doDecorr:
-            sig1squared = computeVarianceMean(im1)
-            sig2squared = computeVarianceMean(im2)
-
             spatialKernel = result.psfMatchingKernel
             kimg = afwImage.ImageD(spatialKernel.getDimensions())
             bbox = im1.getBBox()
@@ -1196,7 +1194,7 @@ class DiffimTest(object):
             #return kimg
             if preConvKernel is not None and kimg.shape[0] < preConvKernel.shape[0]:
                 # This is likely brittle and may only work if both kernels are odd-shaped.
-                kimg[np.abs(kimg) < 1e-4] = 1e-8
+                kimg[np.abs(kimg) < 1e-4] = np.sign(kimg)[np.abs(kimg) < 1e-4] * 1e-8
                 kimg -= kimg[0, 0]
                 padSize0 = preConvKernel.shape[0]//2 - kimg.shape[0]//2
                 padSize1 = preConvKernel.shape[1]//2 - kimg.shape[1]//2
@@ -1207,6 +1205,8 @@ class DiffimTest(object):
                 preConvKernel = preConvKernel[padSize0:-padSize0, padSize1:-padSize1]
                 print kimg.shape, preConvKernel.shape
 
+            sig1squared = computeVarianceMean(im1)
+            sig2squared = computeVarianceMean(im2)
             pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
                                              preConvKernel=preConvKernel)
             #return kimg, preConvKernel, pck
