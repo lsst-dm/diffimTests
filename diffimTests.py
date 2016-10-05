@@ -1167,7 +1167,7 @@ class DiffimTest(object):
         self.D_ZOGY = Exposure(self.D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
         return self.D_ZOGY
 
-    def doALInStack(self, doDecorr=False, doPreConv=False):
+    def doALInStack(self, doWarping=False, doDecorr=True, doPreConv=False):
         import lsst.ip.diffim as ipDiffim
         im1 = self.im1.asAfwExposure()
         im2 = self.im2.asAfwExposure()
@@ -1175,6 +1175,7 @@ class DiffimTest(object):
         preConvKernel = None
         im2c = im2
         if doPreConv:
+            doDecorr = False  # Right now decorr with pre-conv doesn't work
             preConvKernel = self.im1.psf
             im2c, kern = doConvolve(im2, preConvKernel, use_scipy=False)
 
@@ -1188,7 +1189,7 @@ class DiffimTest(object):
         subconfig.fitForBackground = False
 
         task = ipDiffim.ImagePsfMatchTask(config=config)
-        result = task.subtractExposures(im1, im2c, doWarping=True)
+        result = task.subtractExposures(im1, im2c, doWarping=doWarping)
 
         if doDecorr:
             spatialKernel = result.psfMatchingKernel
@@ -1218,6 +1219,10 @@ class DiffimTest(object):
                                              preConvKernel=preConvKernel)
             #return kimg, preConvKernel, pck
             diffim, pck = doConvolve(result.subtractedExposure, pck, use_scipy=False)
+            diffim.getMaskedImage().getImage().getArray()[:, ] \
+                /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
+            diffim.getMaskedImage().getVariance().getArray()[:, ] \
+                /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
             result.decorrelatedDiffim = diffim
 
         return result
