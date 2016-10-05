@@ -1140,13 +1140,20 @@ class DiffimTest(object):
         # TBD: make the returned D an Exposure.
         return self.D_AL, self.kappa_AL
 
-    def doZOGY(self, computeScorr=True):
-        #if inImageSpace:  # Doesn't work anymore (needs image-sized PSFs)
-        self.D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
-                                            sig1=self.im1.sig, sig2=self.im2.sig)
-        #else:
-        #    self.D_ZOGY = performZOGY(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
-        #                              sig1=self.im1.sig, sig2=self.im2.sig)
+    def doZOGY(self, computeScorr=True, inImageSpace=True):
+        if inImageSpace:
+            self.D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
+                                                sig1=self.im1.sig, sig2=self.im2.sig)
+        else:  # Do all in fourier space (needs image-sized PSFs)
+            padSize0 = self.im1.im.shape[0]//2 - self.im1.psf.shape[0]//2
+            padSize1 = self.im1.im.shape[1]//2 - self.im1.psf.shape[1]//2
+            # Hastily assume the image is even-sized and the psf is odd...
+            psf1 = np.pad(self.im1.psf, ((padSize0-1, padSize0), (padSize1-1, padSize1)), mode='constant',
+                          constant_values=0)
+            psf2 = np.pad(self.im2.psf, ((padSize0-1, padSize0), (padSize1-1, padSize1)), mode='constant',
+                          constant_values=0)
+            self.D_ZOGY = performZOGY(self.im1.im, self.im2.im, psf1, psf2,
+                                      sig1=self.im1.sig, sig2=self.im2.sig)
 
         if computeScorr:
             self.S_corr_ZOGY, self.S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
