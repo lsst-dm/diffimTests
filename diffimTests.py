@@ -1099,6 +1099,26 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     measureTask.measure(exp, sources)
     return sources
 
+# Compute mean of variance plane. Can actually get std of image plane if
+# actuallyDoImage=True and statToDo=afwMath.VARIANCECLIP
+def computeVarianceMean(exposure, actuallyDoImage=False, statToDo=afwMath.MEANCLIP):
+    try:
+        import lsst.afw.math as afwMath
+    except Exception as e:
+        print e
+        return None
+    statsControl = afwMath.StatisticsControl()
+    statsControl.setNumSigmaClip(3.)
+    statsControl.setNumIter(3)
+    ignoreMaskPlanes = ("INTRP", "EDGE", "DETECTED", "SAT", "CR", "BAD", "NO_DATA", "DETECTED_NEGATIVE")
+    statsControl.setAndMask(afwImage.MaskU.getPlaneBitMask(ignoreMaskPlanes))
+    imToDo = exposure.getMaskedImage().getVariance()
+    if actuallyDoImage:
+        imToDo = exposure.getMaskedImage().getImage()
+    statObj = afwMath.makeStatistics(imToDo, exposure.getMaskedImage().getMask(),
+                                     statToDo, statsControl)
+    var = statObj.getValue(statToDo)
+    return var
 
 class DiffimTest(object):
     def __init__(self, imSize=None, sky=300., psf1=None, psf2=None, offset=None,
@@ -1283,20 +1303,3 @@ class DiffimTest(object):
             result.decorrelatedDiffim = diffim
 
         return result
-
-def computeVarianceMean(exposure):
-    try:
-        import lsst.afw.math as afwMath
-    except Exception as e:
-        print e
-        return None
-    statsControl = afwMath.StatisticsControl()
-    statsControl.setNumSigmaClip(3.)
-    statsControl.setNumIter(3)
-    ignoreMaskPlanes = ("INTRP", "EDGE", "DETECTED", "SAT", "CR", "BAD", "NO_DATA", "DETECTED_NEGATIVE")
-    statsControl.setAndMask(afwImage.MaskU.getPlaneBitMask(ignoreMaskPlanes))
-    statObj = afwMath.makeStatistics(exposure.getMaskedImage().getVariance(),
-                                     exposure.getMaskedImage().getMask(),
-                                     afwMath.MEANCLIP, statsControl)
-    var = statObj.getValue(afwMath.MEANCLIP)
-    return var
