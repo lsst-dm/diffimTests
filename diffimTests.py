@@ -523,7 +523,7 @@ def getImageGrid(im):
 
 def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kernelSize=25,
                        spatialKernelOrder=2, spatialBackgroundOrder=2, doALZCcorrection=True,
-                       preConvKernel=None, sig1=None, sig2=None, verbose=False):
+                       preConvKernel=None, sig1=None, sig2=None, im1Psf=None, verbose=False):
     x = np.arange(-kernelSize+1, kernelSize, 1)
     y = x.copy()
     x0, y0 = np.meshgrid(x, y)
@@ -547,6 +547,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
                                spatialBasis, basisScale, basisOffset, xcen=xcen, ycen=ycen,
                                verbose=verbose)
     diffim = im2 - fit
+    psf = im1Psf
     if doALZCcorrection:
         if sig1 is None:
             _, sig1, _, _ = computeClippedImageStats(im1)
@@ -555,9 +556,11 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
 
         pck = computeDecorrelationKernel(kfit, sig1**2, sig2**2, preConvKernel=preConvKernel)
         pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
+        if im1Psf is not None:
+            psf = computeCorrectedDiffimPsf(kfit, im1Psf, svar=sig1**2, tvar=sig2**2)
         diffim = pci
 
-    return diffim, kfit
+    return diffim, psf, kfit
 
 # Compute the ZOGY eqn. (13):
 # $$
@@ -1214,17 +1217,18 @@ class DiffimTest(object):
             preConvKernel = self.im1.psf
             if betaGauss == 1.:  # update default, resize the kernel appropriately
                 betaGauss = 1./np.sqrt(2.)
-        D_AL, self.kappa_AL = performAlardLupton(self.im1.im, self.im2.im,
-                                                 spatialKernelOrder=spatialKernelOrder,
-                                                 spatialBackgroundOrder=spatialBackgroundOrder,
-                                                 sig1=self.im1.sig, sig2=self.im2.sig,
-                                                 kernelSize=kernelSize,
-                                                 betaGauss=betaGauss,
-                                                 doALZCcorrection=doDecorr,
-                                                 preConvKernel=preConvKernel)
+        D_AL, D_psf, self.kappa_AL = performAlardLupton(self.im1.im, self.im2.im,
+                                                        spatialKernelOrder=spatialKernelOrder,
+                                                        spatialBackgroundOrder=spatialBackgroundOrder,
+                                                        sig1=self.im1.sig, sig2=self.im2.sig,
+                                                        kernelSize=kernelSize,
+                                                        betaGauss=betaGauss,
+                                                        doALZCcorrection=doDecorr,
+                                                        im1Psf=self.im1.psf,
+                                                        preConvKernel=preConvKernel)
         # This is not entirely correct, we also need to convolve var with the decorrelation kernel:
         var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL, mode='constant')
-        self.D_AL = Exposure(D_AL, self.im1.psf, var)
+        self.D_AL = Exposure(D_AL, D_psf, var)
         self.D_AL.im /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
         self.D_AL.var /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
         # TBD: make the returned D an Exposure.
@@ -1322,10 +1326,10 @@ class DiffimTest(object):
 
         return result
 
-    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S'], returnSources=False):
+    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'AL'], returnSources=False):
         import pandas as pd  # We're going to store the results as pandas dataframes.
 
-        D_ZOGY = S_ZOGY = res = None
+        D_ZOGY = S_ZOGY = res = D_AL = None
         # Run diffim first
         if 'ALstack' in subtractMethods:
             res = self.doALInStack(doPreConv=False, doDecorr=True)
@@ -1337,6 +1341,10 @@ class DiffimTest(object):
             if self.S_ZOGY is None:
                 self.doZOGY()
             S_ZOGY = self.S_ZOGY
+        if 'AL' in subtractMethods:  # my clean-room (pure python) version of A&L
+            self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
+            D_AL = self.D_AL
+
 
         # Run detection next
         #src_AL = src_ZOGY = src_SZOGY = None
@@ -1345,7 +1353,7 @@ class DiffimTest(object):
             src_AL = doDetection(res.decorrelatedDiffim)
             src_AL = pd.DataFrame({col: src_AL.columns[col] for col in src_AL.schema.getNames()})
             src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
-            src['AL'] = src_AL
+            src['ALstack'] = src_AL
         if 'ZOGY' in subtractMethods:
             src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
             src_ZOGY = pd.DataFrame({col: src_ZOGY.columns[col] for col in src_ZOGY.schema.getNames()})
@@ -1356,6 +1364,11 @@ class DiffimTest(object):
             src_SZOGY = pd.DataFrame({col: src_SZOGY.columns[col] for col in src_SZOGY.schema.getNames()})
             src_SZOGY = src_SZOGY[~src_SZOGY['base_PsfFlux_flag']]
             src['SZOGY'] = src_SZOGY
+        if 'AL' in subtractMethods:
+            src_AL = doDetection(D_AL.asAfwExposure())
+            src_AL = pd.DataFrame({col: src_AL.columns[col] for col in src_AL.schema.getNames()})
+            src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
+            src['AL'] = src_AL
         if returnSources:
             return src
 
