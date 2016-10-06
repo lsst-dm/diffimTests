@@ -1026,6 +1026,10 @@ class Exposure(object):
         im1ex.setWcs(wcs)
         return im1ex
 
+    def doDetection(self, threshold=5.0, doSmooth=True):
+        return doDetection(self.awAfwExposure(), threshold=threshold, doSmooth=doSmooth)
+
+
 def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
     import lsst.daf.base as dafBase
     metadata = dafBase.PropertySet()
@@ -1047,6 +1051,54 @@ def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
     metadata.setDouble("CD2_2", -5.10281493481982E-05)
     metadata.setDouble("CD2_1", -8.27440751733828E-07)
     return afwImage.makeWcs(metadata)
+
+
+def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='both', doSmooth=True):
+    # Modeled from meas_algorithms/tests/testMeasure.py
+    import lsst.meas.algorithms as measAlg
+    import lsst.meas.base as measBase
+    import lsst.afw.table as afwTable
+
+    schema = afwTable.SourceTable.makeMinimalSchema()
+    config = measAlg.SourceDetectionTask.ConfigClass()
+    config.thresholdPolarity = thresholdPolarity
+    config.reEstimateBackground = False
+    config.thresholdValue = threshold
+    config.thresholdType = thresholdType
+    detectionTask = measAlg.SourceDetectionTask(config=config, schema=schema)
+
+    # Do measurement too, so we can get x- and y-coord centroids
+
+    config = measBase.SingleFrameMeasurementTask.ConfigClass()
+    # Use the minimum set of plugins required.
+    config.plugins = ["base_CircularApertureFlux",
+                      "base_PixelFlags",
+                      "base_SkyCoord",
+                      "base_PsfFlux",
+                      "base_GaussianCentroid",
+                      "base_PeakLikelihoodFlux",
+                      "base_PeakCentroid",
+                      "base_SdssCentroid",
+                      "base_NaiveCentroid",
+                      "ip_diffim_NaiveDipoleCentroid",
+                      "ip_diffim_NaiveDipoleFlux",
+                      "ip_diffim_PsfDipoleFlux",
+                      "ip_diffim_ClassificationDipole",
+                      ]
+    config.slots.centroid = "ip_diffim_NaiveDipoleCentroid"
+    config.slots.calibFlux = None
+    config.slots.modelFlux = None
+    config.slots.instFlux = None
+    config.slots.shape = None
+    config.doReplaceWithNoise = False
+    measureTask = measBase.SingleFrameMeasurementTask(schema, config=config)
+
+    table = afwTable.SourceTable.make(schema)
+    sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
+
+    measureTask.measure(exp, sources)
+    return sources
+
 
 class DiffimTest(object):
     def __init__(self, imSize=None, sky=300., psf1=None, psf2=None, offset=None,
@@ -1141,8 +1193,9 @@ class DiffimTest(object):
         return self.D_AL, self.kappa_AL
 
     def doZOGY(self, computeScorr=True, inImageSpace=True):
+        D_ZOGY = None
         if inImageSpace:
-            self.D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
+            D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
                                                 sig1=self.im1.sig, sig2=self.im2.sig)
         else:  # Do all in fourier space (needs image-sized PSFs)
             padSize0 = self.im1.im.shape[0]//2 - self.im1.psf.shape[0]//2
@@ -1152,19 +1205,23 @@ class DiffimTest(object):
                           constant_values=0)
             psf2 = np.pad(self.im2.psf, ((padSize0-1, padSize0), (padSize1-1, padSize1)), mode='constant',
                           constant_values=0)
-            self.D_ZOGY = performZOGY(self.im1.im, self.im2.im, psf1, psf2,
-                                      sig1=self.im1.sig, sig2=self.im2.sig)
+            D_ZOGY = performZOGY(self.im1.im, self.im2.im, psf1, psf2,
+                                 sig1=self.im1.sig, sig2=self.im2.sig)
+
+        P_D_ZOGY, F_D = computeZOGYDiffimPsf(self.im1.im, self.im2.im,
+                                             self.im1.psf, self.im2.psf,
+                                             sig1=self.im1.sig, sig2=self.im2.sig, F_r=1., F_n=1.)
+        self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
 
         if computeScorr:
-            self.S_corr_ZOGY, self.S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
+            S_corr_ZOGY, S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
                 var2c = performZOGY_Scorr(self.im1.im, self.im2.im, self.im1.var, self.im2.var,
                                           sig1=self.im1.sig, sig2=self.im2.sig,
                                           im1_psf=self.im1.psf, im2_psf=self.im2.psf,
-                                          D=self.D_ZOGY)
-            self.S_ZOGY = Exposure(self.S_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c))
-            self.S_corr_ZOGY = Exposure(self.S_corr_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c)/np.sqrt(var1c + var2c))
+                                          D=D_ZOGY)
+            self.S_ZOGY = Exposure(S_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c))
+            self.S_corr_ZOGY = Exposure(S_corr_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c)/np.sqrt(var1c + var2c))
 
-        self.D_ZOGY = Exposure(self.D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
         return self.D_ZOGY
 
     def doALInStack(self, doWarping=False, doDecorr=True, doPreConv=False):
@@ -1175,7 +1232,7 @@ class DiffimTest(object):
         preConvKernel = None
         im2c = im2
         if doPreConv:
-            doDecorr = False  # Right now decorr with pre-conv doesn't work
+            #doDecorr = False  # Right now decorr with pre-conv doesn't work
             preConvKernel = self.im1.psf
             im2c, kern = doConvolve(im2, preConvKernel, use_scipy=False)
 
