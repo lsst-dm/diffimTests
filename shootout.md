@@ -1,5 +1,7 @@
 # Notes on shoot-out between ZOGY and A&L (with decorrelation and optional pre-filtering).
 
+<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
+
 All code and notebooks are in this repository, specifically the code is in the `diffimTests.py` module.
 
 ## Necessary ingredients for the shoot-out:
