@@ -206,7 +206,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
 
     im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
     im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
-    centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2))
+    centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes))
     return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, ind
 
 # Okay, here we start the A&L basis functions...
