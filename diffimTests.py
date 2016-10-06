@@ -139,19 +139,21 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 
 def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
                    psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
-                   n_sources=500, sourceFluxRange=(50, 30000), psfSize=None, seed=66):
-    np.random.seed(seed)
+                   n_sources=500, sourceFluxRange=(50, 30000), psfSize=None, seed=66, verbose=False):
+    if seed is not None:  # use None if you set the seed outside of this func.
+        np.random.seed(seed)
 
     # psf1 = 1.6 # sigma in pixels im1 will be template
     # psf2 = 2.2 # sigma in pixels im2 will be science image. make the psf in this image slighly offset and elongated
     psf1 = [1.6, 1.6] if psf1 is None else psf1
-    print 'Template PSF:', psf1, theta1
     psf2 = [1.8, 2.2] if psf2 is None else psf2
-    print 'Science PSF:', psf2, theta2
-    print np.sqrt(psf2[0]**2 - psf1[1]**2)
     # offset = 0.2  # astrometric offset (pixels) between the two images
     offset = [0.2, 0.2] if offset is None else offset
-    print 'Offset:', offset
+    if verbose:
+        print 'Template PSF:', psf1, theta1
+        print 'Science PSF:', psf2, theta2
+        print np.sqrt(psf2[0]**2 - psf1[1]**2)
+        print 'Offset:', offset
 
     imSize = (512, 512) if imSize is None else imSize
     xim = np.arange(-imSize[0]//2, imSize[0]//2, 1)
@@ -160,30 +162,40 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
     xposns = np.random.uniform(xim.min()+16, xim.max()-5, n_sources)
     yposns = np.random.uniform(yim.min()+16, yim.max()-5, n_sources)
+    fluxSortedInds = np.argsort(xposns**2. + yposns**2.)
 
-    # Make the source closest to the center of the image the one that increases in flux
-    ind = np.argmin(xposns**2. + yposns**2.)
-    #print ind, xposns[ind], yposns[ind]
+    # Make the sources closest to the center of the image the ones that increases in flux
+    if not hasattr(varSourceChange, "__len__"):
+        varSourceChange = [varSourceChange]
+    inds = fluxSortedInds[:len(varSourceChange)]
+    #print inds, xposns[inds], yposns[inds]
 
     im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
     im2 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of science image
 
     # variation in y-width of psf in science image across (x-dim of) image
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()
-    print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
+    if verbose:
+        print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
 
-    for i in range(n_sources):
+    varSourceInd = 0
+    fluxes2 = fluxes.copy()
+    for i in fluxSortedInds:
         flux = fluxes[i]
         tmp1 = flux * singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
         im1 += tmp1
 
-        if i == ind:
-            if varSourceChange < 1:  # option to input it as fractional flux change
-                varSourceChange = flux * varSourceChange
+        if i in inds:
+            vsc = varSourceChange[varSourceInd]
+            if vsc < 1:  # option to input it as fractional flux change
+                vsc = varSourceChange[varSourceInd] = flux * vsc
             changedCentroid = (xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2)
-            print 'Variable source:', ind, changedCentroid[0], changedCentroid[1], flux, flux + varSourceChange
-            flux += varSourceChange
+            if verbose:
+                print 'Variable source:', i, changedCentroid[0], changedCentroid[1], flux, flux + vsc
+            flux += vsc
+            fluxes2[i] = flux
+            varSourceInd += 1
         tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
                                        psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
         im2 += tmp2
@@ -206,8 +218,8 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
 
     im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
     im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
-    centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes))
-    return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, ind
+    centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
+    return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
 
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
@@ -489,7 +501,11 @@ def getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices, 
 #     pcf = pcf.real / pcf.real.sum()
 #     return pcf
 
-def computeClippedImageStats(im, low=3, high=3):
+def computeClippedImageStats(im, low=3, high=3, ignore=None):
+    im = im[~(np.isnan(im) | np.isinf(im))]
+    if ignore is not None:
+        for i in ignore:
+            im = im[im != i]
     tmp = im
     if low != 0 and high != 0:
         _, low, upp = scipy.stats.sigmaclip(im, low=low, high=high)
@@ -595,8 +611,10 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     K_r = np.fft.ifft2(K_r_hat).real
     K_n = np.fft.ifft2(K_n_hat).real
 
-    im1c = scipy.ndimage.filters.convolve(im1, K_n.real, mode='constant')
-    im2c = scipy.ndimage.filters.convolve(im2, K_r.real, mode='constant')
+    #im1c = scipy.ndimage.filters.convolve(im1, K_n.real, mode='constant')
+    #im2c = scipy.ndimage.filters.convolve(im2, K_r.real, mode='constant')
+    im1c = scipy.signal.convolve2d(im1, K_n.real, mode='same', boundary='fill', fillvalue=0.)
+    im2c = scipy.signal.convolve2d(im2, K_r.real, mode='same', boundary='fill', fillvalue=0.)
     D = im2c - im1c
 
     return D
@@ -1303,3 +1321,56 @@ class DiffimTest(object):
             result.decorrelatedDiffim = diffim
 
         return result
+
+    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S'], returnSources=False):
+        import pandas as pd  # We're going to store the results as pandas dataframes.
+
+        D_ZOGY = S_ZOGY = res = None
+        # Run diffim first
+        if 'ALstack' in subtractMethods:
+            res = self.doALInStack(doPreConv=False, doDecorr=True)
+        if 'ZOGY' in subtractMethods:
+            if self.D_ZOGY is None:
+                self.doZOGY()
+            D_ZOGY = self.D_ZOGY
+        if 'ZOGY_S' in subtractMethods:
+            if self.S_ZOGY is None:
+                self.doZOGY()
+            S_ZOGY = self.S_ZOGY
+
+        # Run detection next
+        #src_AL = src_ZOGY = src_SZOGY = None
+        src = {}
+        if 'ALstack' in subtractMethods:
+            src_AL = doDetection(res.decorrelatedDiffim)
+            src_AL = pd.DataFrame({col: src_AL.columns[col] for col in src_AL.schema.getNames()})
+            src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
+            src['AL'] = src_AL
+        if 'ZOGY' in subtractMethods:
+            src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
+            src_ZOGY = pd.DataFrame({col: src_ZOGY.columns[col] for col in src_ZOGY.schema.getNames()})
+            src_ZOGY = src_ZOGY[~src_ZOGY['base_PsfFlux_flag']]
+            src['ZOGY'] = src_ZOGY
+        if 'ZOGY_S' in subtractMethods:
+            src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), doSmooth=False)
+            src_SZOGY = pd.DataFrame({col: src_SZOGY.columns[col] for col in src_SZOGY.schema.getNames()})
+            src_SZOGY = src_SZOGY[~src_SZOGY['base_PsfFlux_flag']]
+            src['SZOGY'] = src_SZOGY
+        if returnSources:
+            return src
+
+        # Compare detections to input sources and get true positives and false negatives
+        changedCentroid = np.array(self.centroids[self.changedCentroidInd, :])
+
+        detections = {}
+        for key in src:
+            dist = np.sqrt(np.add.outer(src[key].base_NaiveCentroid_x, -changedCentroid[:, 0])**2. + \
+               np.add.outer(src[key].base_NaiveCentroid_y, -changedCentroid[:, 1])**2.) # in pixels
+            matches = np.where(dist <= 1.5)
+            true_pos = len(matches[0])
+            false_neg = changedCentroid.shape[0] - len(matches[0])
+            false_pos = src[key].shape[0] - len(matches[0])
+            detections[key] = {'TP': true_pos, 'FN': false_neg, 'FP': false_pos}
+
+        return detections
+

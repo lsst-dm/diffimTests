@@ -13,6 +13,11 @@ All code and notebooks are in this repository, specifically the code is in the `
 
 A comparison of the three different implementations (actually, four) is shown in Cell[30] of [this notebook](https://github.com/djreiss/diffimTests/blob/master/25.%20Compare%20basic%20ZOGY%20and%20ALCZ%20with%20preconvolution-final.ipynb).
 
+## Observations about the different methods
+
+1. I note that the combination pre-filtering + A&L + decorrelation has the potential to lose pixels around edges and masks due to up to *three* convolutions. In contrast ZOGY (with convolutions in image space) has effectively *one* convolution, and should lose fewer pixels.
+2. 
+
 ## Timings
 
 I have compared the run-time of the algorithms on a pair of basic 512x512 -pixel images with 50 sources and an elongated PSF in the science image. For all A&L runs, decorrelation was enabled, and warping was disabled. For all tests, PSFs were 25x25 pixels. The ZOGY "pre-filtering enabled" runs are actually those where $S_{corr}$ is computed in addition to $D$ (as pre-filtering is not necessary with ZOGY, but the resulting $S_{corr}$ corresponds to the match-filtered $D$, as it does for A&L with pre-filtering enabled). The comparisons are in [this notebook](https://github.com/djreiss/diffimTests/blob/master/25.%20Compare%20basic%20ZOGY%20and%20ALCZ%20with%20preconvolution-final.ipynb). Results:
@@ -33,4 +38,8 @@ ZOGY is at least $\sim 6\times$ faster than the version of A&L in the LSST stack
 ## Performance
 
 We will now investigate performance of the algorithms in terms of false positive/negative detections. We will describe the measures of performance below, and then define the different tests.
+
+### Detection
+
+
 
