@@ -538,14 +538,19 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
     spatialBasis, bgBasis = makeSpatialBases(im1, basis, basis2, verbose=verbose)
     basis2a, (constKernelIndices, nonConstKernelIndices, bgIndices), (basisOffset, basisScale) \
         = collectAllBases(basis2, spatialBasis, bgBasis)
+    del bgBasis
+    del basis2
 
     pars, fit, resid = doTheLinearFitAL(basis2a, im2)
+    del basis2a
     xcen = np.int(np.floor(im1.shape[0]/2.))
     ycen = np.int(np.floor(im1.shape[1]/2.))
 
     kfit = getMatchingKernelAL(pars, basis, constKernelIndices, nonConstKernelIndices,
                                spatialBasis, basisScale, basisOffset, xcen=xcen, ycen=ycen,
                                verbose=verbose)
+    del basis
+    del spatialBasis
     diffim = im2 - fit
     psf = im1Psf
     if doALZCcorrection:
@@ -1268,6 +1273,8 @@ class DiffimTest(object):
 
     def doALInStack(self, doWarping=False, doDecorr=True, doPreConv=False):
         import lsst.ip.diffim as ipDiffim
+        import lsst.meas.algorithms as measAlg
+
         im1 = self.im1.asAfwExposure()
         im2 = self.im2.asAfwExposure()
 
@@ -1322,6 +1329,15 @@ class DiffimTest(object):
                 /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
             diffim.getMaskedImage().getVariance().getArray()[:, ] \
                 /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
+
+            psf = result.subtractedExposure.getPsf().computeImage().getArray()
+            psfc = computeCorrectedDiffimPsf(kimg, psf, svar=sig1squared, tvar=sig2squared)
+            psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
+            psfcI.getArray()[:, :] = psfc
+            psfcK = afwMath.FixedKernel(psfcI)
+            psfNew = measAlg.KernelPsf(psfcK)
+            diffim.setPsf(psfNew)
+
             result.decorrelatedDiffim = diffim
 
         return result
@@ -1342,9 +1358,11 @@ class DiffimTest(object):
                 self.doZOGY()
             S_ZOGY = self.S_ZOGY
         if 'AL' in subtractMethods:  # my clean-room (pure python) version of A&L
-            self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
-            D_AL = self.D_AL
-
+            try:
+                self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
+                D_AL = self.D_AL
+            except:
+                D_AL = None
 
         # Run detection next
         #src_AL = src_ZOGY = src_SZOGY = None
@@ -1364,7 +1382,7 @@ class DiffimTest(object):
             src_SZOGY = pd.DataFrame({col: src_SZOGY.columns[col] for col in src_SZOGY.schema.getNames()})
             src_SZOGY = src_SZOGY[~src_SZOGY['base_PsfFlux_flag']]
             src['SZOGY'] = src_SZOGY
-        if 'AL' in subtractMethods:
+        if 'AL' in subtractMethods and D_AL is not None:
             src_AL = doDetection(D_AL.asAfwExposure())
             src_AL = pd.DataFrame({col: src_AL.columns[col] for col in src_AL.schema.getNames()})
             src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
