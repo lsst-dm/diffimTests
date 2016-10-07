@@ -24,16 +24,16 @@ I have compared the run-time of the algorithms on a pair of basic 512x512 -pixel
 
 | Method        | Pre-filtering? | Time (ms) |
 |---------------|------------------------|----------------------|
-| A&L (custom)  | Yes | 12,100 |
-| A&L (custom)  | No  | 10,200 |
-| A&L (stack)   | Yes | 3,910  |
-| A&L (stack)   | No  | 3,770  |
-| ZOGY (real)   | Yes | 581    |
-| ZOGY (real)   | No  | 300    |
-| ZOGY (FT)     | Yes | 411    |
-| ZOGY (FT)     | No  | 81.3    |
+| A&L (custom)  | Yes | 11,300 |
+| A&L (custom)  | No  | 10,000 |
+| A&L (stack)   | Yes | 2,210  |
+| A&L (stack)   | No  | 1,830  |
+| ZOGY (real)   | Yes | 1,130  |
+| ZOGY (real)   | No  | 887    |
+| ZOGY (FT)     | Yes | 373    |
+| ZOGY (FT)     | No  | 82.7   |
 
-ZOGY is at least $\sim 6\times$ faster than the version of A&L in the LSST stack.
+ZOGY is at least $\sim 2\times$ faster than the version of A&L in the LSST stack.
 
 ## Performance
 

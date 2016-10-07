@@ -1087,6 +1087,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     import lsst.meas.algorithms as measAlg
     import lsst.meas.base as measBase
     import lsst.afw.table as afwTable
+    import lsst.log
 
     schema = afwTable.SourceTable.makeMinimalSchema()
     config = measAlg.SourceDetectionTask.ConfigClass()
@@ -1095,6 +1096,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     config.thresholdValue = threshold
     config.thresholdType = thresholdType
     detectionTask = measAlg.SourceDetectionTask(config=config, schema=schema)
+    detectionTask.log.setLevel(lsst.log.ERROR)
 
     # Do measurement too, so we can get x- and y-coord centroids
 
@@ -1121,6 +1123,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     config.slots.shape = None
     config.doReplaceWithNoise = False
     measureTask = measBase.SingleFrameMeasurementTask(schema, config=config)
+    measureTask.log.setLevel(lsst.log.ERROR)
 
     table = afwTable.SourceTable.make(schema)
     sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
@@ -1277,6 +1280,7 @@ class DiffimTest(object):
     def doALInStack(self, doWarping=False, doDecorr=True, doPreConv=False):
         import lsst.ip.diffim as ipDiffim
         import lsst.meas.algorithms as measAlg
+        import lsst.log
 
         im1 = self.im1.asAfwExposure()
         im2 = self.im2.asAfwExposure()
@@ -1298,6 +1302,7 @@ class DiffimTest(object):
         subconfig.fitForBackground = False
 
         task = ipDiffim.ImagePsfMatchTask(config=config)
+        task.log.setLevel(lsst.log.ERROR)
         result = task.subtractExposures(im1, im2c, doWarping=doWarping)
 
         if doDecorr:
@@ -1328,10 +1333,10 @@ class DiffimTest(object):
                                              preConvKernel=preConvKernel)
             #return kimg, preConvKernel, pck
             diffim, _ = doConvolve(result.subtractedExposure, pck, use_scipy=False)
-            diffim.getMaskedImage().getImage().getArray()[:, ] \
-                /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
-            diffim.getMaskedImage().getVariance().getArray()[:, ] \
-                /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
+            #diffim.getMaskedImage().getImage().getArray()[:, ] \
+            #    /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
+            #diffim.getMaskedImage().getVariance().getArray()[:, ] \
+            #    /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
 
             psf = result.subtractedExposure.getPsf().computeImage().getArray()
             psfc = computeCorrectedDiffimPsf(kimg, psf, svar=sig1squared, tvar=sig2squared)
@@ -1346,12 +1351,13 @@ class DiffimTest(object):
 
         return result
 
-    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S'], returnSources=False):
+    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_noDecorr'],
+                returnSources=False):
         import pandas as pd  # We're going to store the results as pandas dataframes.
 
         D_ZOGY = S_ZOGY = res = D_AL = None
         # Run diffim first
-        if 'ALstack' in subtractMethods:
+        if 'ALstack' in subtractMethods or 'ALstack_noDecorr' in subtractMethods:
             res = self.doALInStack(doPreConv=False, doDecorr=True)
         if 'ZOGY' in subtractMethods:
             if self.D_ZOGY is None:
@@ -1376,6 +1382,11 @@ class DiffimTest(object):
             src_AL = pd.DataFrame({col: src_AL.columns[col] for col in src_AL.schema.getNames()})
             src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
             src['ALstack'] = src_AL
+        if 'ALstack_noDecorr' in subtractMethods:
+            src_AL2 = doDetection(res.subtractedExposure)
+            src_AL2 = pd.DataFrame({col: src_AL2.columns[col] for col in src_AL2.schema.getNames()})
+            src_AL2 = src_AL2[~src_AL2['base_PsfFlux_flag']]
+            src['ALstack_noDecorr'] = src_AL2
         if 'ZOGY' in subtractMethods:
             src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
             src_ZOGY = pd.DataFrame({col: src_ZOGY.columns[col] for col in src_ZOGY.schema.getNames()})
