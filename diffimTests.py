@@ -957,7 +957,10 @@ def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
         elif psf.shape[0] > kernel.shape[0]:
             diff = (psf.shape[0] - kernel.shape[0]) // 2
             kernel = np.pad(kernel, (diff, diff), mode='constant')
+
+        psf = fixOddKernel(psf)
         psf_ft = scipy.fftpack.fft2(psf)
+        kernel = fixOddKernel(kernel)
         kft = scipy.fftpack.fft2(kernel)
         out = psf_ft * np.sqrt((svar + tvar) / (svar + tvar * kft**2))
         return out
@@ -1339,10 +1342,11 @@ class DiffimTest(object):
             diffim.setPsf(psfNew)
 
             result.decorrelatedDiffim = diffim
+            result.decorrelationKernel = pck
 
         return result
 
-    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'AL'], returnSources=False):
+    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S'], returnSources=False):
         import pandas as pd  # We're going to store the results as pandas dataframes.
 
         D_ZOGY = S_ZOGY = res = D_AL = None
