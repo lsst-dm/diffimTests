@@ -1324,7 +1324,7 @@ class DiffimTest(object):
             pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
                                              preConvKernel=preConvKernel)
             #return kimg, preConvKernel, pck
-            diffim, pck = doConvolve(result.subtractedExposure, pck, use_scipy=False)
+            diffim, _ = doConvolve(result.subtractedExposure, pck, use_scipy=False)
             diffim.getMaskedImage().getImage().getArray()[:, ] \
                 /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
             diffim.getMaskedImage().getVariance().getArray()[:, ] \
