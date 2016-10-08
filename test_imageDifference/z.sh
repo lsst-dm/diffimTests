@@ -15,6 +15,10 @@ setup -r . -t b2063
 scons
 back
 
+mkdir test_out
+echo lsst.obs.file.FileMapper >test_out/_mapper
+ingestFiles.py test_out im1.fits im2.fits
+
 processCcd.py test_out/ --id filename=im1.fits --output test_out --config charImage.installSimplePsf.fwhm=1.0 --config charImage.repair.doCosmicRay=False --clobber-config --configfile ./processCcdConfig.py --config isr.noise=300 isr.addNoise=True
 processCcd.py test_out/ --id filename=im2.fits --output test_out --config charImage.installSimplePsf.fwhm=1.0 --config charImage.repair.doCosmicRay=False --clobber-config --configfile ./processCcdConfig.py --config isr.noise=300 isr.addNoise=True
 
