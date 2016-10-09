@@ -1,0 +1,188 @@
+#<?cfg paf policy ?>
+
+defaultLevel: "file"
+
+exposures: {
+    raw: {
+        template:      "raw/%(filename)s"
+        python:        "lsst.afw.image.ExposureF"
+        persistable:   "ExposureF"
+        storage:       "FitsStorage"
+        level:         "Ccd"
+        tables:        "raw"
+    }
+    calexp: {
+        template:      "calexp/%(fileroot)s.fits"
+        python:        "lsst.afw.image.ExposureF"
+        persistable:   "ExposureF"
+        storage:       "FitsStorage"
+        level:         "Ccd"
+        tables:        "raw"
+    }
+}
+
+datasets: {
+    psf: {
+        template:      "psf/%(fileroot)s/psf.boost"
+        python:        "lsst.afw.detection.Psf"
+        persistable:   "Psf"
+        storage:       "BoostStorage"
+        tables:        "raw"
+    }
+    apCorr: {
+        template:      "apCorr/%(fileroot)s/apCorr.pickle"
+        python:        "lsst.meas.algorithms.ApertureCorrection"
+        persistable:   "ApertureCorrection"
+        storage:       "PickleStorage"
+        tables:        raw
+    }
+    src: {
+        template:      "src/%(fileroot)s/src.fits"
+        python:        "lsst.afw.table.SourceCatalog"
+        persistable:   "SourceCatalog"
+        storage:       "FitsCatalogStorage"
+        tables:        "raw"
+    }
+    src_schema: {
+        template:      "schema/src.fits"
+        python:        "lsst.afw.table.SourceCatalog"
+        persistable:   "SourceCatalog"
+        storage:       "FitsCatalogStorage"
+        tables:        "raw"
+    }
+    calexpBackground: {
+        template:      "bckgd/%(fileroot)s/background.fits"
+        python:        "lsst.afw.math.BackgroundList"
+        persistable:   "PurePythonClass"
+        storage:       "FitsCatalogStorage"
+        tables:        raw
+    }
+    icExp: {
+        template:      "icExp/%(fileroot)s/icExp.fits"
+        python:        "lsst.afw.image.ExposureF"
+        persistable:   "ExposureF"
+        storage:       "FitsStorage"
+        level:         "Ccd"
+        tables:        raw
+    }
+    icExpBackground: {
+        template:      "icExp/%(fileroot)s/bkgd.fits"
+        python:        "lsst.afw.math.BackgroundList"
+        persistable:   "PurePythonClass"
+        storage:       "FitsCatalogStorage"
+        tables:        raw
+    }
+    icSrc: {
+        template:      "icSrc/%(fileroot)s/icSrc.fits"
+        python:        "lsst.afw.table.SourceCatalog"
+        persistable:   "SourceCatalog"
+        storage:       "FitsCatalogStorage"
+        tables:        "raw"
+    }
+    icSrc_schema: {
+        template:      "schema/icSrc.fits"
+        python:        "lsst.afw.table.SourceCatalog"
+        persistable:   "SourceCatalog"
+        storage:       "FitsCatalogStorage"
+        tables:        "raw"
+    }
+    icMatch: {
+        template:      "icMatch/%(fileroot)s/icMatch.fits"
+        python:        "lsst.afw.table.BaseCatalog"
+        persistable:   "BaseCatalog"
+        storage:       "FitsCatalogStorage"
+        tables:        "raw"
+    }
+    log: {
+        template:      "logs/%(fileroot)s/run.log"
+        python:        "str"
+        persistable:   "None"
+        storage:       "TextStorage"
+    }
+    logDir: {
+        template:      "logs/%(fileroot)s"
+        python:        "str"
+        persistable:   "None"
+        storage:       "None"
+    }
+    ccdExposureId: {
+        template:     "ignored"
+        # Provide something to import, although we actually return a long
+        python:       "lsst.daf.base.PropertySet"
+        persistable:  "ignored"
+        storage:      "ignored"
+        tables:       "raw"
+    }
+    ccdExposureId_bits: {
+        template:     "ignored"
+        # Provide something to import, although we actually return an int
+        python:       "lsst.daf.base.PropertySet"
+        persistable:  "ignored"
+        storage:      "ignored"
+        tables:       "raw"
+    }
+    processCcd_config: {
+        template:      "config/processCcd.py"
+        python:        "lsst.pipe.tasks.processCcd.ProcessCcdConfig"
+        persistable:   "Config"
+        storage:       "ConfigStorage"
+        tables:        raw
+    }
+    processCcd_metadata: {
+        template:      "metadata/%(fileroot)s/processCcd_metadata.boost"
+        python:        "lsst.daf.base.PropertySet"
+        persistable:   "PropertySet"
+        storage:       "BoostStorage"
+        tables:        raw
+    }
+
+    deepDiff_differenceExp: {
+        template:      "deepDiff/%(fileroot)s/diffexp.fits"
+        python:        "lsst.afw.image.ExposureF"
+        persistable:        "ExposureF"
+        storage:    "FitsStorage"
+        tables:        raw
+    }
+    deepDiff_matchedExp: {
+        template:      "deepDiff/%(fileroot)s/matchexp.fits"
+        python:        "lsst.afw.image.ExposureF"
+        persistable:        "ExposureF"
+        storage:    "FitsStorage"
+        tables:        raw
+    }
+    deepDiff_diaSrc: {
+        template:      "deepDiff/%(fileroot)s/diaSrc.fits"
+        python:        "lsst.afw.table.SourceCatalog"
+        persistable:        "SourceCatalog"
+        storage:    "FitsCatalogStorage"
+        tables:        raw
+    }
+    deepDiff_diaSrc_schema: {
+        template:      "schema/deepDiff_diaSrc.fits"
+        python:        "lsst.afw.table.SourceCatalog"
+        persistable:        "SourceCatalog"
+        storage:    "FitsCatalogStorage"
+        tables:        raw
+    }
+    deepDiff_kernelSrc: {
+        template:      "deepDiff/%(fileroot)s/kernelSrc.fits"
+        python:        "lsst.afw.table.SourceCatalog"
+        persistable:        "SourceCatalog"
+        storage:    "FitsCatalogStorage"
+        tables:        raw
+    }
+    deepDiff_config: {
+        template:      "config/deepDiff.py"
+        python:        "lsst.pex.config.Config"
+        persistable:      "Config"
+        storage:    "ConfigStorage"
+        tables:        raw
+    }
+    deepDiff_metadata: {
+        template:      "deepDiff/%(fileroot)s/metadata.boost"
+        python:        "lsst.daf.base.PropertySet"
+        persistable:        "PropertySet"
+        storage:    "BoostStorage"
+        tables:        raw
+    }
+}
