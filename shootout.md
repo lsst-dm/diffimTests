@@ -17,7 +17,7 @@ A comparison of the three different implementations (actually, four) is shown in
 
 1. I note that the combination pre-filtering + A&L + decorrelation has the potential to lose pixels around edges and masks due to up to *three* convolutions. In contrast ZOGY (with convolutions in image space) has effectively *one* convolution, and should lose fewer pixels.
 2. A&L loses sensitivity if a large number of sources are increasing in flux between the two simulated images. This is because it adjusts the kernel to scale the fluxes given the assumption that no sources are changing. This is a not a big concern in practice.
-3. A&L (stack version) run-time scales with number of sources, as it performs PSF matching surrounding the bright stars only.
+3. A&L (stack version) run-time scales with number of sources, as it performs PSF matching surrounding the bright stars only. For example, the timings in the table below are for images with 50 sources. If we increase the number to 250, the timing for A&L (stack; pre-filtering=No) is 2.31s, an increase of 25%.
 
 ## Timings
 
@@ -42,5 +42,19 @@ We will now investigate performance of the algorithms in terms of false positive
 
 ### Detection
 
+We will use the rate of true-postive detections (fraction of input sources actually detected by the algorithm) and false-positive detections (number of false detections divided by number of input sources) to quantify the performance of each algorithm in each set of simulated images. Ideally, the true-positive rate would be 100%, and the false-positive rate would be 0%.
+
+### Tests/simulations
+
+For the simulated input images, we will vary:
+
+* The number of static and variable sources
+* The relative widths/shapes of PSFs between the two images. This will include: 
+ - The "canonical" case of near-Gaussian PSFs with that of the science image being wider than that of the template.
+ - The inverse case where the PSF of the science image is narrower (or equal to) that of the template
+ - Cases where PSF of one image are elongated in one axis to be broader than that of the other image
+* Cases where PSFs of science and/or template image are mis-measured by a certain amount (we will quantify it in terms of percentage mismeasurement of PSF sigma).
+* Cases where noise of one or both images are mis-measured.
+* Combinations of all of the above.
 
 
