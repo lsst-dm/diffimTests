@@ -6,7 +6,7 @@ config.convolveTemplate=True
 #config.doSelectSources=False
 #config.kernelSourcesFromRef=False
 config.doWriteMatchedExp=True
-config.doDecorrelation=True
+#config.doDecorrelation=True
 
 config.doMerge=True
 

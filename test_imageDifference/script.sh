@@ -19,10 +19,14 @@ mkdir test_out
 echo lsst.obs.file.FileMapper >test_out/_mapper
 ingestFiles.py test_out im1.fits im2.fits
 
-processCcd.py test_out/ --id filename=im1.fits --output test_out --config charImage.installSimplePsf.fwhm=1.0 --config charImage.repair.doCosmicRay=False --clobber-config --configfile ./processCcdConfig.py --config isr.noise=300 isr.addNoise=True
-processCcd.py test_out/ --id filename=im2.fits --output test_out --config charImage.installSimplePsf.fwhm=1.0 --config charImage.repair.doCosmicRay=False --clobber-config --configfile ./processCcdConfig.py --config isr.noise=300 isr.addNoise=True
+# Note add '--show config' to print out all config options.
+
+processCcd.py test_out/ --id filename=im1.fits --output test_out --config charImage.installSimplePsf.fwhm=1.0 --config charImage.repair.doCosmicRay=False --clobber-config --configfile ./processCcdConfig.py --config isr.noise=17.32 isr.addNoise=False --clobber-versions
+processCcd.py test_out/ --id filename=im2.fits --output test_out --config charImage.installSimplePsf.fwhm=1.0 --config charImage.repair.doCosmicRay=False --clobber-config --configfile ./processCcdConfig.py --config isr.noise=17.32 isr.addNoise=False --clobber-versions
 
 #processFile.py im1.fits --outputCatalog cat1.fits --outputCalexp calexp1.fits
 #processFile.py im2.fits --outputCatalog cat2.fits --outputCalexp calexp2.fits
 
-imageDifference.py test_out --id fileroot=im2 --templateId fileroot=im1 --output ./test_dr1 --configfile diffimConfig.py --clobber-config --clobber-versions
+imageDifference.py test_out --id fileroot=im2 --templateId fileroot=im1 --output ./test_noDecorr --configfile diffimConfig.py --clobber-config --clobber-versions
+imageDifference.py test_out --id fileroot=im2 --templateId fileroot=im1 --output ./test_decorr --configfile diffimConfig.py --clobber-config --clobber-versions --config doDecorrelation=True --config detection.thresholdValue=5.0
+
