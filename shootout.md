@@ -16,7 +16,8 @@ A comparison of the three different implementations (actually, four) is shown in
 ## Observations about the different methods
 
 1. I note that the combination pre-filtering + A&L + decorrelation has the potential to lose pixels around edges and masks due to up to *three* convolutions. In contrast ZOGY (with convolutions in image space) has effectively *one* convolution, and should lose fewer pixels.
-2. 
+2. A&L loses sensitivity if a large number of sources are increasing in flux between the two simulated images. This is because it adjusts the kernel to scale the fluxes given the assumption that no sources are changing. This is a not a big concern in practice.
+3. A&L (stack version) run-time scales with number of sources, as it performs PSF matching surrounding the bright stars only.
 
 ## Timings
 
