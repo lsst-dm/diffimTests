@@ -9,6 +9,16 @@ import scipy.signal
 try:
     import lsst.afw.image as afwImage
     import lsst.afw.math as afwMath
+    import lsst.log
+    lsst.log.Log.getLogger('afw').setLevel(lsst.log.ERROR)
+    lsst.log.Log.getLogger('afw.math').setLevel(lsst.log.ERROR)
+    lsst.log.Log.getLogger('afw.image').setLevel(lsst.log.ERROR)
+    lsst.log.Log.getLogger('afw.math.convolve').setLevel(lsst.log.ERROR)
+    lsst.log.Log.getLogger('TRACE5.afw.math.convolve.convolveWithInterpolation').setLevel(lsst.log.ERROR)
+    lsst.log.Log.getLogger('TRACE2.afw.math.convolve.basicConvolve').setLevel(lsst.log.ERROR)
+    lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
+    import lsst.log.utils as logUtils
+    logUtils.traceSetAt('afw', 0)
 except:
     print "LSSTSW has not been set up."
 
