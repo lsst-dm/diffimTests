@@ -17,9 +17,10 @@ try:
     lsst.log.Log.getLogger('TRACE5.afw.math.convolve.convolveWithInterpolation').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE2.afw.math.convolve.basicConvolve').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
-    import lsst.log.utils as logUtils
-    logUtils.traceSetAt('afw', 0)
-except:
+    #import lsst.log.utils as logUtils
+    #logUtils.traceSetAt('afw', 0)
+except Exception as e:
+    print e
     print "LSSTSW has not been set up."
 
 def zscale_image(input_img, contrast=0.25):
@@ -146,10 +147,15 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 # flux increase also messes up the fitting (seems to lead to
 # overfitting -- perhaps to the source itself). This might be fixed by
 # adding more constant sources.
+# varFlux1 is the flux of variable sources in im1 (template). If zero, then the variable sources are
+#  "new" sources in im2.
+# varFlux2 is the flux of variable sources in im2 (science img)
 
 def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
-                   psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
-                   n_sources=500, sourceFluxRange=(50, 30000), psfSize=None, seed=66, verbose=False):
+                   psf_yvary_factor=0.2, theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
+                   variablesNearCenter=True,
+                   im2background=10., n_sources=500, sourceFluxRange=None, psfSize=None,
+                   seed=66, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -159,6 +165,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     psf2 = [1.8, 2.2] if psf2 is None else psf2
     # offset = 0.2  # astrometric offset (pixels) between the two images
     offset = [0.2, 0.2] if offset is None else offset
+    sourceFluxRange = (50, 30000) if sourceFluxRange is None else sourceFluxRange
     if verbose:
         print 'Template PSF:', psf1, theta1
         print 'Science PSF:', psf2, theta2
@@ -170,14 +177,21 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     yim = np.arange(-imSize[1]//2, imSize[1]//2, 1)
     x0im, y0im = np.meshgrid(xim, yim)
     fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
-    xposns = np.random.uniform(xim.min()+16, xim.max()-5, n_sources)
-    yposns = np.random.uniform(yim.min()+16, yim.max()-5, n_sources)
+    xposns = np.random.uniform(xim.min()+40, xim.max()-40, n_sources)
+    yposns = np.random.uniform(yim.min()+40, yim.max()-40, n_sources)
     fluxSortedInds = np.argsort(xposns**2. + yposns**2.)
 
-    # Make the sources closest to the center of the image the ones that increases in flux
-    if not hasattr(varSourceChange, "__len__"):
-        varSourceChange = [varSourceChange]
-    inds = fluxSortedInds[:len(varSourceChange)]
+    if not hasattr(varFlux1, "__len__"):
+        varFlux1 = [varFlux1]
+    if not hasattr(varFlux2, "__len__"):
+        varFlux2 = [varFlux2]
+    if len(varFlux1) == 1:
+        varFlux1 = np.repeat(varFlux1[0], len(varFlux2))
+    if variablesNearCenter:
+        # Make the sources closest to the center of the image the ones that increases in flux
+        inds = fluxSortedInds[:len(varFlux2)]
+    else:  # Just choose random ones
+        inds = np.arange(len(varFlux2))
     #print inds, xposns[inds], yposns[inds]
 
     im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
@@ -192,23 +206,29 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     varSourceInd = 0
     fluxes2 = fluxes.copy()
     for i in fluxSortedInds:
-        flux = fluxes[i]
-        tmp1 = flux * singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
+        if i in inds:
+            flux = varFlux1[varSourceInd]
+        else:
+            flux = fluxes[i]
+        fluxes[i] = flux
+        tmp1 = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
+        tmp1 *= flux
         im1 += tmp1
 
         if i in inds:
-            vsc = varSourceChange[varSourceInd]
-            if vsc < 1:  # option to input it as fractional flux change
-                vsc = varSourceChange[varSourceInd] = flux * vsc
+            vf2 = varFlux2[varSourceInd]
+            if vf2 < 1:  # option to input it as fractional flux change
+                vf2 = flux * vf2
             changedCentroid = (xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2)
             if verbose:
-                print 'Variable source:', i, changedCentroid[0], changedCentroid[1], flux, flux + vsc
-            flux += vsc
+                print 'Variable source:', i, changedCentroid[0], changedCentroid[1], flux, flux + vf2
+            flux += vf2
             fluxes2[i] = flux
             varSourceInd += 1
-        tmp2 = flux * singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
-                                       psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
-        im2 += tmp2
+        tmp = singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
+                               psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
+        tmp *= flux
+        im2 += tmp
 
     var_im1 = im1.copy()
     var_im2 = im2.copy()
@@ -1162,43 +1182,23 @@ def computeVarianceMean(exposure, actuallyDoImage=False, statToDo=afwMath.MEANCL
     var = statObj.getValue(statToDo)
     return var
 
+
 class DiffimTest(object):
-    def __init__(self, imSize=None, sky=300., psf1=None, psf2=None, offset=None,
-                 psf_yvary_factor=0.2, varSourceChange=1/50., theta1=0., theta2=-45., im2background=10.,
-                 n_sources=500, sourceFluxRange=(50, 30000), psfSize=25, seed=66,
-                 doInit=True):
-        self.offset = offset
-        self.psf_yvary_factor = psf_yvary_factor
-        self.varSourceChange = varSourceChange
-        self.im2background = im2background
-        self.n_sources = n_sources
-        self.psfSize = psfSize
-        self.seed = seed
+    def __init__(self, doInit=True, **kwargs):
+        self.args = kwargs
 
         if doInit:
             # Generate images and PSF's with the same dimension as the image (used for A&L)
             im1, im2, P_r, P_n, im1_var, im2_var, self.centroids, \
-                self.changedCentroidInd = makeFakeImages(imSize, sky=sky, psf1=psf1, psf2=psf2,
-                                                         offset=offset, psf_yvary_factor=psf_yvary_factor,
-                                                         varSourceChange=varSourceChange,
-                                                         theta1=theta1, theta2=theta2,
-                                                         im2background=im2background, n_sources=n_sources,
-                                                         sourceFluxRange=sourceFluxRange, psfSize=psfSize,
-                                                         seed=seed)
+                self.changedCentroidInd = makeFakeImages(**kwargs)
+
+            self.kwargs = kwargs
 
             self.im1 = Exposure(im1, P_r, im1_var)
-            self.im1.setMetaData('sky', sky)
-            self.im1.setMetaData('psfSigma', psf1)
-            self.im1.setMetaData('thetaPsf', theta1)
-            self.im1.setMetaData('nSources', n_sources)
-            self.im1.setMetaData('sourceFluxRange', sourceFluxRange)
+            self.im1.setMetaData('sky', kwargs.get('sky', 300.))
 
             self.im2 = Exposure(im2, P_n, im2_var)
-            self.im2.setMetaData('sky', sky)
-            self.im2.setMetaData('psfSigma', psf2)
-            self.im2.setMetaData('thetaPsf', theta2)
-            self.im2.setMetaData('nSources', n_sources)
-            self.im2.setMetaData('sourceFluxRange', sourceFluxRange)
+            self.im2.setMetaData('sky', kwargs.get('sky', 300.))
 
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
@@ -1210,13 +1210,8 @@ class DiffimTest(object):
 
     def clone(self):
         out = DiffimTest(imSize=self.im1.im.shape, sky=self.im1.metaData['sky'],
-                         psf1=self.im1.metaData['psfSigma'], psf2=self.im2.metaData['psfSigma'],
-                         offset=self.offset,
-                         psf_yvary_factor=self.psf_yvary_factor, varSourceChange=self.varSourceChange,
-                         theta1=self.im1.metaData['thetaPsf'], theta2=self.im2.metaData['thetaPsf'],
-                         im2background=self.im2background,
-                         n_sources=self.n_sources, sourceFluxRange=self.im1.metaData['sourceFluxRange'],
-                         psfSize=self.psfSize, seed=self.seed, doInit=False)
+                         doInit=False)
+        out.kwargs = self.kwargs
         out.im1, out.im2 = self.im1, self.im2
         out.centroids, out.changedCentroidInd = self.centroids, self.changedCentroidInd
         out.D_AL, out.kappa, out.D_ZOGY, \
@@ -1385,7 +1380,6 @@ class DiffimTest(object):
                 D_AL = None
 
         # Run detection next
-        #src_AL = src_ZOGY = src_SZOGY = None
         src = {}
         if 'ALstack' in subtractMethods:
             src_AL = doDetection(res.decorrelatedDiffim)
@@ -1423,9 +1417,9 @@ class DiffimTest(object):
             dist = np.sqrt(np.add.outer(src[key].base_NaiveCentroid_x, -changedCentroid[:, 0])**2. + \
                np.add.outer(src[key].base_NaiveCentroid_y, -changedCentroid[:, 1])**2.) # in pixels
             matches = np.where(dist <= 1.5)
-            true_pos = len(matches[0])
-            false_neg = changedCentroid.shape[0] - len(matches[0])
-            false_pos = src[key].shape[0] - len(matches[0])
+            true_pos = len(np.unique(matches[0]))
+            false_neg = changedCentroid.shape[0] - len(np.unique(matches[1]))
+            false_pos = src[key].shape[0] - len(np.unique(matches[0]))
             detections[key] = {'TP': true_pos, 'FN': false_neg, 'FP': false_pos}
 
         return detections

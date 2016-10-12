@@ -21,20 +21,20 @@ A comparison of the three different implementations (actually, four) is shown in
 
 ## Timings
 
-I have compared the run-time of the algorithms on a pair of basic 512x512 -pixel images with 50 sources and an elongated PSF in the science image. For all A&L runs, decorrelation was enabled, and warping was disabled. For all tests, PSFs were 25x25 pixels. The ZOGY "pre-filtering enabled" runs are actually those where $S_{corr}$ is computed in addition to $D$ (as pre-filtering is not necessary with ZOGY, but the resulting $S_{corr}$ corresponds to the match-filtered $D$, as it does for A&L with pre-filtering enabled). The comparisons are in [this notebook](https://github.com/djreiss/diffimTests/blob/master/25.%20Compare%20basic%20ZOGY%20and%20ALCZ%20with%20preconvolution-final.ipynb). Results:
+I have compared the run-time of the algorithms on a pair of basic 2k x 2k -pixel images with 250 sources and a slightly elongated PSF in the science image. For all A&L runs, decorrelation was enabled, and warping was disabled. For all tests, PSFs were 25x25 pixels. Timings were performed using `%timeit` in an IPython notebook, and using a single core on `lsst-dev` (Intel Xeon E5-2687W @ 3.10GHz). The ZOGY "pre-filtering enabled" runs are actually those where $S_{corr}$ is computed in addition to $D$ (as pre-filtering is not necessary with ZOGY, but the resulting $S_{corr}$ corresponds to the match-filtered $D$, as it does for A&L with pre-filtering enabled). The comparisons are in [this notebook](https://github.com/djreiss/diffimTests/blob/master/25.%20Compare%20basic%20ZOGY%20and%20ALCZ%20with%20preconvolution-final.ipynb). Results:
 
-| Method        | Pre-filtering? | Time (ms) |
+| Method        | Pre-filtering? | Time (sec.) |
 |---------------|------------------------|----------------------|
-| A&L (custom)  | Yes | 11,300 |
-| A&L (custom)  | No  | 10,000 |
-| A&L (stack)   | Yes | 2,210  |
-| A&L (stack)   | No  | 1,830  |
-| ZOGY (real)   | Yes | 1,130  |
-| ZOGY (real)   | No  | 887    |
-| ZOGY (FT)     | Yes | 373    |
-| ZOGY (FT)     | No  | 82.7   |
+| A&L (custom)  | Yes | 487   |
+| A&L (custom)  | No  | 224   |
+| A&L (stack)   | Yes | 30.7  |
+| A&L (stack)   | No  | 26.1  |
+| ZOGY (real)   | Yes | 21.2   |
+| ZOGY (real)   | No  | 14.8   |
+| ZOGY (FT)     | Yes | 8.69   |
+| ZOGY (FT)     | No  | 2.3   |
 
-ZOGY is at least $\sim 2\times$ faster than the version of A&L in the LSST stack.
+ZOGY is slightly ($\sim 50\%$) faster than A&L(stack) in these tests. It should be noted that A&L scales (primarily) with the number of bright sources selected for PSF matching, and partly with image size. ZOGY should scale only with image size. If the field is more crowded, it is likely that A&L run-time performance will worsen, whereas this is not true for ZOGY. For example, the same test on A&L (stack, no pre-filter)on simulated images with 10x as many soures  has a timing of 37.9 sec. We should strongly consider whether to use the FT-based version of ZOGY if we choose to move forward with that algorithm as it is $\sim 3 - 8 \times$ faster than the real-space implementation.
 
 ## Performance
 
