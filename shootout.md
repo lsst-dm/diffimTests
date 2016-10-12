@@ -26,7 +26,7 @@ I have compared the run-time of the algorithms on a pair of basic 2k x 2k -pixel
 | Method        | Pre-filtering? | Time (sec.) |
 |---------------|------------------------|----------------------|
 | A&L (custom)  | Yes | 487   |
-| A&L (custom)  | No  | 224   |
+| A&L (custom)  | No  | 442   |
 | A&L (stack)   | Yes | 30.7  |
 | A&L (stack)   | No  | 26.1  |
 | ZOGY (real)   | Yes | 21.2   |
@@ -34,7 +34,7 @@ I have compared the run-time of the algorithms on a pair of basic 2k x 2k -pixel
 | ZOGY (FT)     | Yes | 8.69   |
 | ZOGY (FT)     | No  | 2.3   |
 
-ZOGY is slightly ($\sim 50\%$) faster than A&L(stack) in these tests. It should be noted that A&L scales (primarily) with the number of bright sources selected for PSF matching, and partly with image size. ZOGY should scale only with image size. If the field is more crowded, it is likely that A&L run-time performance will worsen, whereas this is not true for ZOGY. For example, the same test on A&L (stack, no pre-filter)on simulated images with 10x as many soures  has a timing of 37.9 sec. We should strongly consider whether to use the FT-based version of ZOGY if we choose to move forward with that algorithm as it is $\sim 3 - 8 \times$ faster than the real-space implementation.
+ZOGY is slightly ($\sim 50\%$) faster than A&L(stack) in these tests. It should be noted that A&L scales (primarily) with the number of bright sources selected for PSF matching, and partly with image size. ZOGY should scale only with image size. If the field is more crowded, it is likely that A&L run-time performance will worsen, whereas this is not true for ZOGY. For example, the same test on A&L (stack, no pre-filter)on simulated images with 10x as many soures has a timing of 43.2 sec. We should strongly consider whether to use the FT-based version of ZOGY if we choose to move forward with that algorithm as it is $\sim 3 - 8 \times$ faster than the real-space implementation.
 
 ## Performance
 
