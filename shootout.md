@@ -15,9 +15,10 @@ A comparison of the three different implementations (actually, four) is shown in
 
 ## Observations about the different methods
 
-1. I note that the combination pre-filtering + A&L + decorrelation has the potential to lose pixels around edges and masks due to up to *three* convolutions. In contrast ZOGY (with convolutions in image space) has effectively *one* convolution, and should lose fewer pixels.
+1. I note that the combination pre-filtering + A&L + decorrelation has the potential to lose pixels around edges and masks due to up to *three* convolutions. In contrast ZOGY (with convolutions in image space) has effectively *one* convolution of each image, and should lose fewer pixels.
 2. A&L loses sensitivity if a large number of sources are increasing in flux between the two simulated images. This is because it adjusts the kernel to scale the fluxes given the assumption that no sources are changing. This is a not a big concern in practice.
 3. A&L (stack version) run-time scales with number of sources, as it performs PSF matching surrounding the bright stars only. For example, the timings in the table below are for images with 50 sources. If we increase the number to 250, the timing for A&L (stack; pre-filtering=No) is 2.31s, an increase of 25%.
+4. ZOGY provides a method for correcting the corrected likelihood image $S_{corr}$ by pixel-wise variance, as well as by astrometric errors between the two images (which must be measured). I have implemented both of these corrections (the correction for astrometric noise uses ZOGY eqns. 30-33), and note that performing them requires the an additional two convolutions of each of the science and template images (not a factor regarding loss of border pixels, but just timing).
 
 ## Timings
 
@@ -49,11 +50,12 @@ We will use the rate of true-postive detections (fraction of input sources actua
 For the simulated input images, we will vary:
 
 * The number of static and variable sources
-* The relative widths/shapes of PSFs between the two images. This will include: 
+* The relative widths/shapes/offsets of PSFs between the two images. This will include: 
  - The "canonical" case of near-Gaussian PSFs with that of the science image being wider than that of the template.
  - The inverse case where the PSF of the science image is narrower (or equal to) that of the template
  - Cases where PSF of one image are elongated in one axis to be broader than that of the other image
 * Cases where PSFs of science and/or template image are mis-measured by a certain amount (we will quantify it in terms of percentage mismeasurement of PSF sigma).
+* Cases where images are systematically astrometrically offset from each other by a fraction of a pixel
 * Cases where noise of one or both images are mis-measured.
 * Combinations of all of the above.
 
