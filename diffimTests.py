@@ -247,7 +247,9 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         y0, x0 = np.meshgrid(x, y)
 
     im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
-    im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
+    #im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
+    # Don't include any astrometric "error" in the PSF, see how well the diffim algo. handles it.
+    im2_psf = singleGaussian2d(x0, y0, 0, 0, psf2[0], psf2[1], theta=theta2)
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
     return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
 
@@ -609,7 +611,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
 # will set to one here), $\sigma_r^2$ and $\sigma_n^2$ are their
 # variance, and $\widehat{D}$ denotes the FT of $D$.
 
-
+# In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     if sig1 is None and im1 is not None:
         _, sig1, _, _ = computeClippedImageStats(im1)
@@ -627,6 +629,7 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     return sigR, sigN, P_r_hat, P_n_hat, denom
 
 
+# In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
 
@@ -641,16 +644,15 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
     return D
 
 
+# In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-
     sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     K_r_hat = P_r_hat / denom
     K_n_hat = P_n_hat / denom
     K_r = np.fft.ifft2(K_r_hat).real
     K_n = np.fft.ifft2(K_n_hat).real
 
-    #im1c = scipy.ndimage.filters.convolve(im1, K_n.real, mode='constant')
-    #im2c = scipy.ndimage.filters.convolve(im2, K_r.real, mode='constant')
+    # Note these are reverse-labelled, this is CORRECT!
     im1c = scipy.signal.convolve2d(im1, K_n.real, mode='same', boundary='fill', fillvalue=0.)
     im2c = scipy.signal.convolve2d(im2, K_r.real, mode='same', boundary='fill', fillvalue=0.)
     D = im2c - im1c
@@ -676,15 +678,16 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 
 
 # Compute the corrected ZOGY "S_corr" (eq. 25)
+# Currently only implemented is V(S_N) and V(S_R)
+# Want to implement astrometric variance Vast(S_N) and Vast(S_R)
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
-                      sig1=None, sig2=None, F_r=1., F_n=1., D=None):
+                      sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None):
     sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
-    #denom = np.sqrt((sigN**2 * F_r**2 * np.abs(P_r_hat)**2) + (sigR**2 * F_n**2 * np.abs(P_n_hat)**2))
     if D is None:
         D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sigR, sigN, F_r, F_n)
     P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sigR, sigN, F_r, F_n)
-    #P_r_hat = np.fft.fftshift(P_r_hat)  # Not sure why I need to do this but it seems that I do.
-    #P_n_hat = np.fft.fftshift(P_n_hat)
+    # P_r_hat = np.fft.fftshift(P_r_hat)  # Not sure why I need to do this but it seems that I do.
+    # P_n_hat = np.fft.fftshift(P_n_hat)
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
@@ -692,20 +695,26 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
     k_n_hat = F_n * F_r**2 * np.conj(P_n_hat) * np.abs(P_r_hat)**2 / denom**2.
 
     k_r = np.fft.ifft2(k_r_hat)
-    k_r = k_r.real #np.abs(k_r).real #np.fft.ifftshift(k_r).real
+    k_r = k_r.real  # np.abs(k_r).real #np.fft.ifftshift(k_r).real
     k_r = np.roll(np.roll(k_r, -1, 0), -1, 1)
     k_n = np.fft.ifft2(k_n_hat)
-    k_n = k_n.real #np.abs(k_n).real #np.fft.ifftshift(k_n).real
+    k_n = k_n.real  # np.abs(k_n).real #np.fft.ifftshift(k_n).real
     k_n = np.roll(np.roll(k_n, -1, 0), -1, 1)
-    #print k_r.shape, np.unravel_index(np.argmax(k_r), k_r.shape)
-    #print k_n.shape, np.unravel_index(np.argmax(k_n), k_n.shape)
-    var1c = scipy.ndimage.filters.convolve(var_im1, k_n**2., mode='constant')
-    var2c = scipy.ndimage.filters.convolve(var_im2, k_r**2., mode='constant')
+    var1c = scipy.ndimage.filters.convolve(var_im1, k_r**2., mode='constant')
+    var2c = scipy.ndimage.filters.convolve(var_im2, k_n**2., mode='constant')
+
+    fGradR = fGradN = 0.
+    if xVarAst + yVarAst > 0:  # Do the astrometric variance correction
+        S_R = scipy.ndimage.filters.convolve(im1, k_r, mode='constant')
+        gradRx, gradRy = np.gradient(S_R)
+        fGradR = xVarAst * gradRx**2 + yVarAst * gradRy**2
+        S_N = scipy.ndimage.filters.convolve(im2, k_n, mode='constant')
+        gradNx, gradNy = np.gradient(S_N)
+        fGradN = xVarAst * gradNx**2 + yVarAst * gradNy**2
 
     PD_bar = np.fliplr(np.flipud(P_D))
     S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant') * F_D
-    #print PD_bar.shape, np.unravel_index(np.argmax(PD_bar), PD_bar.shape)
-    S_corr = S / np.sqrt(var1c + var2c)
+    S_corr = S / np.sqrt(var1c + var2c + fGradR + fGradN)
     return S_corr, S, D, P_D, F_D, var1c, var2c
 
 
@@ -1200,6 +1209,7 @@ class DiffimTest(object):
             self.im2 = Exposure(im2, P_n, im2_var)
             self.im2.setMetaData('sky', kwargs.get('sky', 300.))
 
+            self.astrometricOffsets = kwargs.get('offset', [0,0])
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
@@ -1276,7 +1286,8 @@ class DiffimTest(object):
                 var2c = performZOGY_Scorr(self.im1.im, self.im2.im, self.im1.var, self.im2.var,
                                           sig1=self.im1.sig, sig2=self.im2.sig,
                                           im1_psf=self.im1.psf, im2_psf=self.im2.psf,
-                                          D=D_ZOGY)
+                                          D=D_ZOGY, xVarAst=self.astrometricOffsets[0]**2.,
+                                          yVarAst=self.astrometricOffsets[1]**2. )
             self.S_ZOGY = Exposure(S_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c))
             self.S_corr_ZOGY = Exposure(S_corr_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c)/np.sqrt(var1c + var2c))
 
