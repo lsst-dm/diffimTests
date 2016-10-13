@@ -1095,7 +1095,7 @@ class Exposure(object):
         return im1ex
 
     def doDetection(self, threshold=5.0, doSmooth=True):
-        return doDetection(self.awAfwExposure(), threshold=threshold, doSmooth=doSmooth)
+        return doDetection(self.asAfwExposure(), threshold=threshold, doSmooth=doSmooth)
 
 
 def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
@@ -1375,14 +1375,14 @@ class DiffimTest(object):
         # Run diffim first
         if 'ALstack' in subtractMethods or 'ALstack_noDecorr' in subtractMethods:
             res = self.doALInStack(doPreConv=False, doDecorr=True)
+        if 'ZOGY_S' in subtractMethods:
+            if self.S_corr_ZOGY is None:
+                self.doZOGY(computeScorr=True)
+            S_ZOGY = self.S_corr_ZOGY
         if 'ZOGY' in subtractMethods:
             if self.D_ZOGY is None:
-                self.doZOGY()
+                self.doZOGY(computeScorr=True)
             D_ZOGY = self.D_ZOGY
-        if 'ZOGY_S' in subtractMethods:
-            if self.S_ZOGY is None:
-                self.doZOGY()
-            S_ZOGY = self.S_ZOGY
         if 'AL' in subtractMethods:  # my clean-room (pure python) version of A&L
             try:
                 self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
