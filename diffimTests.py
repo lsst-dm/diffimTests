@@ -240,18 +240,22 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         print 'Background:', im2background
         im2 += im2background
 
-    x0, y0 = x0im, y0im
-    if psfSize is not None:
-        x = np.arange(-psfSize+1, psfSize, 1)
-        y = x.copy()
-        y0, x0 = np.meshgrid(x, y)
+    if psfSize is None:
+        psfSize = imSize
 
-    im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
-    #im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
+    im1_psf = makePsf(psfSize, psf1, theta1)
+    #im2_psf = makePsf(psfSize, psf2, theta2, offset)
     # Don't include any astrometric "error" in the PSF, see how well the diffim algo. handles it.
-    im2_psf = singleGaussian2d(x0, y0, 0, 0, psf2[0], psf2[1], theta=theta2)
+    im2_psf = makePsf(psfSize, psf2, theta2)
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
     return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
+
+def makePsf(psfSize, sigma, theta, offset=[0, 0]):
+    x = np.arange(-psfSize+1, psfSize, 1)
+    y = x.copy()
+    y0, x0 = np.meshgrid(x, y)
+    psf = singleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
+    return psf
 
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
