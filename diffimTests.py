@@ -17,8 +17,8 @@ try:
     lsst.log.Log.getLogger('TRACE5.afw.math.convolve.convolveWithInterpolation').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE2.afw.math.convolve.basicConvolve').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
-    #import lsst.log.utils as logUtils
-    #logUtils.traceSetAt('afw', 0)
+    import lsst.log.utils as logUtils
+    logUtils.traceSetAt('afw', 0)
 except Exception as e:
     print e
     print "LSSTSW has not been set up."
@@ -1235,8 +1235,11 @@ class DiffimTest(object):
             self.im2.setMetaData('sky', kwargs.get('sky', 300.))
 
             self.astrometricOffsets = kwargs.get('offset', [0, 0])
-            dx, dy = self.computeAstrometricOffsets(threshold=2.5)
-            self.astrometricOffsets = [dx, dy]
+            try:
+                dx, dy = self.computeAstrometricOffsets(threshold=2.5)
+                self.astrometricOffsets = [dx, dy]
+            except:
+                pass
 
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
