@@ -1235,8 +1235,11 @@ class DiffimTest(object):
             self.im2.setMetaData('sky', kwargs.get('sky', 300.))
 
             self.astrometricOffsets = kwargs.get('offset', [0, 0])
-            dx, dy = self.computeAstrometricOffsets(threshold=2.5)
-            self.astrometricOffsets = [dx, dy]
+            try:
+                dx, dy = self.computeAstrometricOffsets(threshold=2.5)
+                self.astrometricOffsets = [dx, dy]
+            except:
+                pass
 
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
@@ -1252,6 +1255,7 @@ class DiffimTest(object):
         out.kwargs = self.kwargs
         out.im1, out.im2 = self.im1, self.im2
         out.centroids, out.changedCentroidInd = self.centroids, self.changedCentroidInd
+        out.astrometricOffsets = self.astrometricOffsets
         out.D_AL, out.kappa, out.D_ZOGY, \
             out.S_corr_ZOGY, out.S_ZOGY = self.D_AL, self.kappa, self.D_ZOGY, \
                                           self.S_corr_ZOGY, self.S_ZOGY
