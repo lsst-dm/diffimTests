@@ -539,12 +539,31 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
         for i in ignore:
             im = im[im != i]
     tmp = im
-    if low != 0 and high != 0:
-        _, low, upp = scipy.stats.sigmaclip(im, low=low, high=high)
-        tmp = im[(im > low) & (im < upp)]
+    if low != 0 and high != 0 and tmp.min() != tmp.max():
+        _, low, upp = scipy.stats.sigmaclip(tmp, low=low, high=high)
+        if not np.isnan(low) and not np.isnan(upp) and low != upp:
+            tmp = im[(im > low) & (im < upp)]
     mean1 = np.nanmean(tmp)
     sig1 = np.nanstd(tmp)
     return mean1, sig1, np.nanmin(im), np.nanmax(im)
+
+
+# compute rms x- and y- pixel offset between two catalogs. Assume input is 2- or 3-column dataframe.
+# Assume 1st column is x-coord and 2nd is y-coord. 
+# If 3-column then 3rd column is flux and use flux as weighting on shift calculation (not implemented yet)
+def computeOffset(src1, src2, threshold=2.5):
+    dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
+                   np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
+    matches = np.where(dist <= threshold)
+    match1 = src1.iloc[matches[0], :]
+    match2 = src2.iloc[matches[1], :]
+    dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)**2.
+    dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)**2.
+    rms = (dx + dy).mean()
+    dx = dx.mean()
+    dy = dy.mean()
+    return dx, dy, rms
+
 
 def getImageGrid(im):
     xim = np.arange(np.int(-np.floor(im.shape[0]/2.)), np.int(np.floor(im.shape[0]/2)))
@@ -707,10 +726,10 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
     if xVarAst + yVarAst > 0:  # Do the astrometric variance correction
         S_R = scipy.ndimage.filters.convolve(im1, k_r, mode='constant')
         gradRx, gradRy = np.gradient(S_R)
-        fGradR = xVarAst * gradRx**2 + yVarAst * gradRy**2
+        fGradR = xVarAst * gradRx**2. + yVarAst * gradRy**2.
         S_N = scipy.ndimage.filters.convolve(im2, k_n, mode='constant')
         gradNx, gradNy = np.gradient(S_N)
-        fGradN = xVarAst * gradNx**2 + yVarAst * gradNy**2
+        fGradN = xVarAst * gradNx**2. + yVarAst * gradNy**2.
 
     PD_bar = np.fliplr(np.flipud(P_D))
     S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant') * F_D
@@ -1121,7 +1140,8 @@ def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
     return afwImage.makeWcs(metadata)
 
 
-def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='both', doSmooth=True):
+def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='both', doSmooth=True,
+                asDF=True):
     # Modeled from meas_algorithms/tests/testMeasure.py
     import lsst.meas.algorithms as measAlg
     import lsst.meas.base as measBase
@@ -1168,6 +1188,11 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
 
     measureTask.measure(exp, sources)
+
+    if asDF:
+        import pandas as pd
+        sources = pd.DataFrame({col: sources.columns[col] for col in sources.schema.getNames()})
+
     return sources
 
 # Compute mean of variance plane. Can actually get std of image plane if
@@ -1209,7 +1234,10 @@ class DiffimTest(object):
             self.im2 = Exposure(im2, P_n, im2_var)
             self.im2.setMetaData('sky', kwargs.get('sky', 300.))
 
-            self.astrometricOffsets = kwargs.get('offset', [0,0])
+            self.astrometricOffsets = kwargs.get('offset', [0, 0])
+            dx, dy = self.computeAstrometricOffsets(threshold=2.5)
+            self.astrometricOffsets = [dx, dy]
+
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
@@ -1260,11 +1288,23 @@ class DiffimTest(object):
         # TBD: make the returned D an Exposure.
         return self.D_AL, self.kappa_AL
 
+    def computeAstrometricOffsets(self, threshold=2.5):
+        src1 = self.im1.doDetection()
+        src1 = src1[~src1['base_PsfFlux_flag']]
+        src1 = src1[['base_NaiveCentroid_x', 'base_NaiveCentroid_y']]
+        src1.reindex()
+        src2 = self.im2.doDetection()
+        src2 = src2[~src2['base_PsfFlux_flag']]
+        src2 = src2[['base_NaiveCentroid_x', 'base_NaiveCentroid_y']]
+        src2.reindex()
+        dx, dy, _ = computeOffset(src1, src2, threshold=threshold)
+        return dx, dy
+
     def doZOGY(self, computeScorr=True, inImageSpace=True):
         D_ZOGY = None
         if inImageSpace:
             D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
-                                                sig1=self.im1.sig, sig2=self.im2.sig)
+                                           sig1=self.im1.sig, sig2=self.im2.sig)
         else:  # Do all in fourier space (needs image-sized PSFs)
             padSize0 = self.im1.im.shape[0]//2 - self.im1.psf.shape[0]//2
             padSize1 = self.im1.im.shape[1]//2 - self.im1.psf.shape[1]//2
@@ -1282,12 +1322,14 @@ class DiffimTest(object):
         self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
 
         if computeScorr:
+            #print self.astrometricOffsets
             S_corr_ZOGY, S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
                 var2c = performZOGY_Scorr(self.im1.im, self.im2.im, self.im1.var, self.im2.var,
                                           sig1=self.im1.sig, sig2=self.im2.sig,
                                           im1_psf=self.im1.psf, im2_psf=self.im2.psf,
-                                          D=D_ZOGY, xVarAst=self.astrometricOffsets[0]**2.,
-                                          yVarAst=self.astrometricOffsets[1]**2. )
+                                          D=D_ZOGY, #xVarAst=dx, yVarAst=dy)
+                                          xVarAst=self.astrometricOffsets[0], #**2.,
+                                          yVarAst=self.astrometricOffsets[1]) #**2.)
             self.S_ZOGY = Exposure(S_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c))
             self.S_corr_ZOGY = Exposure(S_corr_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c)/np.sqrt(var1c + var2c))
 
@@ -1394,27 +1436,22 @@ class DiffimTest(object):
         src = {}
         if 'ALstack' in subtractMethods:
             src_AL = doDetection(res.decorrelatedDiffim)
-            src_AL = pd.DataFrame({col: src_AL.columns[col] for col in src_AL.schema.getNames()})
             src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
             src['ALstack'] = src_AL
         if 'ALstack_noDecorr' in subtractMethods:
             src_AL2 = doDetection(res.subtractedExposure)
-            src_AL2 = pd.DataFrame({col: src_AL2.columns[col] for col in src_AL2.schema.getNames()})
             src_AL2 = src_AL2[~src_AL2['base_PsfFlux_flag']]
             src['ALstack_noDecorr'] = src_AL2
         if 'ZOGY' in subtractMethods:
             src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
-            src_ZOGY = pd.DataFrame({col: src_ZOGY.columns[col] for col in src_ZOGY.schema.getNames()})
             src_ZOGY = src_ZOGY[~src_ZOGY['base_PsfFlux_flag']]
             src['ZOGY'] = src_ZOGY
         if 'ZOGY_S' in subtractMethods:
             src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), doSmooth=False)
-            src_SZOGY = pd.DataFrame({col: src_SZOGY.columns[col] for col in src_SZOGY.schema.getNames()})
             src_SZOGY = src_SZOGY[~src_SZOGY['base_PsfFlux_flag']]
             src['SZOGY'] = src_SZOGY
         if 'AL' in subtractMethods and D_AL is not None:
             src_AL = doDetection(D_AL.asAfwExposure())
-            src_AL = pd.DataFrame({col: src_AL.columns[col] for col in src_AL.schema.getNames()})
             src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
             src['AL'] = src_AL
         if returnSources:
