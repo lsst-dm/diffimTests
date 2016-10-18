@@ -152,7 +152,8 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 # varFlux2 is the flux of variable sources in im2 (science img)
 
 def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
-                   psf_yvary_factor=0.2, theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
+                   scintillation=0., psf_yvary_factor=0.2,
+                   theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
                    variablesNearCenter=True,
                    im2background=10., n_sources=500, sourceFluxRange=None, psfSize=None,
                    seed=66, verbose=False):
@@ -194,6 +195,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         inds = np.arange(len(varFlux2))
     #print inds, xposns[inds], yposns[inds]
 
+    ## Need to add poisson noise of stars as well...
     im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
     im2 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of science image
 
@@ -202,6 +204,11 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     if verbose:
         print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
+
+    scintillationNoiseX = scintillationNoiseY = np.zeros(len(fluxes))
+    if scintillation > 0.:
+        scintillationNoiseX = np.random.normal(0., scintillation, len(fluxes))
+        scintillationNoiseY = np.random.normal(0., scintillation, len(fluxes))
 
     varSourceInd = 0
     fluxes2 = fluxes.copy()
@@ -225,8 +232,10 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
             flux += vf2
             fluxes2[i] = flux
             varSourceInd += 1
-        tmp = singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
-                               psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
+        xposn = xposns[i] + offset[0] + scintillationNoiseX[i]
+        yposn = yposns[i] + offset[0] + scintillationNoiseY[i]
+        tmp = singleGaussian2d(x0im, y0im, xposn, yposn,
+                               psf2[0], psf2[1] + psf2_yvary[i], theta=theta2)
         tmp *= flux
         im2 += tmp
 
