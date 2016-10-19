@@ -17,8 +17,8 @@ try:
     lsst.log.Log.getLogger('TRACE5.afw.math.convolve.convolveWithInterpolation').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE2.afw.math.convolve.basicConvolve').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
-    #import lsst.log.utils as logUtils
-    #logUtils.traceSetAt('afw', 0)
+    import lsst.log.utils as logUtils
+    logUtils.traceSetAt('afw', 0)
 except Exception as e:
     print e
     print "LSSTSW has not been set up."
@@ -152,7 +152,8 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 # varFlux2 is the flux of variable sources in im2 (science img)
 
 def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
-                   psf_yvary_factor=0.2, theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
+                   scintillation=0., psf_yvary_factor=0.2,
+                   theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
                    variablesNearCenter=True,
                    im2background=10., n_sources=500, sourceFluxRange=None, psfSize=None,
                    seed=66, verbose=False):
@@ -194,6 +195,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         inds = np.arange(len(varFlux2))
     #print inds, xposns[inds], yposns[inds]
 
+    ## Need to add poisson noise of stars as well...
     im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
     im2 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of science image
 
@@ -202,6 +204,11 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     if verbose:
         print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
+
+    scintillationNoiseX = scintillationNoiseY = np.zeros(len(fluxes))
+    if scintillation > 0.:
+        scintillationNoiseX = np.random.normal(0., scintillation, len(fluxes))
+        scintillationNoiseY = np.random.normal(0., scintillation, len(fluxes))
 
     varSourceInd = 0
     fluxes2 = fluxes.copy()
@@ -225,8 +232,10 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
             flux += vf2
             fluxes2[i] = flux
             varSourceInd += 1
-        tmp = singleGaussian2d(x0im, y0im, xposns[i]+offset[0], yposns[i]+offset[1],
-                               psf2[0], psf2[1]+psf2_yvary[i], theta=theta2)
+        xposn = xposns[i] + offset[0] + scintillationNoiseX[i]
+        yposn = yposns[i] + offset[0] + scintillationNoiseY[i]
+        tmp = singleGaussian2d(x0im, y0im, xposn, yposn,
+                               psf2[0], psf2[1] + psf2_yvary[i], theta=theta2)
         tmp *= flux
         im2 += tmp
 
@@ -240,18 +249,22 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         print 'Background:', im2background
         im2 += im2background
 
-    x0, y0 = x0im, y0im
-    if psfSize is not None:
-        x = np.arange(-psfSize+1, psfSize, 1)
-        y = x.copy()
-        y0, x0 = np.meshgrid(x, y)
+    if psfSize is None:
+        psfSize = imSize
 
-    im1_psf = singleGaussian2d(x0, y0, 0, 0, psf1[0], psf1[1], theta=theta1)
-    #im2_psf = singleGaussian2d(x0, y0, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
+    im1_psf = makePsf(psfSize, psf1, theta1)
+    #im2_psf = makePsf(psfSize, psf2, theta2, offset)
     # Don't include any astrometric "error" in the PSF, see how well the diffim algo. handles it.
-    im2_psf = singleGaussian2d(x0, y0, 0, 0, psf2[0], psf2[1], theta=theta2)
+    im2_psf = makePsf(psfSize, psf2, theta2)
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
     return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
+
+def makePsf(psfSize, sigma, theta, offset=[0, 0]):
+    x = np.arange(-psfSize+1, psfSize, 1)
+    y = x.copy()
+    y0, x0 = np.meshgrid(x, y)
+    psf = singleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
+    return psf
 
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
