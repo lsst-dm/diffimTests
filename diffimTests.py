@@ -592,9 +592,9 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
     y = x.copy()
     x0, y0 = np.meshgrid(x, y)
 
-    im1_orig = im1
+    im2_orig = im2
     if preConvKernel is not None:
-        im1 = scipy.ndimage.filters.convolve(im1, preConvKernel, mode='constant')
+        im2 = scipy.ndimage.filters.convolve(im2, preConvKernel, mode='constant')
 
     basis = getALChebGaussBases(x0, y0, sigGauss=sigGauss, degGauss=degGauss,
                                 betaGauss=betaGauss, verbose=verbose)
@@ -999,8 +999,9 @@ def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
     kft = np.sqrt((svar + tvar) / (svar * pcft**2 + tvar * kft**2))
     #kft = scipy.fftpack.fftshift(kft)
     pck = scipy.fftpack.ifft2(kft)
-    pck = scipy.fftpack.ifftshift(pck).real
-    fkernel = fixEvenKernel(pck)
+    if np.argmax(pck.real) == 0:  # I can't figure out why we need to ifftshift sometimes but not others.
+        pck = scipy.fftpack.ifftshift(pck.real)
+    fkernel = fixEvenKernel(pck.real)
 
     # I think we may need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers...
     # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
@@ -1285,7 +1286,7 @@ class DiffimTest(object):
             #        kernelSize -= 1
         preConvKernel = None
         if doPreConv:
-            preConvKernel = self.im1.psf
+            preConvKernel = self.im2.psf
             if betaGauss == 1.:  # update default, resize the kernel appropriately
                 betaGauss = 1./np.sqrt(2.)
         D_AL, D_psf, self.kappa_AL = performAlardLupton(self.im1.im, self.im2.im,
@@ -1297,8 +1298,8 @@ class DiffimTest(object):
                                                         doALZCcorrection=doDecorr,
                                                         im1Psf=self.im1.psf,
                                                         preConvKernel=preConvKernel)
-        # This is not entirely correct, we also need to convolve var with the decorrelation kernel:
-        var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL, mode='constant')
+        # This is not entirely correct, we also need to convolve var with the decorrelation kernel (squared):
+        var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL**2., mode='constant')
         self.D_AL = Exposure(D_AL, D_psf, var)
         self.D_AL.im /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
         self.D_AL.var /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
@@ -1422,7 +1423,9 @@ class DiffimTest(object):
             diffim.setPsf(psfNew)
 
             result.decorrelatedDiffim = diffim
+            result.preConvKernel = preConvKernel
             result.decorrelationKernel = pck
+            result.kappaImg = kimg
 
         return result
 
