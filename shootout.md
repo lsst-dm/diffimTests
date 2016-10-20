@@ -11,7 +11,7 @@ All code and notebooks are in this repository, specifically the code is in the `
 3. A "clean-room" pure python method that can apply the ZOGY algorithm to these simulated images. It can do so either completely in Fourier space, or by only computing kernels in Fourier space and then convolving the images in real (image) space. It can also compute the ZOGY matched-filtered image $S$ and its corrected version $S_{corr}$.
 4. A wrapper that performs the LSST-stack (`ip_diffim`) version of A&L on the simulated images, with pre-filtering (pre-convolution of the science image with its PSF) *or* decorrelation (see *Note* below).
 
-*Note: Currently for both implementations of A&L, decorrelation with pre-filtering does not work. [UPDATE: It appears that I have figured out how to get it to work, with creative usage of `fftshift()` and `ifftshift()` in various locations. Still needs to be thoroughly vetted.*
+*Note: Currently for both implementations of A&L, decorrelation with pre-filtering does not work. [UPDATE: It appears that I have figured out how to get it to work, with creative usage of `fftshift()` and `ifftshift()` in various locations. Still needs to be thoroughly vetted. UPDATE2: It does not seem to generate a likelihood image that is as optimal as the ZOGY $S_{corr}$.]*
 
 A comparison of the three different implementations (actually, four) is shown in Cell[30] of [this notebook](https://github.com/djreiss/diffimTests/blob/master/25.%20Compare%20basic%20ZOGY%20and%20ALCZ%20with%20preconvolution-final.ipynb), and in the figure below, for an example when the template's PSF is wider than that of the science image. Both A&L image differences are computed with the decorrelation "afterburner" enabled.
 
