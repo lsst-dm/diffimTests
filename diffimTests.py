@@ -996,7 +996,7 @@ def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
         pc = fixOddKernel(preConvKernel)
         pcft = scipy.fftpack.fft2(pc)
 
-    kft = np.sqrt((svar + tvar) / (svar * pcft**2 + tvar * kft**2))
+    kft = np.sqrt((svar + tvar) / (svar * np.abs(pcft)**2 + tvar * np.abs(kft)**2))
     #kft = scipy.fftpack.fftshift(kft)
     pck = scipy.fftpack.ifft2(kft)
     if np.argmax(pck.real) == 0:  # I can't figure out why we need to ifftshift sometimes but not others.
@@ -1365,7 +1365,7 @@ class DiffimTest(object):
         im2c = im2
         if doPreConv:
             #doDecorr = False  # Right now decorr with pre-conv doesn't work
-            preConvKernel = self.im1.psf
+            preConvKernel = self.im2.psf
             im2c, kern = doConvolve(im2, preConvKernel, use_scipy=False)
 
         config = ipDiffim.ImagePsfMatchTask.ConfigClass()
