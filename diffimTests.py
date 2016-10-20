@@ -585,9 +585,10 @@ def getImageGrid(im):
     return x0im, y0im
 
 
+# Here, im2 is science, im1 is template
 def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kernelSize=25,
                        spatialKernelOrder=2, spatialBackgroundOrder=2, doALZCcorrection=True,
-                       preConvKernel=None, sig1=None, sig2=None, im1Psf=None, verbose=False):
+                       preConvKernel=None, sig1=None, sig2=None, im2Psf=None, verbose=False):
     x = np.arange(-kernelSize+1, kernelSize, 1)
     y = x.copy()
     x0, y0 = np.meshgrid(x, y)
@@ -616,7 +617,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
     del basis
     del spatialBasis
     diffim = im2 - fit
-    psf = im1Psf
+    psf = im2Psf
     if doALZCcorrection:
         if sig1 is None:
             _, sig1, _, _ = computeClippedImageStats(im1)
@@ -625,8 +626,8 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
 
         pck = computeDecorrelationKernel(kfit, sig1**2, sig2**2, preConvKernel=preConvKernel)
         pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
-        if im1Psf is not None:
-            psf = computeCorrectedDiffimPsf(kfit, im1Psf, svar=sig1**2, tvar=sig2**2)
+        if im2Psf is not None:
+            psf = computeCorrectedDiffimPsf(kfit, im2Psf, svar=sig1**2, tvar=sig2**2)
         diffim = pci
 
     return diffim, psf, kfit
@@ -984,7 +985,7 @@ def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
     @param kappa  A matching kernel 2-d numpy.array derived from Alard & Lupton PSF matching
     @param svar   Average variance of science image used for PSF matching
     @param tvar   Average variance of template image used for PSF matching
-    @param preConvKernel   A pre-convolution kernel applied to im1 prior to A&L PSF matching
+    @param preConvKernel   A pre-convolution kernel applied to im2 prior to A&L PSF matching
     @return a 2-d numpy.array containing the correction kernel
 
     @note As currently implemented, kappa is a static (single, non-spatially-varying) kernel.
@@ -997,7 +998,8 @@ def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
         pcft = scipy.fftpack.fft2(pc)
 
     kft = np.sqrt((svar + tvar) / (svar * np.abs(pcft)**2 + tvar * np.abs(kft)**2))
-    #kft = scipy.fftpack.fftshift(kft)
+    if preConvKernel is not None:
+        kft = scipy.fftpack.fftshift(kft)  # I can't figure out why we need to fftshift sometimes but not others.
     pck = scipy.fftpack.ifft2(kft)
     if np.argmax(pck.real) == 0:  # I can't figure out why we need to ifftshift sometimes but not others.
         pck = scipy.fftpack.ifftshift(pck.real)
@@ -1296,7 +1298,7 @@ class DiffimTest(object):
                                                         kernelSize=kernelSize,
                                                         betaGauss=betaGauss,
                                                         doALZCcorrection=doDecorr,
-                                                        im1Psf=self.im1.psf,
+                                                        im2Psf=self.im2.psf,
                                                         preConvKernel=preConvKernel)
         # This is not entirely correct, we also need to convolve var with the decorrelation kernel (squared):
         var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL**2., mode='constant')
