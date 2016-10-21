@@ -1217,7 +1217,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
 
     return sources
 
-def measurePsf(exp):
+def measurePsf(exp, measurePsfAlg='psfex'):
     import lsst.pipe.tasks.measurePsf as measurePsf
     import lsst.afw.table as afwTable
     import lsst.ip.diffim as ipDiffim  # for detection - needs NaiveDipoleCentroid (registered by my routine)
@@ -1225,7 +1225,8 @@ def measurePsf(exp):
 
     # The old (meas_algorithms) SdssCentroid assumed this by default if it
     # wasn't specified; meas_base requires us to be explicit.
-    psf = measAlg.DoubleGaussianPsf(11, 11, 0.01)
+    shape = exp.getPsf().computeImage().getDimensions()
+    psf = measAlg.DoubleGaussianPsf(shape[0], shape[1], 0.01)
     exp.setPsf(psf)
 
     im = exp.getMaskedImage().getImage()
@@ -1235,11 +1236,24 @@ def measurePsf(exp):
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 
+    if measurePsfAlg is 'psfex':
+        try:
+            import lsst.meas.extensions.psfex.psfexPsfDeterminer
+            config.psfDeterminer['psfex'].spatialOrder = 2
+            config.psfDeterminer.name = 'psfex'
+        except ImportError as e:
+            print "WARNING: Unable to use psfex: %s" % e
+            measurePsfAlg = 'pca'
+
+    if measurePsfAlg is 'pca':
+        config.psfDeterminer['pca'].sizeCellX = 128
+        config.psfDeterminer['pca'].sizeCellY = 128
+        config.psfDeterminer['pca'].spatialOrder = 1
+        config.psfDeterminer['pca'].nEigenComponents = 3
+        config.psfDeterminer.name = "pca"
+
     psfDeterminer = config.psfDeterminer.apply()
-    psfDeterminer.config.sizeCellX = 128
-    psfDeterminer.config.sizeCellY = 128
-    psfDeterminer.config.spatialOrder = 1
-    psfDeterminer.config.nEigenComponents = 3
+    #print type(psfDeterminer)
     task = measurePsf.MeasurePsfTask(schema=schema, config=config)
 
     result = task.run(exp, sources)
