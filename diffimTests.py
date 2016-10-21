@@ -1132,6 +1132,10 @@ class Exposure(object):
     def doDetection(self, threshold=5.0, doSmooth=True):
         return doDetection(self.asAfwExposure(), threshold=threshold, doSmooth=doSmooth)
 
+    def doMeasurePsf(self):
+        res = measurePsf(self.asAfwExposure())
+        self.psf = res.psf.computeImage()
+
 
 def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
     import lsst.daf.base as dafBase
@@ -1182,9 +1186,11 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
                       "base_SkyCoord",
                       "base_PsfFlux",
                       "base_GaussianCentroid",
+                      "base_GaussianFlux",
                       "base_PeakLikelihoodFlux",
                       "base_PeakCentroid",
                       "base_SdssCentroid",
+                      "base_SdssShape",
                       "base_NaiveCentroid",
                       "ip_diffim_NaiveDipoleCentroid",
                       "ip_diffim_NaiveDipoleFlux",
@@ -1195,7 +1201,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     config.slots.calibFlux = None
     config.slots.modelFlux = None
     config.slots.instFlux = None
-    config.slots.shape = None
+    config.slots.shape = "base_SdssShape"
     config.doReplaceWithNoise = False
     measureTask = measBase.SingleFrameMeasurementTask(schema, config=config)
     measureTask.log.setLevel(lsst.log.ERROR)
@@ -1210,6 +1216,34 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
         sources = pd.DataFrame({col: sources.columns[col] for col in sources.schema.getNames()})
 
     return sources
+
+def measurePsf(exp):
+    import lsst.pipe.tasks.measurePsf as measurePsf
+    import lsst.afw.table as afwTable
+    import lsst.ip.diffim as ipDiffim  # for detection - needs NaiveDipoleCentroid (registered by my routine)
+    import lsst.meas.algorithms        as measAlg
+
+    # The old (meas_algorithms) SdssCentroid assumed this by default if it
+    # wasn't specified; meas_base requires us to be explicit.
+    psf = measAlg.DoubleGaussianPsf(11, 11, 0.01)
+    exp.setPsf(psf)
+
+    im = exp.getMaskedImage().getImage()
+    im -= np.median(im.getArray())
+
+    sources = doDetection(exp, asDF=False)
+    config = measurePsf.MeasurePsfConfig()
+    schema = afwTable.SourceTable.makeMinimalSchema()
+
+    psfDeterminer = config.psfDeterminer.apply()
+    psfDeterminer.config.sizeCellX = 128
+    psfDeterminer.config.sizeCellY = 128
+    psfDeterminer.config.spatialOrder = 1
+    psfDeterminer.config.nEigenComponents = 3
+    task = measurePsf.MeasurePsfTask(schema=schema, config=config)
+
+    result = task.run(exp, sources)
+    return result
 
 # Compute mean of variance plane. Can actually get std of image plane if
 # actuallyDoImage=True and statToDo=afwMath.VARIANCECLIP
