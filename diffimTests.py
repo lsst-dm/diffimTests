@@ -1222,6 +1222,7 @@ def measurePsf(exp, measurePsfAlg='psfex'):
     import lsst.afw.table as afwTable
     import lsst.ip.diffim as ipDiffim  # for detection - needs NaiveDipoleCentroid (registered by my routine)
     import lsst.meas.algorithms        as measAlg
+    import lsst.log
 
     # The old (meas_algorithms) SdssCentroid assumed this by default if it
     # wasn't specified; meas_base requires us to be explicit.
@@ -1255,7 +1256,7 @@ def measurePsf(exp, measurePsfAlg='psfex'):
     psfDeterminer = config.psfDeterminer.apply()
     #print type(psfDeterminer)
     task = measurePsf.MeasurePsfTask(schema=schema, config=config)
-
+    task.log.setLevel(lsst.log.ERROR)
     result = task.run(exp, sources)
     return result
 
