@@ -1240,7 +1240,8 @@ def measurePsf(exp, measurePsfAlg='psfex'):
     if measurePsfAlg is 'psfex':
         try:
             import lsst.meas.extensions.psfex.psfexPsfDeterminer
-            config.psfDeterminer['psfex'].spatialOrder = 2
+            config.psfDeterminer['psfex'].spatialOrder = 2  # 2 is default, 0 seems to kill it
+            config.psfDeterminer['psfex'].recentroid = True
             config.psfDeterminer.name = 'psfex'
         except ImportError as e:
             print "WARNING: Unable to use psfex: %s" % e
