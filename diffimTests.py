@@ -785,23 +785,27 @@ def computePixelCovariance(diffim, diffim2=None):
     return out, stat
 
 
-# Compute ALZC correction kernel from matching kernel
-# Here we use a constant kernel, just compute it for the center of the image.
-def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure, psfMatchingKernel, log):
-    import lsst.meas.algorithms as measAlg
-
+def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure):
     spatialKernel = psfMatchingKernel
     kimg = afwImage.ImageD(spatialKernel.getDimensions())
     bbox = subtractedExposure.getBBox()
     xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
     ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
     spatialKernel.computeImage(kimg, True, xcen, ycen)
+    return kimg.getArray()
+
+# Compute ALZC correction kernel from matching kernel
+# Here we use a constant kernel, just compute it for the center of the image.
+def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure, psfMatchingKernel, log):
+    import lsst.meas.algorithms as measAlg
+
+    kimg = alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure)
     # Compute the images' sigmas (sqrt of variance)
     sig1 = templateExposure.getMaskedImage().getVariance().getArray()
     sig2 = exposure.getMaskedImage().getVariance().getArray()
     sig1squared, _, _, _ = computeClippedImageStats(sig1)
     sig2squared, _, _, _ = computeClippedImageStats(sig2)
-    corrKernel = computeDecorrelationKernel(kimg.getArray(), sig1squared, sig2squared)
+    corrKernel = computeDecorrelationKernel(kimg, sig1squared, sig2squared)
     # Eventually, use afwMath.convolve(), but for now just use scipy.
     log.info("ALZC: Convolving.")
     pci, _ = doConvolve(subtractedExposure.getMaskedImage().getImage().getArray(),
@@ -979,7 +983,7 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
 # This should eventually replace computeCorrectionKernelALZC and
 # computeCorrectedDiffimPsfALZC
 
-def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
+def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None, delta=0.):
     """! Compute the Lupton/ZOGY post-conv. kernel for decorrelating an
     image difference, based on the PSF-matching kernel.
     @param kappa  A matching kernel 2-d numpy.array derived from Alard & Lupton PSF matching
@@ -997,12 +1001,12 @@ def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None):
         pc = fixOddKernel(preConvKernel)
         pcft = scipy.fftpack.fft2(pc)
 
-    kft = np.sqrt((svar + tvar) / (svar * np.abs(pcft)**2 + tvar * np.abs(kft)**2))
-    if preConvKernel is not None:
-        kft = scipy.fftpack.fftshift(kft)  # I can't figure out why we need to fftshift sometimes but not others.
+    kft = np.sqrt((svar + tvar + delta) / (svar * np.abs(pcft)**2 + tvar * np.abs(kft)**2 + delta))
+    #if preConvKernel is not None:
+    #    kft = scipy.fftpack.fftshift(kft)  # I can't figure out why we need to fftshift sometimes but not others.
     pck = scipy.fftpack.ifft2(kft)
-    if np.argmax(pck.real) == 0:  # I can't figure out why we need to ifftshift sometimes but not others.
-        pck = scipy.fftpack.ifftshift(pck.real)
+    #if np.argmax(pck.real) == 0:  # I can't figure out why we need to ifftshift sometimes but not others.
+    #    pck = scipy.fftpack.ifftshift(pck.real)
     fkernel = fixEvenKernel(pck.real)
 
     # I think we may need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers...
@@ -1434,31 +1438,25 @@ class DiffimTest(object):
         result = task.subtractExposures(im1, im2c, doWarping=doWarping)
 
         if doDecorr:
-            spatialKernel = result.psfMatchingKernel
-            kimg = afwImage.ImageD(spatialKernel.getDimensions())
-            bbox = im1.getBBox()
-            xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
-            ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
-            spatialKernel.computeImage(kimg, True, xcen, ycen)
-            kimg = kimg.getArray()
+            kimg = alPsfMatchingKernelToArray(result.psfMatchingKernel, im1)
             #return kimg
             if preConvKernel is not None and kimg.shape[0] < preConvKernel.shape[0]:
                 # This is likely brittle and may only work if both kernels are odd-shaped.
-                kimg[np.abs(kimg) < 1e-4] = np.sign(kimg)[np.abs(kimg) < 1e-4] * 1e-8
-                kimg -= kimg[0, 0]
+                #kimg[np.abs(kimg) < 1e-4] = np.sign(kimg)[np.abs(kimg) < 1e-4] * 1e-8
+                #kimg -= kimg[0, 0]
                 padSize0 = preConvKernel.shape[0]//2 - kimg.shape[0]//2
                 padSize1 = preConvKernel.shape[1]//2 - kimg.shape[1]//2
-                #kimg = np.pad(kimg, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
-                #              constant_values=0)
-                kimg /= kimg.sum()
+                kimg = np.pad(kimg, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
+                              constant_values=0)
+                #kimg /= kimg.sum()
 
-                preConvKernel = preConvKernel[padSize0:-padSize0, padSize1:-padSize1]
-                print kimg.shape, preConvKernel.shape
+                #preConvKernel = preConvKernel[padSize0:-padSize0, padSize1:-padSize1]
+                #print kimg.shape, preConvKernel.shape
 
             sig1squared = computeVarianceMean(im1)
             sig2squared = computeVarianceMean(im2)
             pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
-                                             preConvKernel=preConvKernel)
+                                             preConvKernel=preConvKernel, delta=1.)
             #return kimg, preConvKernel, pck
             diffim, _ = doConvolve(result.subtractedExposure, pck, use_scipy=False)
             #diffim.getMaskedImage().getImage().getArray()[:, ] \
@@ -1467,6 +1465,7 @@ class DiffimTest(object):
             #    /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
 
             psf = result.subtractedExposure.getPsf().computeImage().getArray()
+            # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
             psfc = computeCorrectedDiffimPsf(kimg, psf, svar=sig1squared, tvar=sig2squared)
             psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
             psfcI.getArray()[:, :] = psfc
