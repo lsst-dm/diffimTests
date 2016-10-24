@@ -6,6 +6,7 @@ from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
 import scipy.ndimage.filters
 import scipy.signal
 
+log_level = None
 try:
     import lsst.afw.image as afwImage
     import lsst.afw.math as afwMath
@@ -19,6 +20,7 @@ try:
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
     import lsst.log.utils as logUtils
     logUtils.traceSetAt('afw', 0)
+    log_level = lsst.log.INFO  # ERROR
 except Exception as e:
     print e
     print "LSSTSW has not been set up."
@@ -156,7 +158,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
                    theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
                    variablesNearCenter=True,
                    im2background=10., n_sources=500, sourceFluxRange=None, psfSize=None,
-                   seed=66, verbose=False):
+                   seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -210,6 +212,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         scintillationNoiseX = np.random.normal(0., scintillation, len(fluxes))
         scintillationNoiseY = np.random.normal(0., scintillation, len(fluxes))
 
+    starSize = 32  # make stars using "psf's" of this size (instead of whole image)
     varSourceInd = 0
     fluxes2 = fluxes.copy()
     for i in fluxSortedInds:
@@ -218,9 +221,18 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         else:
             flux = fluxes[i]
         fluxes[i] = flux
-        tmp1 = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
-        tmp1 *= flux
-        im1 += tmp1
+        if fast:
+            offset1 = [yposns[i]-np.floor(yposns[i]),
+                       xposns[i]-np.floor(xposns[i])]
+            tmp1 = makePsf(starSize, psf1, theta1, offset=offset1)
+            tmp1 *= flux
+            offset2 = [xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2]
+            im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
+                (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp1
+        else:
+            tmp1 = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
+            tmp1 *= flux
+            im1 += tmp1
 
         if i in inds:
             vf2 = varFlux2[varSourceInd]
@@ -234,10 +246,19 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
             varSourceInd += 1
         xposn = xposns[i] + offset[0] + scintillationNoiseX[i]
         yposn = yposns[i] + offset[0] + scintillationNoiseY[i]
-        tmp = singleGaussian2d(x0im, y0im, xposn, yposn,
-                               psf2[0], psf2[1] + psf2_yvary[i], theta=theta2)
-        tmp *= flux
-        im2 += tmp
+
+        if fast:
+            offset1 = [yposn-np.floor(yposn), xposn-np.floor(xposn)]
+            tmp = makePsf(starSize, [psf2[0], psf2[1] + psf2_yvary[i]], theta2, offset=offset1)
+            tmp *= flux
+            offset2 = [xposn+imSize[0]//2, yposn+imSize[1]//2]
+            im2[(offset2[1]-starSize+1):(offset2[1]+starSize),
+                (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
+        else:
+            tmp = singleGaussian2d(x0im, y0im, xposn, yposn,
+                                   psf2[0], psf2[1] + psf2_yvary[i], theta=theta2)
+            tmp *= flux
+            im2 += tmp
 
     var_im1 = im1.copy()
     var_im2 = im2.copy()
@@ -564,17 +585,23 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
 # compute rms x- and y- pixel offset between two catalogs. Assume input is 2- or 3-column dataframe.
 # Assume 1st column is x-coord and 2nd is y-coord. 
 # If 3-column then 3rd column is flux and use flux as weighting on shift calculation (not implemented yet)
-def computeOffset(src1, src2, threshold=2.5):
+def computeOffset(src1, src2, threshold=0.5):
     dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
                    np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
     matches = np.where(dist <= threshold)
     match1 = src1.iloc[matches[0], :]
     match2 = src2.iloc[matches[1], :]
+    if len(matches[0]) > src1.shape[0]:
+        print 'WARNING: Threshold for ast. matching is probably too small:', match1.shape[0], src1.shape[0]
+    if len(matches[1]) > src2.shape[0]:
+        print 'WARNING: Threshold for ast. matching is probably too small:', match2.shape[0], src2.shape[0]
     dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)**2.
     dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)**2.
-    rms = (dx + dy).mean()
-    dx = dx.mean()
-    dy = dy.mean()
+    rms = dx + dy
+    rms2, low, upp = scipy.stats.sigmaclip(rms, low=2.5, high=2.5)
+    dx = dx[(rms >= low) & (rms <= upp)].mean()
+    dy = dy[(rms >= low) & (rms <= upp)].mean()
+    rms = rms2.mean()
     return dx, dy, rms
 
 
@@ -1179,7 +1206,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     config.thresholdValue = threshold
     config.thresholdType = thresholdType
     detectionTask = measAlg.SourceDetectionTask(config=config, schema=schema)
-    detectionTask.log.setLevel(lsst.log.ERROR)
+    detectionTask.log.setLevel(log_level)
 
     # Do measurement too, so we can get x- and y-coord centroids
 
@@ -1196,19 +1223,19 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
                       "base_SdssCentroid",
                       "base_SdssShape",
                       "base_NaiveCentroid",
-                      "ip_diffim_NaiveDipoleCentroid",
-                      "ip_diffim_NaiveDipoleFlux",
+                      #"ip_diffim_NaiveDipoleCentroid",
+                      #"ip_diffim_NaiveDipoleFlux",
                       "ip_diffim_PsfDipoleFlux",
                       "ip_diffim_ClassificationDipole",
                       ]
-    config.slots.centroid = "ip_diffim_NaiveDipoleCentroid"
+    config.slots.centroid = "base_GaussianCentroid" #"ip_diffim_NaiveDipoleCentroid"
     config.slots.calibFlux = None
     config.slots.modelFlux = None
     config.slots.instFlux = None
     config.slots.shape = "base_SdssShape"
     config.doReplaceWithNoise = False
     measureTask = measBase.SingleFrameMeasurementTask(schema, config=config)
-    measureTask.log.setLevel(lsst.log.ERROR)
+    measureTask.log.setLevel(log_level)
 
     table = afwTable.SourceTable.make(schema)
     sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
@@ -1261,7 +1288,7 @@ def measurePsf(exp, measurePsfAlg='psfex'):
     psfDeterminer = config.psfDeterminer.apply()
     #print type(psfDeterminer)
     task = measurePsf.MeasurePsfTask(schema=schema, config=config)
-    task.log.setLevel(lsst.log.ERROR)
+    task.log.setLevel(log_level)
     result = task.run(exp, sources)
     return result
 
@@ -1306,9 +1333,9 @@ class DiffimTest(object):
 
             self.astrometricOffsets = kwargs.get('offset', [0, 0])
             try:
-                dx, dy = self.computeAstrometricOffsets(threshold=2.5)
+                dx, dy = self.computeAstrometricOffsets(threshold=0.25)
                 self.astrometricOffsets = [dx, dy]
-            except:
+            except Exception as e:
                 pass
 
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
@@ -1362,7 +1389,7 @@ class DiffimTest(object):
         # TBD: make the returned D an Exposure.
         return self.D_AL, self.kappa_AL
 
-    def computeAstrometricOffsets(self, threshold=2.5):
+    def computeAstrometricOffsets(self, threshold=0.5):
         src1 = self.im1.doDetection()
         src1 = src1[~src1['base_PsfFlux_flag']]
         src1 = src1[['base_NaiveCentroid_x', 'base_NaiveCentroid_y']]
@@ -1396,7 +1423,6 @@ class DiffimTest(object):
         self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
 
         if computeScorr:
-            #print self.astrometricOffsets
             S_corr_ZOGY, S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
                 var2c = performZOGY_Scorr(self.im1.im, self.im2.im, self.im1.var, self.im2.var,
                                           sig1=self.im1.sig, sig2=self.im2.sig,
@@ -1427,6 +1453,8 @@ class DiffimTest(object):
         config = ipDiffim.ImagePsfMatchTask.ConfigClass()
         config.kernel.name = "AL"
         subconfig = config.kernel.active
+        config.kernel.active.spatialKernelOrder = 1
+        config.kernel.active.spatialBgOrder = 0
         subconfig.afwBackgroundConfig.useApprox = False
         subconfig.constantVarianceWeighting = False
         subconfig.singleKernelClipping = False
@@ -1434,7 +1462,7 @@ class DiffimTest(object):
         subconfig.fitForBackground = False
 
         task = ipDiffim.ImagePsfMatchTask(config=config)
-        task.log.setLevel(lsst.log.ERROR)
+        task.log.setLevel(log_level)
         result = task.subtractExposures(im1, im2c, doWarping=doWarping)
 
         if doDecorr:
@@ -1485,46 +1513,52 @@ class DiffimTest(object):
         import pandas as pd  # We're going to store the results as pandas dataframes.
 
         D_ZOGY = S_ZOGY = res = D_AL = None
-        # Run diffim first
-        if 'ALstack' in subtractMethods or 'ALstack_noDecorr' in subtractMethods:
-            res = self.doALInStack(doPreConv=False, doDecorr=True)
-        if 'ZOGY_S' in subtractMethods:
-            if self.S_corr_ZOGY is None:
-                self.doZOGY(computeScorr=True)
-            S_ZOGY = self.S_corr_ZOGY
-        if 'ZOGY' in subtractMethods:
-            if self.D_ZOGY is None:
-                self.doZOGY(computeScorr=True)
-            D_ZOGY = self.D_ZOGY
-        if 'AL' in subtractMethods:  # my clean-room (pure python) version of A&L
-            try:
-                self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
-                D_AL = self.D_AL
-            except:
-                D_AL = None
-
-        # Run detection next
         src = {}
-        if 'ALstack' in subtractMethods:
-            src_AL = doDetection(res.decorrelatedDiffim)
-            src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
-            src['ALstack'] = src_AL
-        if 'ALstack_noDecorr' in subtractMethods:
-            src_AL2 = doDetection(res.subtractedExposure)
-            src_AL2 = src_AL2[~src_AL2['base_PsfFlux_flag']]
-            src['ALstack_noDecorr'] = src_AL2
-        if 'ZOGY' in subtractMethods:
-            src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
-            src_ZOGY = src_ZOGY[~src_ZOGY['base_PsfFlux_flag']]
-            src['ZOGY'] = src_ZOGY
-        if 'ZOGY_S' in subtractMethods:
-            src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), doSmooth=False)
-            src_SZOGY = src_SZOGY[~src_SZOGY['base_PsfFlux_flag']]
-            src['SZOGY'] = src_SZOGY
-        if 'AL' in subtractMethods and D_AL is not None:
-            src_AL = doDetection(D_AL.asAfwExposure())
-            src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
-            src['AL'] = src_AL
+        # Run diffim first
+        for subMethod in subtractMethods:
+            if subMethod is 'ALstack' or subMethod is 'ALstack_noDecorr':
+                res = self.res = self.doALInStack(doPreConv=False, doDecorr=True)
+            if subMethod is 'ZOGY_S':
+                if self.S_corr_ZOGY is None:
+                    self.doZOGY(computeScorr=True)
+                S_ZOGY = self.S_corr_ZOGY
+            if subMethod is 'ZOGY':
+                if self.D_ZOGY is None:
+                    self.doZOGY(computeScorr=True)
+                D_ZOGY = self.D_ZOGY
+            if subMethod is 'AL':  # my clean-room (pure python) version of A&L
+                try:
+                    self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
+                    D_AL = self.D_AL
+                except:
+                    D_AL = None
+
+            # Run detection next
+            try:
+                if subMethod is 'ALstack':
+                    src_AL = doDetection(res.decorrelatedDiffim)
+                    src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
+                    src['ALstack'] = src_AL
+                elif subMethod is 'ALstack_noDecorr':
+                    src_AL2 = doDetection(res.subtractedExposure)
+                    src_AL2 = src_AL2[~src_AL2['base_PsfFlux_flag']]
+                    src['ALstack_noDecorr'] = src_AL2
+                elif subMethod is 'ZOGY':
+                    src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
+                    src_ZOGY = src_ZOGY[~src_ZOGY['base_PsfFlux_flag']]
+                    src['ZOGY'] = src_ZOGY
+                elif subMethod is 'ZOGY_S':
+                    src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), doSmooth=False)
+                    src_SZOGY = src_SZOGY[~src_SZOGY['base_PsfFlux_flag']]
+                    src['SZOGY'] = src_SZOGY
+                elif subMethod is 'AL' and D_AL is not None:
+                    src_AL = doDetection(D_AL.asAfwExposure())
+                    src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
+                    src['AL'] = src_AL
+            except Exception as e:
+                print(e)
+                pass
+
         if returnSources:
             return src
 
