@@ -20,7 +20,7 @@ try:
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
     import lsst.log.utils as logUtils
     logUtils.traceSetAt('afw', 0)
-    log_level = lsst.log.ERROR
+    log_level = lsst.log.ERROR  # INFO
 except Exception as e:
     print e
     print "LSSTSW has not been set up."
@@ -280,7 +280,7 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
     return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
 
-def makePsf(psfSize, sigma, theta, offset=[0, 0]):
+def makePsf(psfSize, sigma, theta=0., offset=[0, 0]):
     x = np.arange(-psfSize+1, psfSize, 1)
     y = x.copy()
     y0, x0 = np.meshgrid(x, y)
@@ -1248,7 +1248,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
 
     return sources
 
-def measurePsf(exp, measurePsfAlg='psfex'):
+def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
     import lsst.pipe.tasks.measurePsf as measurePsf
     import lsst.afw.table as afwTable
     import lsst.ip.diffim as ipDiffim  # for detection - needs NaiveDipoleCentroid (registered by my routine)
@@ -1264,7 +1264,7 @@ def measurePsf(exp, measurePsfAlg='psfex'):
     im = exp.getMaskedImage().getImage()
     im -= np.median(im.getArray())
 
-    sources = doDetection(exp, asDF=False)
+    sources = doDetection(exp, threshold=detectThresh, asDF=False)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 
@@ -1283,6 +1283,8 @@ def measurePsf(exp, measurePsfAlg='psfex'):
         config.psfDeterminer['pca'].sizeCellY = 128
         config.psfDeterminer['pca'].spatialOrder = 1
         config.psfDeterminer['pca'].nEigenComponents = 3
+        #config.psfDeterminer['pca'].constantWeight = False
+        #config.psfDeterminer['pca'].doMaskBlends = False
         config.psfDeterminer.name = "pca"
 
     psfDeterminer = config.psfDeterminer.apply()
