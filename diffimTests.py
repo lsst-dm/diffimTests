@@ -20,7 +20,7 @@ try:
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
     import lsst.log.utils as logUtils
     logUtils.traceSetAt('afw', 0)
-    log_level = lsst.log.INFO  # ERROR
+    log_level = lsst.log.ERROR
 except Exception as e:
     print e
     print "LSSTSW has not been set up."
@@ -598,10 +598,10 @@ def computeOffset(src1, src2, threshold=0.5):
     dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)**2.
     dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)**2.
     rms = dx + dy
-    rms2, low, upp = scipy.stats.sigmaclip(rms, low=2.5, high=2.5)
-    dx = dx[(rms >= low) & (rms <= upp)].mean()
+    rms2, low, upp = scipy.stats.sigmaclip(rms, low=5, high=5)
+    dx = dx[(rms >= low) & (rms <= upp)].mean()  # Note this returns the variance (astrometric noise squared)
     dy = dy[(rms >= low) & (rms <= upp)].mean()
-    rms = rms2.mean()
+    rms = np.sqrt(rms2.mean())
     return dx, dy, rms
 
 
