@@ -24,7 +24,7 @@ try:
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
     #import lsst.log.utils as logUtils
     #logUtils.traceSetAt('afw', 0)
-    log_level = lsst.log.ERROR  # INFO
+    log_level = lsst.log.INFO # ERROR  # INFO
 except Exception as e:
     print e
     print "LSSTSW has not been set up."
@@ -1232,6 +1232,8 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
                       "ip_diffim_ClassificationDipole",
                       ]
     config.slots.centroid = "base_GaussianCentroid" #"ip_diffim_NaiveDipoleCentroid"
+    #config.plugins["base_CircularApertureFlux"].radii = [3.0, 7.0, 15.0, 25.0]
+    #config.slots.psfFlux = "base_CircularApertureFlux_7_0" # Use of the PSF flux is hardcoded in secondMomentStarSelector
     config.slots.calibFlux = None
     config.slots.modelFlux = None
     config.slots.instFlux = None
@@ -1271,7 +1273,7 @@ def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
     if measurePsfAlg is 'psfex':
         try:
             import lsst.meas.extensions.psfex.psfexPsfDeterminer
-            config.psfDeterminer['psfex'].spatialOrder = 2  # 2 is default, 0 seems to kill it
+            config.psfDeterminer['psfex'].spatialOrder = 1  # 2 is default, 0 seems to kill it
             config.psfDeterminer['psfex'].recentroid = True
             config.psfDeterminer['psfex'].sizeCellX = 256  # default is 256
             config.psfDeterminer['psfex'].sizeCellY = 256
@@ -1286,6 +1288,8 @@ def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
         config.psfDeterminer['pca'].sizeCellY = 128
         config.psfDeterminer['pca'].spatialOrder = 1
         config.psfDeterminer['pca'].nEigenComponents = 3
+        #config.psfDeterminer['pca'].tolerance = 1e-1
+        #config.starSelector['objectSize'].fluxMin = 500.
         #config.psfDeterminer['pca'].constantWeight = False
         #config.psfDeterminer['pca'].doMaskBlends = False
         config.psfDeterminer.name = "pca"
