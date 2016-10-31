@@ -10,6 +10,10 @@ log_level = None
 try:
     import lsst.afw.image as afwImage
     import lsst.afw.math as afwMath
+    import lsst.afw.geom as afwGeom
+    import lsst.meas.algorithms as measAlg
+    import lsst.afw.table as afwTable
+    import lsst.ip.diffim as ipDiffim  # for detection - needs NaiveDipoleCentroid (registered by my routine)
     import lsst.log
     lsst.log.Log.getLogger('afw').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('afw.math').setLevel(lsst.log.ERROR)
@@ -18,8 +22,8 @@ try:
     lsst.log.Log.getLogger('TRACE5.afw.math.convolve.convolveWithInterpolation').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE2.afw.math.convolve.basicConvolve').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
-    import lsst.log.utils as logUtils
-    logUtils.traceSetAt('afw', 0)
+    #import lsst.log.utils as logUtils
+    #logUtils.traceSetAt('afw', 0)
     log_level = lsst.log.ERROR  # INFO
 except Exception as e:
     print e
@@ -824,8 +828,6 @@ def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure):
 # Compute ALZC correction kernel from matching kernel
 # Here we use a constant kernel, just compute it for the center of the image.
 def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure, psfMatchingKernel, log):
-    import lsst.meas.algorithms as measAlg
-
     kimg = alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure)
     # Compute the images' sigmas (sqrt of variance)
     sig1 = templateExposure.getMaskedImage().getVariance().getArray()
@@ -896,17 +898,26 @@ def doConvolve(exposure, kernel, use_scipy=False):
         kern = fkernel
 
     else:
-        kernelImg = afwImage.ImageD(fkernel.shape[0], fkernel.shape[1])
-        kernelImg.getArray()[:, :] = fkernel
-        kern = afwMath.FixedKernel(kernelImg)
-        maxloc = np.unravel_index(np.argmax(fkernel), fkernel.shape)
-        kern.setCtrX(maxloc[0])
-        kern.setCtrY(maxloc[1])
+        kern = arrayToAfwKernel(fkernel)
         outExp = exposure.clone()  # Do this to keep WCS, PSF, masks, etc.
         convCntrl = afwMath.ConvolutionControl(False, True, 0)
         afwMath.convolve(outExp.getMaskedImage(), exposure.getMaskedImage(), kern, convCntrl)
 
     return outExp, kern
+
+def arrayToAfwKernel(array):
+    kernelImg = afwImage.ImageD(array.shape[0], array.shape[1])
+    kernelImg.getArray()[:, :] = array
+    kern = afwMath.FixedKernel(kernelImg)
+    maxloc = np.unravel_index(np.argmax(array), array.shape)
+    kern.setCtrX(maxloc[0])
+    kern.setCtrY(maxloc[1])
+    return kern
+
+def arrayToAfwPsf(array):
+    psfcK = arrayToAfwKernel(array)
+    psfNew = measAlg.KernelPsf(psfcK)
+    return psfNew
 
 # Code taken from https://github.com/lsst-dm/dmtn-006/blob/master/python/diasource_mosaic.py
 def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
@@ -1137,14 +1148,6 @@ class Exposure(object):
         self.metaData[key] = value
 
     def asAfwExposure(self):
-        try:
-            import lsst.afw.image as afwImage
-            import lsst.afw.geom as afwGeom
-            import lsst.meas.algorithms as measAlg
-        except Exception as e:
-            print e
-            return None
-
         bbox = afwGeom.Box2I(afwGeom.Point2I(0, 0), afwGeom.Point2I(self.im.shape[0]-1, self.im.shape[1]-1))
         im1ex = afwImage.ExposureF(bbox)
         im1ex.getMaskedImage().getImage().getArray()[:, :] = self.im
@@ -1250,9 +1253,6 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
 
 def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
     import lsst.pipe.tasks.measurePsf as measurePsf
-    import lsst.afw.table as afwTable
-    import lsst.ip.diffim as ipDiffim  # for detection - needs NaiveDipoleCentroid (registered by my routine)
-    import lsst.meas.algorithms        as measAlg
     import lsst.log
 
     # The old (meas_algorithms) SdssCentroid assumed this by default if it
@@ -1273,6 +1273,9 @@ def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
             import lsst.meas.extensions.psfex.psfexPsfDeterminer
             config.psfDeterminer['psfex'].spatialOrder = 2  # 2 is default, 0 seems to kill it
             config.psfDeterminer['psfex'].recentroid = True
+            config.psfDeterminer['psfex'].sizeCellX = 256  # default is 256
+            config.psfDeterminer['psfex'].sizeCellY = 256
+            config.psfDeterminer['psfex'].samplingSize = 1  # default is 1
             config.psfDeterminer.name = 'psfex'
         except ImportError as e:
             print "WARNING: Unable to use psfex: %s" % e
