@@ -925,6 +925,18 @@ def arrayToAfwPsf(array):
     psfNew = measAlg.KernelPsf(psfcK)
     return psfNew
 
+def afwPsfToArray(psf, img):
+    bbox = img.getBBox()
+    xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+    ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+    return psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
+
+def afwPsfToShape(psf, img):
+    bbox = img.getBBox()
+    xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+    ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+    return psf.computeShape(afwGeom.Point2D(xcen, ycen))
+
 # Code taken from https://github.com/lsst-dm/dmtn-006/blob/master/python/diasource_mosaic.py
 def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
                      template_catalog=None, xnear=None, ynear=None, sourceIds=None, gridSpec=[7, 4],
