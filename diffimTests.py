@@ -291,6 +291,12 @@ def makePsf(psfSize, sigma, theta=0., offset=[0, 0]):
     psf = singleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
     return psf
 
+def computeMoments(psf):
+    xgrid, ygrid = np.meshgrid(np.arange(0, psf.shape[0]), np.arange(0, psf.shape[1]))
+    xmoment = np.average(xgrid, weights=psf)
+    ymoment = np.average(ygrid, weights=psf)
+    return xmoment, ymoment
+
 # Okay, here we start the A&L basis functions...
 # Update: it looks like the actual code in the stack uses chebyshev1 polynomials!
 # Note these are essentially the same but with different scale factors.
@@ -1461,6 +1467,7 @@ class DiffimTest(object):
 
         config = ipDiffim.ImagePsfMatchTask.ConfigClass()
         config.kernel.name = "AL"
+        config.selectDetection.thresholdValue = 5.0  # default is 10.0 but this is necessary for very dense fields
         subconfig = config.kernel.active
         config.kernel.active.spatialKernelOrder = 1
         config.kernel.active.spatialBgOrder = 0
@@ -1516,6 +1523,9 @@ class DiffimTest(object):
             result.kappaImg = kimg
 
         return result
+
+    def reset(self):
+        self.res = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
 
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_noDecorr'],
                 returnSources=False):
