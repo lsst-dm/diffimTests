@@ -849,7 +849,7 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     log.info("ALZC: Finished with convolution.")
 
     # Compute the subtracted exposure's updated psf
-    psf = subtractedExposure.getPsf().computeImage().getArray()
+    psf = afwPsfToArray(subtractedExposure.getPsf(), subtractedExposure)  # .computeImage().getArray()
     psfc = computeCorrectedDiffimPsf(corrKernel, psf, svar=sig1squared, tvar=sig2squared)
     psfcI = afwImage.ImageD(subtractedExposure.getPsf().computeImage().getBBox())
     psfcI.getArray()[:, :] = psfc
@@ -1186,7 +1186,8 @@ class Exposure(object):
 
     def doMeasurePsf(self):
         res = measurePsf(self.asAfwExposure())
-        self.psf = res.psf.computeImage()
+        self.psf = afwPsfToArray(res.psf, self.asAfwExposure())  # .computeImage()
+        return res
 
 
 def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
@@ -1520,7 +1521,7 @@ class DiffimTest(object):
             #diffim.getMaskedImage().getVariance().getArray()[:, ] \
             #    /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
 
-            psf = result.subtractedExposure.getPsf().computeImage().getArray()
+            psf = afwPsfToArray(result.subtractedExposure.getPsf(), result.subtractedExposure)  # .computeImage().getArray()
             # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
             psfc = computeCorrectedDiffimPsf(kimg, psf, svar=sig1squared, tvar=sig2squared)
             psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
