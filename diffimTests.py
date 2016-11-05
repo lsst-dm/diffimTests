@@ -714,17 +714,35 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
     return D
 
 
+global_dict = {}
+
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
-def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.,
+                          padSize=60):
+    padSize0 = padSize #im1.shape[0]//2 - im1_psf.shape[0]//2 # Need to pad the PSF to remove windowing artifacts
+    padSize1 = padSize #im1.shape[1]//2 - im1_psf.shape[1]//2 # The bigger the padSize the better, but slower.
+    psf1 = np.pad(im1_psf, ((padSize0-2, padSize0), (padSize1-2, padSize1)), mode='constant',
+                  constant_values=0)
+    psf2 = np.pad(im2_psf, ((padSize0-2, padSize0), (padSize1-2, padSize1)), mode='constant',
+                  constant_values=0)
+
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, psf1, psf2, sig1, sig2, F_r, F_n)
     K_r_hat = P_r_hat / denom
     K_n_hat = P_n_hat / denom
+    global_dict['K_r_hat'] = K_r_hat
+    global_dict['K_n_hat'] = K_n_hat
     K_r = np.fft.ifft2(K_r_hat).real
     K_n = np.fft.ifft2(K_n_hat).real
+    global_dict['K_r'] = K_r
+    global_dict['K_n'] = K_n
+    global_dict['psf1'] = psf1
+    global_dict['psf2'] = psf2
+    global_dict['P_r_hat'] = P_r_hat
+    global_dict['P_n_hat'] = P_n_hat
 
     # Note these are reverse-labelled, this is CORRECT!
-    im1c = scipy.signal.convolve2d(im1, K_n.real, mode='same', boundary='fill', fillvalue=0.)
-    im2c = scipy.signal.convolve2d(im2, K_r.real, mode='same', boundary='fill', fillvalue=0.)
+    im1c = scipy.signal.convolve2d(im1, K_n, mode='same', boundary='fill', fillvalue=0.)
+    im2c = scipy.signal.convolve2d(im2, K_r, mode='same', boundary='fill', fillvalue=0.)
     D = im2c - im1c
 
     return D
