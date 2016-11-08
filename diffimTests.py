@@ -682,14 +682,26 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
 # variance, and $\widehat{D}$ denotes the FT of $D$.
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
-def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
+def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., padSize=0):
     if sig1 is None and im1 is not None:
         _, sig1, _, _ = computeClippedImageStats(im1)
     if sig2 is None and im2 is not None:
         _, sig2, _, _ = computeClippedImageStats(im2)
 
-    P_r = im1_psf
-    P_n = im2_psf
+    psf1 = im1_psf
+    psf2 = im2_psf
+    if padSize > 0:
+        padSize0 = padSize #im1.shape[0]//2 - im1_psf.shape[0]//2 # Need to pad the PSF to remove windowing artifacts
+        padSize1 = padSize #im1.shape[1]//2 - im1_psf.shape[1]//2 # The bigger the padSize the better, but slower.
+        psf1 = np.pad(im1_psf, ((padSize0-2, padSize0), (padSize1-2, padSize1)), mode='constant',
+                      constant_values=0)
+        psf1 *= im1_psf.mean() / psf1.mean()
+        psf2 = np.pad(im2_psf, ((padSize0-2, padSize0), (padSize1-2, padSize1)), mode='constant',
+                      constant_values=0)
+        psf2 *= im2_psf.mean() / psf2.mean()
+
+    P_r = psf1 #im1_psf
+    P_n = psf2 #im2_psf
     sigR = sig1
     sigN = sig2
     P_r_hat = fft2(P_r)
@@ -701,7 +713,7 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n, padSize=0)
 
     R_hat = fft2(im1)
     N_hat = fft2(im2)
@@ -717,16 +729,9 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
 global_dict = {}
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
-def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.,
-                          padSize=60):
-    padSize0 = padSize #im1.shape[0]//2 - im1_psf.shape[0]//2 # Need to pad the PSF to remove windowing artifacts
-    padSize1 = padSize #im1.shape[1]//2 - im1_psf.shape[1]//2 # The bigger the padSize the better, but slower.
-    psf1 = np.pad(im1_psf, ((padSize0-2, padSize0), (padSize1-2, padSize1)), mode='constant',
-                  constant_values=0)
-    psf2 = np.pad(im2_psf, ((padSize0-2, padSize0), (padSize1-2, padSize1)), mode='constant',
-                  constant_values=0)
-
-    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, psf1, psf2, sig1, sig2, F_r, F_n)
+def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., padSize=0):
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n,
+                                                    padSize=padSize)
     K_r_hat = P_r_hat / denom
     K_n_hat = P_n_hat / denom
     global_dict['K_r_hat'] = K_r_hat
@@ -735,8 +740,8 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     K_n = np.fft.ifft2(K_n_hat).real
     global_dict['K_r'] = K_r
     global_dict['K_n'] = K_n
-    global_dict['psf1'] = psf1
-    global_dict['psf2'] = psf2
+    global_dict['psf1'] = im1_psf
+    global_dict['psf2'] = im2_psf
     global_dict['P_r_hat'] = P_r_hat
     global_dict['P_n_hat'] = P_n_hat
 
@@ -750,7 +755,8 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
 
 ## Also compute the diffim's PSF (eq. 14)
 def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n,
+                                                    padSize=0)
 
     F_D_numerator = F_r * F_n
     F_D_denom = np.sqrt(sigN**2 * F_r**2 + sigR**2 * F_n**2)
@@ -769,13 +775,14 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 # Currently only implemented is V(S_N) and V(S_R)
 # Want to implement astrometric variance Vast(S_N) and Vast(S_R)
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
-                      sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None):
-    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
+                      sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None, padSize=0):
     if D is None:
-        D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sigR, sigN, F_r, F_n)
-    P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sigR, sigN, F_r, F_n)
+        D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n, padSize=padSize)
+    P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     # P_r_hat = np.fft.fftshift(P_r_hat)  # Not sure why I need to do this but it seems that I do.
     # P_n_hat = np.fft.fftshift(P_n_hat)
+
+    sigR, sigN, P_r_hat, P_n_hat, denom = ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n, padSize=padSize)
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
@@ -1447,11 +1454,11 @@ class DiffimTest(object):
         dx, dy, _ = computeOffset(src1, src2, threshold=threshold)
         return dx, dy
 
-    def doZOGY(self, computeScorr=True, inImageSpace=True):
+    def doZOGY(self, computeScorr=True, inImageSpace=True, padSize=0):
         D_ZOGY = None
         if inImageSpace:
             D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
-                                           sig1=self.im1.sig, sig2=self.im2.sig)
+                                           sig1=self.im1.sig, sig2=self.im2.sig, padSize=padSize)
         else:  # Do all in fourier space (needs image-sized PSFs)
             padSize0 = self.im1.im.shape[0]//2 - self.im1.psf.shape[0]//2
             padSize1 = self.im1.im.shape[1]//2 - self.im1.psf.shape[1]//2
