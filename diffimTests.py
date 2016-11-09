@@ -707,6 +707,7 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., 
     P_r_hat = fft2(P_r)
     P_n_hat = fft2(P_n)
     denom = np.sqrt((sigN**2 * F_r**2 * np.abs(P_r_hat)**2) + (sigR**2 * F_n**2 * np.abs(P_n_hat)**2))
+    #denom = np.sqrt((sigN**2 * F_r**2 * P_r_hat**2) + (sigR**2 * F_n**2 * P_n_hat**2))
 
     return sigR, sigN, P_r_hat, P_n_hat, denom, P_r, P_n
 
@@ -730,7 +731,7 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
 global_dict = {}
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
-def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., padSize=20):
+def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., padSize=15):
     sigR, sigN, P_r_hat, P_n_hat, denom, padded_psf1, padded_psf2 = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                                               sig1, sig2, F_r, F_n,
                                                                               padSize=padSize)
