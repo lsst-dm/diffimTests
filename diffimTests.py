@@ -22,12 +22,12 @@ try:
     lsst.log.Log.getLogger('TRACE5.afw.math.convolve.convolveWithInterpolation').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE2.afw.math.convolve.basicConvolve').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('TRACE4.afw.math.convolve.convolveWithBruteForce').setLevel(lsst.log.ERROR)
-    #import lsst.log.utils as logUtils
-    #logUtils.traceSetAt('afw', 0)
-    log_level = lsst.log.INFO # ERROR  # INFO
+    log_level = lsst.log.ERROR  # INFO
+    import lsst.log.utils as logUtils
+    logUtils.traceSetAt('afw', 0)
 except Exception as e:
     print e
-    print "LSSTSW has not been set up."
+    #print "LSSTSW has not been set up."
 
 def zscale_image(input_img, contrast=0.25):
     """This emulates ds9's zscale feature. Returns the suggested minimum and
@@ -595,7 +595,7 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
 # compute rms x- and y- pixel offset between two catalogs. Assume input is 2- or 3-column dataframe.
 # Assume 1st column is x-coord and 2nd is y-coord. 
 # If 3-column then 3rd column is flux and use flux as weighting on shift calculation (not implemented yet)
-def computeOffset(src1, src2, threshold=0.5):
+def computeOffsets(src1, src2, threshold=2.5):
     dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
                    np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
     matches = np.where(dist <= threshold)
@@ -785,7 +785,7 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 # Currently only implemented is V(S_N) and V(S_R)
 # Want to implement astrometric variance Vast(S_N) and Vast(S_R)
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
-                      sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None, padSize=20):
+                      sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None, padSize=15):
     if D is None:
         D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n, padSize=padSize)
     P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
@@ -1400,7 +1400,7 @@ class DiffimTest(object):
 
             self.astrometricOffsets = kwargs.get('offset', [0, 0])
             try:
-                dx, dy = self.computeAstrometricOffsets(threshold=0.25)
+                dx, dy = self.computeAstrometricOffsets(threshold=2.5)  # dont make this threshold smaller!
                 self.astrometricOffsets = [dx, dy]
             except Exception as e:
                 pass
@@ -1456,7 +1456,7 @@ class DiffimTest(object):
         # TBD: make the returned D an Exposure.
         return self.D_AL, self.kappa_AL
 
-    def computeAstrometricOffsets(self, threshold=0.5):
+    def computeAstrometricOffsets(self, threshold=2.5):
         src1 = self.im1.doDetection()
         src1 = src1[~src1['base_PsfFlux_flag']]
         src1 = src1[['base_NaiveCentroid_x', 'base_NaiveCentroid_y']]
@@ -1465,7 +1465,7 @@ class DiffimTest(object):
         src2 = src2[~src2['base_PsfFlux_flag']]
         src2 = src2[['base_NaiveCentroid_x', 'base_NaiveCentroid_y']]
         src2.reindex()
-        dx, dy, _ = computeOffset(src1, src2, threshold=threshold)
+        dx, dy, _ = computeOffsets(src1, src2, threshold=threshold)
         return dx, dy
 
     def doZOGY(self, computeScorr=True, inImageSpace=True, padSize=0):
@@ -1474,12 +1474,13 @@ class DiffimTest(object):
             D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
                                            sig1=self.im1.sig, sig2=self.im2.sig, padSize=padSize)
         else:  # Do all in fourier space (needs image-sized PSFs)
+            padSize = 0
             padSize0 = self.im1.im.shape[0]//2 - self.im1.psf.shape[0]//2
             padSize1 = self.im1.im.shape[1]//2 - self.im1.psf.shape[1]//2
             # Hastily assume the image is even-sized and the psf is odd...
-            psf1 = np.pad(self.im1.psf, ((padSize0-1, padSize0), (padSize1-1, padSize1)), mode='constant',
+            psf1 = np.pad(self.im1.psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
                           constant_values=0)
-            psf2 = np.pad(self.im2.psf, ((padSize0-1, padSize0), (padSize1-1, padSize1)), mode='constant',
+            psf2 = np.pad(self.im2.psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
                           constant_values=0)
             D_ZOGY = performZOGY(self.im1.im, self.im2.im, psf1, psf2,
                                  sig1=self.im1.sig, sig2=self.im2.sig)
@@ -1495,8 +1496,9 @@ class DiffimTest(object):
                                           sig1=self.im1.sig, sig2=self.im2.sig,
                                           im1_psf=self.im1.psf, im2_psf=self.im2.psf,
                                           D=D_ZOGY, #xVarAst=dx, yVarAst=dy)
-                                          xVarAst=self.astrometricOffsets[0], #**2.,
-                                          yVarAst=self.astrometricOffsets[1]) #**2.)
+                                          xVarAst=self.astrometricOffsets[0], # these are already variances.
+                                          yVarAst=self.astrometricOffsets[1],
+                                          padSize=padSize)
             self.S_ZOGY = Exposure(S_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c))
             self.S_corr_ZOGY = Exposure(S_corr_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c)/np.sqrt(var1c + var2c))
 
