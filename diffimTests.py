@@ -1580,7 +1580,7 @@ class DiffimTest(object):
         self.res = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
 
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_noDecorr'],
-                returnSources=False):
+                zogyImageSpace=True, returnSources=False):
         import pandas as pd  # We're going to store the results as pandas dataframes.
 
         D_ZOGY = S_ZOGY = res = D_AL = None
@@ -1591,11 +1591,11 @@ class DiffimTest(object):
                 res = self.res = self.doALInStack(doPreConv=False, doDecorr=True)
             if subMethod is 'ZOGY_S':
                 if self.S_corr_ZOGY is None:
-                    self.doZOGY(computeScorr=True)
+                    self.doZOGY(computeScorr=True, inImageSpace=zogyImageSpace)
                 S_ZOGY = self.S_corr_ZOGY
             if subMethod is 'ZOGY':
                 if self.D_ZOGY is None:
-                    self.doZOGY(computeScorr=True)
+                    self.doZOGY(computeScorr=True, inImageSpace=zogyImageSpace)
                 D_ZOGY = self.D_ZOGY
             if subMethod is 'AL':  # my clean-room (pure python) version of A&L
                 try:
