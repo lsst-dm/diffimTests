@@ -160,7 +160,7 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
                    scintillation=0., psf_yvary_factor=0.2,
                    theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
-                   variablesNearCenter=True,
+                   variablesNearCenter=True, avoidBorder=True,
                    im2background=10., n_sources=500, sourceFluxRange=None, psfSize=None,
                    seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
@@ -184,8 +184,13 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     yim = np.arange(-imSize[1]//2, imSize[1]//2, 1)
     x0im, y0im = np.meshgrid(xim, yim)
     fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
-    xposns = np.random.uniform(xim.min()+40, xim.max()-40, n_sources)
-    yposns = np.random.uniform(yim.min()+40, yim.max()-40, n_sources)
+    border = 5
+    if avoidBorder:
+        border = 40   # number of pixels to avoid putting sources near image boundary
+    else:
+        fast = False  # avoid edge of pixel errors
+    xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
+    yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
     fluxSortedInds = np.argsort(xposns**2. + yposns**2.)
 
     if not hasattr(varFlux1, "__len__"):
