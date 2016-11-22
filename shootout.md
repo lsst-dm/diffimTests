@@ -102,7 +102,7 @@ The question raised in the previous section is, "what is the actual error in PSF
 
 ![](shootout/fig4.png)
 
-Precision of PSF determination decreases at low source densities (too few "examples" to construct a PSF) and then again at stellar densities close to what is observed in the plane of the MW.
+Precision of PSF determination decreases at low source densities (too few "examples" to construct a PSF) and then again at stellar densities close to what is observed in the plane of the MW. (Complete notebook is [here](https://github.com/lsst-dm/diffimTests/blob/master/27.%20psf%20measurement%20evaluation%20-%20part%202.ipynb), including an example of a dense field simulation which leads to ZOGY failing.)
 
 We then evaluated both A&L and ZOGY on these simulated images. The results are shown below:
 
