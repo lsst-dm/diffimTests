@@ -157,6 +157,9 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 #  "new" sources in im2.
 # varFlux2 is the flux of variable sources in im2 (science img)
 
+# Note that n_sources has to be >= len(varFlux2). In fact, to get a desired number of static
+# sources, you want to have n_sources = (# desired static sources) + len(varFlux2)
+
 def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
                    scintillation=0., psf_yvary_factor=0.2,
                    theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
@@ -600,6 +603,7 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
 # compute rms x- and y- pixel offset between two catalogs. Assume input is 2- or 3-column dataframe.
 # Assume 1st column is x-coord and 2nd is y-coord. 
 # If 3-column then 3rd column is flux and use flux as weighting on shift calculation (not implemented yet)
+# We need some severe filtering if we have lots of sources
 def computeOffsets(src1, src2, threshold=2.5):
     dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
                    np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
@@ -610,13 +614,17 @@ def computeOffsets(src1, src2, threshold=2.5):
         print 'WARNING: Threshold for ast. matching is probably too small:', match1.shape[0], src1.shape[0]
     if len(matches[1]) > src2.shape[0]:
         print 'WARNING: Threshold for ast. matching is probably too small:', match2.shape[0], src2.shape[0]
-    dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)**2.
-    dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)**2.
-    rms = dx + dy
-    rms2, low, upp = scipy.stats.sigmaclip(rms, low=5, high=5)
-    dx = dx[(rms >= low) & (rms <= upp)].mean()  # Note this returns the variance (astrometric noise squared)
-    dy = dy[(rms >= low) & (rms <= upp)].mean()
-    rms = np.sqrt(rms2.mean())
+    dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)
+    dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)
+    dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)
+    dx2, dxlow, dxupp = scipy.stats.sigmaclip(dx, low=2, high=2)
+    dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)
+    dy2, dylow, dyupp = scipy.stats.sigmaclip(dy, low=2, high=2)
+    inds = (dx >= dxlow) & (dx <= dxupp) & (dy >= dylow) & (dy <= dyupp)
+    rms = dx[inds]**2. + dy[inds]**2.
+    dx = np.abs(dx2**2.).mean()
+    dy = np.abs(dy2**2.).mean()
+    rms = rms.mean()
     return dx, dy, rms
 
 
@@ -769,9 +777,9 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
 
 
 ## Also compute the diffim's PSF (eq. 14)
-def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
+def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., padSize=0):
     sigR, sigN, P_r_hat, P_n_hat, denom, _, _ = ZOGYUtils(im1, im2, im1_psf, im2_psf,
-                                                          sig1, sig2, F_r, F_n, padSize=0)
+                                                          sig1, sig2, F_r, F_n, padSize=padSize)
 
     F_D_numerator = F_r * F_n
     F_D_denom = np.sqrt(sigN**2 * F_r**2 + sigR**2 * F_n**2)
