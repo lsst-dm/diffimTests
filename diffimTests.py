@@ -164,8 +164,8 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
                    scintillation=0., psf_yvary_factor=0.2,
                    theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
                    variablesNearCenter=True, avoidBorder=True,
-                   im2background=10., n_sources=500, sourceFluxRange=None, psfSize=None,
-                   seed=66, fast=True, verbose=False):
+                   im2background=10., n_sources=500, sourceFluxRange=None, sourceFluxDistrib='exponential',
+                   psfSize=None, seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -186,7 +186,29 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     xim = np.arange(-imSize[0]//2, imSize[0]//2, 1)
     yim = np.arange(-imSize[1]//2, imSize[1]//2, 1)
     x0im, y0im = np.meshgrid(xim, yim)
-    fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
+
+    if sourceFluxDistrib == 'uniform':
+        fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
+    elif sourceFluxDistrib == 'exponential':
+        # More realistic, # of stars decreases by about 3x per increasing 1 magnitude
+        # This means # of stars increases about 3x per decreasing ~2.512x in flux.
+        # So it follows a power law: n = flux**(-3/2.512)
+        fluxes = np.exp(np.linspace(np.log(sourceFluxRange[0]), np.log(sourceFluxRange[1])))
+        n_flux = (np.array(fluxes)/sourceFluxRange[1])**(-3./2.512)
+        samples = np.array([])
+        tries = 0
+        while len(samples) < n_sources and tries < 100:
+            i_choice = np.random.randint(0, len(fluxes), 1000)
+            f_choice = fluxes[i_choice]
+            n_choice = n_flux[i_choice]
+            rand = np.random.rand(len(i_choice)) * np.max(n_choice)
+            chosen = rand <= n_choice
+            f_chosen = f_choice[chosen]
+            samples = np.append(samples, f_chosen)
+            tries += 1
+
+        fluxes = samples[0:n_sources]
+
     border = 5
     if avoidBorder:
         border = 40   # number of pixels to avoid putting sources near image boundary
@@ -1419,6 +1441,23 @@ class DiffimTest(object):
                 pass
 
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
+
+    # Ideally call runTest() first so the images are filled in.
+    def doPlot(self, **kwargs):
+        #fig = plt.figure(1, (12, 12))
+        imagesToPlot = [self.im1.im, self.im2.im]
+        titles = ['Template', 'Science img']
+        if self.D_AL is not None:
+            imagesToPlot.append(self.D_AL.im)
+            titles.append('A&L')
+        if self.D_ZOGY is not None:
+            titles.append('ZOGY')
+            imagesToPlot.append(self.D_ZOGY.im)
+        if self.res is not None:
+            titles.append('A&L')
+            imagesToPlot.append(self.res.decorrelatedDiffim)
+        plotImageGrid(imagesToPlot, titles=titles, **kwargs)
+
 
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
     # on im2-im1.
