@@ -626,6 +626,7 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
 # Assume 1st column is x-coord and 2nd is y-coord. 
 # If 3-column then 3rd column is flux and use flux as weighting on shift calculation (not implemented yet)
 # We need some severe filtering if we have lots of sources
+# TBD: Weight the mean values by the fluxes of the sources!!
 def computeOffsets(src1, src2, threshold=2.5):
     dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
                    np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
