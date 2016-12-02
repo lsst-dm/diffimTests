@@ -624,10 +624,9 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
 
 # compute rms x- and y- pixel offset between two catalogs. Assume input is 2- or 3-column dataframe.
 # Assume 1st column is x-coord and 2nd is y-coord. 
-# If 3-column then 3rd column is flux and use flux as weighting on shift calculation (not implemented yet)
+# If 3-column then 3rd column is flux and use flux**2 as weighting on shift calculation
 # We need some severe filtering if we have lots of sources
-# TBD: Weight the mean values by the fluxes of the sources!!
-def computeOffsets(src1, src2, threshold=2.5):
+def computeOffsets(src1, src2, threshold=2.5, fluxWeighted=True):
     dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
                    np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
     matches = np.where(dist <= threshold)
@@ -638,16 +637,18 @@ def computeOffsets(src1, src2, threshold=2.5):
     if len(matches[1]) > src2.shape[0]:
         print 'WARNING: Threshold for ast. matching is probably too small:', match2.shape[0], src2.shape[0]
     dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)
+    _, dxlow, dxupp = scipy.stats.sigmaclip(dx, low=2, high=2)
     dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)
-    dx = (match1.iloc[:, 0].values - match2.iloc[:, 0].values)
-    dx2, dxlow, dxupp = scipy.stats.sigmaclip(dx, low=2, high=2)
-    dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)
-    dy2, dylow, dyupp = scipy.stats.sigmaclip(dy, low=2, high=2)
+    _, dylow, dyupp = scipy.stats.sigmaclip(dy, low=2, high=2)
     inds = (dx >= dxlow) & (dx <= dxupp) & (dy >= dylow) & (dy <= dyupp)
+    weights = np.ones(inds.sum())
+    if fluxWeighted and match1.shape[1] >= 3:
+        fluxes = (match1.iloc[:, 2].values + match2.iloc[:, 2].values) / 2.
+        weights = fluxes[inds]**2.
     rms = dx[inds]**2. + dy[inds]**2.
-    dx = np.abs(dx2**2.).mean()
-    dy = np.abs(dy2**2.).mean()
-    rms = rms.mean()
+    dx = np.average(np.abs(dx[inds]**2.), weights=weights)
+    dy = np.average(np.abs(dy[inds]**2.), weights=weights)
+    rms = np.average(rms, weights=weights)
     return dx, dy, rms
 
 
@@ -1509,14 +1510,15 @@ class DiffimTest(object):
         # TBD: make the returned D an Exposure.
         return self.D_AL, self.kappa_AL
 
-    def computeAstrometricOffsets(self, threshold=2.5):
+    def computeAstrometricOffsets(self, column='base_GaussianCentroid', fluxCol='base_PsfFlux',
+                                  threshold=2.5):
         src1 = self.im1.doDetection()
-        src1 = src1[~src1['base_PsfFlux_flag']]
-        src1 = src1[['base_NaiveCentroid_x', 'base_NaiveCentroid_y']]
+        src1 = src1[~src1[column + '_flag'] & ~src1[fluxCol + '_flag']]
+        src1 = src1[[column + '_x', column + '_y', fluxCol + '_flux']]
         src1.reindex()
         src2 = self.im2.doDetection()
-        src2 = src2[~src2['base_PsfFlux_flag']]
-        src2 = src2[['base_NaiveCentroid_x', 'base_NaiveCentroid_y']]
+        src2 = src2[~src2[column + '_flag'] & ~src2[fluxCol + '_flag']]
+        src2 = src2[[column + '_x', column + '_y', fluxCol + '_flux']]
         src2.reindex()
         dx, dy, _ = computeOffsets(src1, src2, threshold=threshold)
         return dx, dy
