@@ -81,7 +81,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
                       nrows_ncols=nrows_ncols, direction='row',  # creates 2x2 grid of axes
                       axes_pad=0.1,  # pad between axes in inch.
                       label_mode="L",  # share_all=True,
-                      cbar_location="right", cbar_mode="single", cbar_size='7%')
+                      cbar_location="right", cbar_mode="single", cbar_size='3%')
     extentWasNone = False
     clim_orig = clim
     for i in range(len(images)):
@@ -167,8 +167,8 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 #      (3) add variable relative background by polynomial;
 #      (4) add randomness to PSF shapes of stars
 
-def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1.8, 2.2], 
-                   theta1=0., theta2=-45., offset=[0., 0.], randAstromVariance=0., psf_yvary_factor=0.2,
+def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1.8, 2.2],
+                   theta1=0., theta2=-45., offset=[0., 0.], randAstromVariance=0., psf_yvary_factor=0.,
                    varFlux1=0, varFlux2=np.repeat(750, 50), im2background=0., n_sources=1500,
                    templateNoNoise=False, skyLimited=False, sourceFluxRange=(250, 60000),
                    variablesNearCenter=False, avoidBorder=False, sourceFluxDistrib='exponential',
@@ -208,11 +208,9 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
         fluxes = samples[0:n_sources]
 
-    border = 5
+    border = 2  #5
     if avoidBorder:
-        border = 40   # number of pixels to avoid putting sources near image boundary
-    else:
-        fast = False  # avoid edge of pixel errors
+        border = 22   # number of pixels to avoid putting sources near image boundary
     xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
     yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
     fluxSortedInds = np.argsort(xposns**2. + yposns**2.)
@@ -240,6 +238,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     var_im2 = im2.copy()
 
     # variation in y-width of psf in science image across (x-dim of) image
+    # A good value if you turn it on is 0.2.
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()
     if verbose:
         print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
@@ -250,7 +249,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         astromNoiseX = np.random.normal(0., randAstromVariance, len(fluxes))
         astromNoiseY = np.random.normal(0., randAstromVariance, len(fluxes))
 
-    starSize = 32  # make stars using "psf's" of this size (instead of whole image)
+    starSize = 22  # make stars using "psf's" of this size (instead of whole image)
     varSourceInd = 0
     fluxes2 = fluxes.copy()
     for i in fluxSortedInds:
@@ -259,7 +258,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         else:
             flux = fluxes[i]
         fluxes[i] = flux
-        if fast:
+        if fast and xposns[i] > -imSize[0]//2+starSize and yposns[i] > -imSize[1]//2+starSize and \
+           xposns[i] < imSize[0]//2 - starSize and yposns[i] < imSize[1]//2 - starSize:
             offset1 = [yposns[i]-np.floor(yposns[i]),
                        xposns[i]-np.floor(xposns[i])]
             tmp = makePsf(starSize, psf1, theta1, offset=offset1)
@@ -297,7 +297,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         xposn = xposns[i] + offset[0] + astromNoiseX[i]
         yposn = yposns[i] + offset[0] + astromNoiseY[i]
 
-        if fast:
+        if fast and xposn > -imSize[0]//2+starSize and yposn > imSize[1]//2+starSize and \
+           xposn < imSize[0]//2 - starSize and yposn < imSize[1]//2 - starSize:
             offset1 = [yposn-np.floor(yposn), xposn-np.floor(xposn)]
             tmp = makePsf(starSize, [psf2[0], psf2[1] + psf2_yvary[i]], theta2, offset=offset1)
             tmp *= flux
@@ -1477,6 +1478,16 @@ class DiffimTest(object):
         if self.res is not None:
             titles.append('A&L')
             imagesToPlot.append(self.res.decorrelatedDiffim)
+        if self.D_ZOGY is not None and self.res is not None:
+            titles.append('A&L - ZOGY')  # Plot difference of diffims
+            alIm = self.res.decorrelatedDiffim.getMaskedImage().getImage().getArray()
+            stats = computeClippedImageStats(alIm)
+            alIm = alIm - stats[0]  # need to renormalize the AL image
+            alIm /= stats[1]
+            stats = computeClippedImageStats(self.D_ZOGY.im)
+            zIm = self.D_ZOGY.im - stats[0]
+            zIm /= stats[1]
+            imagesToPlot.append(alIm - self.D_ZOGY.im)
         plotImageGrid(imagesToPlot, titles=titles, **kwargs)
 
 
@@ -1578,7 +1589,8 @@ class DiffimTest(object):
 
         return self.D_ZOGY
 
-    def doALInStack(self, doWarping=False, doDecorr=True, doPreConv=False):
+    def doALInStack(self, doWarping=False, doDecorr=True, doPreConv=False,
+                    spatialBackgroundOrder=0, spatialKernelOrder=0):
         import lsst.ip.diffim as ipDiffim
         import lsst.meas.algorithms as measAlg
         import lsst.log
@@ -1597,8 +1609,8 @@ class DiffimTest(object):
         config.kernel.name = "AL"
         config.selectDetection.thresholdValue = 5.0  # default is 10.0 but this is necessary for very dense fields
         subconfig = config.kernel.active
-        config.kernel.active.spatialKernelOrder = 1
-        config.kernel.active.spatialBgOrder = 0
+        config.kernel.active.spatialKernelOrder = spatialBackgroundOrder  # 1  # make 0 since that is set in the default simulation setup.
+        config.kernel.active.spatialBgOrder = spatialKernelOrder
         subconfig.afwBackgroundConfig.useApprox = False
         subconfig.constantVarianceWeighting = False
         subconfig.singleKernelClipping = False
@@ -1655,7 +1667,7 @@ class DiffimTest(object):
     def reset(self):
         self.res = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
 
-    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_noDecorr'],
+    def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
                 zogyImageSpace=True, returnSources=False):
         import pandas as pd  # We're going to store the results as pandas dataframes.
 
@@ -1663,7 +1675,7 @@ class DiffimTest(object):
         src = {}
         # Run diffim first
         for subMethod in subtractMethods:
-            if subMethod is 'ALstack' or subMethod is 'ALstack_noDecorr':
+            if subMethod is 'ALstack' or subMethod is 'ALstack_decorr':
                 res = self.res = self.doALInStack(doPreConv=False, doDecorr=True)
             if subMethod is 'ZOGY_S':
                 if self.S_corr_ZOGY is None:
@@ -1683,13 +1695,13 @@ class DiffimTest(object):
             # Run detection next
             try:
                 if subMethod is 'ALstack':
-                    src_AL = doDetection(res.decorrelatedDiffim)
+                    src_AL = doDetection(res.subtractedExposure)
                     src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
                     src['ALstack'] = src_AL
-                elif subMethod is 'ALstack_noDecorr':
-                    src_AL2 = doDetection(res.subtractedExposure)
+                elif subMethod is 'ALstack_decorr':
+                    src_AL2 = doDetection(res.decorrelatedDiffim)
                     src_AL2 = src_AL2[~src_AL2['base_PsfFlux_flag']]
-                    src['ALstack_noDecorr'] = src_AL2
+                    src['ALstack_decorr'] = src_AL2
                 elif subMethod is 'ZOGY':
                     src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
                     src_ZOGY = src_ZOGY[~src_ZOGY['base_PsfFlux_flag']]
@@ -1706,9 +1718,6 @@ class DiffimTest(object):
                 print(e)
                 pass
 
-        if returnSources:
-            return src
-
         # Compare detections to input sources and get true positives and false negatives
         changedCentroid = np.array(self.centroids[self.changedCentroidInd, :])
 
@@ -1721,6 +1730,9 @@ class DiffimTest(object):
             false_neg = changedCentroid.shape[0] - len(np.unique(matches[1]))
             false_pos = src[key].shape[0] - len(np.unique(matches[0]))
             detections[key] = {'TP': true_pos, 'FN': false_neg, 'FP': false_pos}
+
+        if returnSources:
+            detections['sources'] = src
 
         return detections
 
