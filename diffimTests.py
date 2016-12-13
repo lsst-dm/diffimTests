@@ -106,6 +106,8 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
             clim = zscale_image(ii)
         if cbar and clim_orig is not None:
             ii = np.clip(ii, clim[0], clim[1])
+        if clim[0] == clim[1]:
+            clim[1] += clim[0] / 10.  # in case there's nothing in the image
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
                              extent=extent, clim=clim, **kwds)
         if cbar:
@@ -160,29 +162,26 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
 # Note that n_sources has to be >= len(varFlux2). In fact, to get a desired number of static
 # sources, you want to have n_sources = (# desired static sources) + len(varFlux2)
 
-def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
-                   scintillation=0., psf_yvary_factor=0.2,
-                   theta1=0., theta2=-45., varFlux1=0, varFlux2=1500,
-                   variablesNearCenter=True, avoidBorder=True,
-                   im2background=10., n_sources=500, sourceFluxRange=None, sourceFluxDistrib='exponential',
-                   psfSize=None, seed=66, fast=True, verbose=False):
+# TBD: (1) make no-noise template (DONE - templateNoNoise)
+#      (2) allow enforce sky-limited (i.e., no shot noise in variance from stars) (DONE - skyLimited)
+#      (3) add variable relative background by polynomial;
+#      (4) add randomness to PSF shapes of stars
+
+def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1.8, 2.2], 
+                   theta1=0., theta2=-45., offset=[0., 0.], randAstromVariance=0., psf_yvary_factor=0.2,
+                   varFlux1=0, varFlux2=np.repeat(750, 50), im2background=0., n_sources=1500,
+                   templateNoNoise=False, skyLimited=False, sourceFluxRange=(250, 60000),
+                   variablesNearCenter=False, avoidBorder=False, sourceFluxDistrib='exponential',
+                   psfSize=21, seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
-    # psf1 = 1.6 # sigma in pixels im1 will be template
-    # psf2 = 2.2 # sigma in pixels im2 will be science image. make the psf in this image slighly offset and elongated
-    psf1 = [1.6, 1.6] if psf1 is None else psf1
-    psf2 = [1.8, 2.2] if psf2 is None else psf2
-    # offset = 0.2  # astrometric offset (pixels) between the two images
-    offset = [0.2, 0.2] if offset is None else offset
-    sourceFluxRange = (50, 30000) if sourceFluxRange is None else sourceFluxRange
     if verbose:
         print 'Template PSF:', psf1, theta1
         print 'Science PSF:', psf2, theta2
         print np.sqrt(psf2[0]**2 - psf1[1]**2)
         print 'Offset:', offset
 
-    imSize = (512, 512) if imSize is None else imSize
     xim = np.arange(-imSize[0]//2, imSize[0]//2, 1)
     yim = np.arange(-imSize[1]//2, imSize[1]//2, 1)
     x0im, y0im = np.meshgrid(xim, yim)
@@ -190,11 +189,11 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     if sourceFluxDistrib == 'uniform':
         fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
     elif sourceFluxDistrib == 'exponential':
-        # More realistic, # of stars decreases by about 3x per increasing 1 magnitude
-        # This means # of stars increases about 3x per decreasing ~2.512x in flux.
-        # So it follows a power law: n = flux**(-3/2.512)
+        # More realistic, # of stars goes as 10**(0.6mag) so decreases by about 3.98x per increasing 1 magnitude
+        # This means # of stars increases about 3.98x per decreasing ~2.512x in flux.
+        # So we use: n = flux**(-3.98/2.512)
         fluxes = np.exp(np.linspace(np.log(sourceFluxRange[0]), np.log(sourceFluxRange[1])))
-        n_flux = (np.array(fluxes)/sourceFluxRange[1])**(-3./2.512)
+        n_flux = (np.array(fluxes)/sourceFluxRange[1])**(-3.98/2.512)
         samples = np.array([])
         tries = 0
         while len(samples) < n_sources and tries < 100:
@@ -232,8 +231,13 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
     #print inds, xposns[inds], yposns[inds]
 
     ## Need to add poisson noise of stars as well...
-    im1 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of template
-    im2 = np.random.poisson(sky, size=x0im.shape).astype(float)  # sigma of science image
+    im1 = np.random.poisson(sky[0], size=x0im.shape).astype(float)  # sigma of template
+    if templateNoNoise:
+        im1[:] = sky[0]
+    im2 = np.random.poisson(sky[1], size=x0im.shape).astype(float)  # sigma of science image
+
+    var_im1 = im1.copy()
+    var_im2 = im2.copy()
 
     # variation in y-width of psf in science image across (x-dim of) image
     psf2_yvary = psf_yvary_factor * (yim.mean() - yposns) / yim.max()
@@ -241,10 +245,10 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
 
-    scintillationNoiseX = scintillationNoiseY = np.zeros(len(fluxes))
-    if scintillation > 0.:
-        scintillationNoiseX = np.random.normal(0., scintillation, len(fluxes))
-        scintillationNoiseY = np.random.normal(0., scintillation, len(fluxes))
+    astromNoiseX = astromNoiseY = np.zeros(len(fluxes))
+    if randAstromVariance > 0.:
+        astromNoiseX = np.random.normal(0., randAstromVariance, len(fluxes))
+        astromNoiseY = np.random.normal(0., randAstromVariance, len(fluxes))
 
     starSize = 32  # make stars using "psf's" of this size (instead of whole image)
     varSourceInd = 0
@@ -258,15 +262,27 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
         if fast:
             offset1 = [yposns[i]-np.floor(yposns[i]),
                        xposns[i]-np.floor(xposns[i])]
-            tmp1 = makePsf(starSize, psf1, theta1, offset=offset1)
-            tmp1 *= flux
+            tmp = makePsf(starSize, psf1, theta1, offset=offset1)
+            tmp *= flux
             offset2 = [xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2]
             im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
-                (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp1
+                (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
+            if not skyLimited:
+                if not templateNoNoise:
+                    var_im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
+                            (offset2[0]-starSize+1):(offset2[0]+starSize)] += np.random.poisson(tmp, size=tmp.shape).astype(float)
+                else:
+                    var_im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
+                            (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
         else:
-            tmp1 = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
-            tmp1 *= flux
-            im1 += tmp1
+            tmp = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
+            tmp *= flux
+            im1 += tmp
+            if not skyLimited:
+                if not templateNoNoise:
+                    var_im1 += np.random.poisson(tmp, size=tmp.shape).astype(float)
+                else:
+                    var_im1 += tmp
 
         if i in inds:
             vf2 = varFlux2[varSourceInd]
@@ -278,8 +294,8 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
             flux += vf2
             fluxes2[i] = flux
             varSourceInd += 1
-        xposn = xposns[i] + offset[0] + scintillationNoiseX[i]
-        yposn = yposns[i] + offset[0] + scintillationNoiseY[i]
+        xposn = xposns[i] + offset[0] + astromNoiseX[i]
+        yposn = yposns[i] + offset[0] + astromNoiseY[i]
 
         if fast:
             offset1 = [yposn-np.floor(yposn), xposn-np.floor(xposn)]
@@ -288,16 +304,19 @@ def makeFakeImages(imSize=None, sky=2000., psf1=None, psf2=None, offset=None,
             offset2 = [xposn+imSize[0]//2, yposn+imSize[1]//2]
             im2[(offset2[1]-starSize+1):(offset2[1]+starSize),
                 (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
+            if not skyLimited:
+                var_im2[(offset2[1]-starSize+1):(offset2[1]+starSize),
+                        (offset2[0]-starSize+1):(offset2[0]+starSize)] += np.random.poisson(tmp, size=tmp.shape).astype(float)
         else:
             tmp = singleGaussian2d(x0im, y0im, xposn, yposn,
                                    psf2[0], psf2[1] + psf2_yvary[i], theta=theta2)
             tmp *= flux
             im2 += tmp
+            if not skyLimited:
+                var_im2 += np.random.poisson(tmp, size=tmp.shape).astype(float)
 
-    var_im1 = im1.copy()
-    var_im2 = im2.copy()
-    im1 -= sky
-    im2 -= sky
+    im1 -= sky[0]
+    im2 -= sky[1]
 
     # Add a (constant, for now) background offset to im2
     if im2background != 0.:  # im2background = 10.
@@ -1447,8 +1466,8 @@ class DiffimTest(object):
     # Ideally call runTest() first so the images are filled in.
     def doPlot(self, **kwargs):
         #fig = plt.figure(1, (12, 12))
-        imagesToPlot = [self.im1.im, self.im2.im]
-        titles = ['Template', 'Science img']
+        imagesToPlot = [self.im1.im, self.im1.var, self.im2.im, self.im2.var]
+        titles = ['Template', 'Template var', 'Science img', 'Science var']
         if self.D_AL is not None:
             imagesToPlot.append(self.D_AL.im)
             titles.append('A&L')
