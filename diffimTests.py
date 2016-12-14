@@ -235,6 +235,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     im2 = np.random.poisson(sky[1], size=x0im.shape).astype(float)  # sigma of science image
 
     var_im1 = im1.copy()
+    if templateNoNoise:
+        var_im1[:] = 0.
     var_im2 = im2.copy()
 
     # variation in y-width of psf in science image across (x-dim of) image
@@ -265,24 +267,21 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             tmp = makePsf(starSize, psf1, theta1, offset=offset1)
             tmp *= flux
             offset2 = [xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2]
+            if not templateNoNoise:
+                tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
                 (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
             if not skyLimited:
-                if not templateNoNoise:
-                    var_im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
-                            (offset2[0]-starSize+1):(offset2[0]+starSize)] += np.random.poisson(tmp, size=tmp.shape).astype(float)
-                else:
-                    var_im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
-                            (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
+                var_im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
+                        (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
         else:
             tmp = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
             tmp *= flux
+            if not templateNoNoise:
+                tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im1 += tmp
             if not skyLimited:
-                if not templateNoNoise:
-                    var_im1 += np.random.poisson(tmp, size=tmp.shape).astype(float)
-                else:
-                    var_im1 += tmp
+                var_im1 += tmp
 
         if i in inds:
             vf2 = varFlux2[varSourceInd]
@@ -303,18 +302,20 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             tmp = makePsf(starSize, [psf2[0], psf2[1] + psf2_yvary[i]], theta2, offset=offset1)
             tmp *= flux
             offset2 = [xposn+imSize[0]//2, yposn+imSize[1]//2]
+            tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im2[(offset2[1]-starSize+1):(offset2[1]+starSize),
                 (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
             if not skyLimited:
                 var_im2[(offset2[1]-starSize+1):(offset2[1]+starSize),
-                        (offset2[0]-starSize+1):(offset2[0]+starSize)] += np.random.poisson(tmp, size=tmp.shape).astype(float)
+                        (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
         else:
             tmp = singleGaussian2d(x0im, y0im, xposn, yposn,
                                    psf2[0], psf2[1] + psf2_yvary[i], theta=theta2)
             tmp *= flux
+            tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im2 += tmp
             if not skyLimited:
-                var_im2 += np.random.poisson(tmp, size=tmp.shape).astype(float)
+                var_im2 += tmp
 
     im1 -= sky[0]
     im2 -= sky[1]
@@ -1135,13 +1136,13 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
 # This should eventually replace computeCorrectionKernelALZC and
 # computeCorrectedDiffimPsfALZC
 
-def computeDecorrelationKernel(kappa, svar=0.04, tvar=0.04, preConvKernel=None, delta=0.):
+def computeDecorrelationKernel(kappa, tvar=0.04, svar=0.04, preConvKernel=None, delta=0.):
     """! Compute the Lupton/ZOGY post-conv. kernel for decorrelating an
     image difference, based on the PSF-matching kernel.
     @param kappa  A matching kernel 2-d numpy.array derived from Alard & Lupton PSF matching
-    @param svar   Average variance of science image used for PSF matching
     @param tvar   Average variance of template image used for PSF matching
-    @param preConvKernel   A pre-convolution kernel applied to im2 prior to A&L PSF matching
+    @param svar   Average variance of science image used for PSF matching
+    @param preConvKernel   A pre-convolution kernel applied to im1 prior to A&L PSF matching
     @return a 2-d numpy.array containing the correction kernel
 
     @note As currently implemented, kappa is a static (single, non-spatially-varying) kernel.
@@ -1650,7 +1651,7 @@ class DiffimTest(object):
 
             psf = afwPsfToArray(result.subtractedExposure.getPsf(), result.subtractedExposure)  # .computeImage().getArray()
             # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
-            psfc = computeCorrectedDiffimPsf(kimg, psf, svar=sig1squared, tvar=sig2squared)
+            psfc = computeCorrectedDiffimPsf(kimg, psf, tvar=sig1squared, svar=sig2squared)
             psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
             psfcI.getArray()[:, :] = psfc
             psfcK = afwMath.FixedKernel(psfcI)
@@ -1694,8 +1695,8 @@ class DiffimTest(object):
 
             # Run detection next
             try:
-                if subMethod is 'ALstack':
-                    src_AL = doDetection(res.subtractedExposure)
+                if subMethod is 'ALstack':  # Only fair to increase detection thresh if decorr. is off
+                    src_AL = doDetection(res.subtractedExposure, threshold=5.5)
                     src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
                     src['ALstack'] = src_AL
                 elif subMethod is 'ALstack_decorr':
