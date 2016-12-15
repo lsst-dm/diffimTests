@@ -1276,7 +1276,7 @@ class Exposure(object):
         psfK = afwMath.FixedKernel(psf)
         psfNew = measAlg.KernelPsf(psfK)
         im1ex.setPsf(psfNew)
-        wcs = makeWcs()
+        wcs = makeWcs(naxis1=self.im.shape[0], naxis2=self.im.shape[1])
         im1ex.setWcs(wcs)
         return im1ex
 
@@ -1289,14 +1289,14 @@ class Exposure(object):
         return res
 
 
-def makeWcs(offset=0):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
+def makeWcs(offset=0, naxis1=1024, naxis2=1153):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
     import lsst.daf.base as dafBase
     metadata = dafBase.PropertySet()
     metadata.set("SIMPLE", "T")
     metadata.set("BITPIX", -32)
     metadata.set("NAXIS", 2)
-    metadata.set("NAXIS1", 1024)
-    metadata.set("NAXIS2", 1153)
+    metadata.set("NAXIS1", naxis1)
+    metadata.set("NAXIS2", naxis2)
     metadata.set("RADECSYS", 'FK5')
     metadata.set("EQUINOX", 2000.)
     metadata.setDouble("CRVAL1", 215.604025685476)
