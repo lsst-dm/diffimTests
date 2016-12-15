@@ -189,11 +189,12 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     if sourceFluxDistrib == 'uniform':
         fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
     elif sourceFluxDistrib == 'exponential':
-        # More realistic, # of stars goes as 10**(0.6mag) so decreases by about 3.98x per increasing 1 magnitude
-        # This means # of stars increases about 3.98x per decreasing ~2.512x in flux.
-        # So we use: n = flux**(-3.98/2.512)
+        # More realistic (euclidean), # of stars goes as 10**(0.6mag) so decreases by about 3.98x per increasing 1 magnitude
+        # Looking toward the disk/bulge, this probably decreases to ~3.
+        # This means # of stars increases about ~3x per decreasing ~2.512x in flux.
+        # So we use: n = flux**(-3./2.512)
         fluxes = np.exp(np.linspace(np.log(sourceFluxRange[0]), np.log(sourceFluxRange[1])))
-        n_flux = (np.array(fluxes)/sourceFluxRange[1])**(-3.98/2.512)
+        n_flux = (np.array(fluxes)/sourceFluxRange[1])**(-3./2.512)
         samples = np.array([])
         tries = 0
         while len(samples) < n_sources and tries < 100:
@@ -213,7 +214,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         border = 22   # number of pixels to avoid putting sources near image boundary
     xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
     yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
-    fluxSortedInds = np.argsort(xposns**2. + yposns**2.)
+    fluxSortedInds = np.argsort(xposns**2. + yposns**2.)[::-1]
 
     if not hasattr(varFlux1, "__len__"):
         varFlux1 = [varFlux1]
@@ -226,6 +227,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         inds = fluxSortedInds[:len(varFlux2)]
     else:  # Just choose random ones
         inds = np.arange(len(varFlux2))
+        np.random.shuffle(inds)
     #print inds, xposns[inds], yposns[inds]
 
     ## Need to add poisson noise of stars as well...
@@ -1696,11 +1698,11 @@ class DiffimTest(object):
             # Run detection next
             try:
                 if subMethod is 'ALstack':  # Only fair to increase detection thresh if decorr. is off
-                    src_AL = doDetection(res.subtractedExposure, threshold=5.5)
+                    src_AL = doDetection(self.res.subtractedExposure, threshold=5.5)
                     src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
                     src['ALstack'] = src_AL
                 elif subMethod is 'ALstack_decorr':
-                    src_AL2 = doDetection(res.decorrelatedDiffim)
+                    src_AL2 = doDetection(self.res.decorrelatedDiffim)
                     src_AL2 = src_AL2[~src_AL2['base_PsfFlux_flag']]
                     src['ALstack_decorr'] = src_AL2
                 elif subMethod is 'ZOGY':
