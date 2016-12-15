@@ -1313,10 +1313,9 @@ def makeWcs(offset=0, naxis1=1024, naxis2=1153):  # Taken from IP_DIFFIM/tests/t
 
 
 def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='both', doSmooth=True,
-                asDF=True):
+                doMeasure=True, asDF=True):
     # Modeled from meas_algorithms/tests/testMeasure.py
     import lsst.meas.algorithms as measAlg
-    import lsst.meas.base as measBase
     import lsst.afw.table as afwTable
     import lsst.log
 
@@ -1329,7 +1328,20 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     detectionTask = measAlg.SourceDetectionTask(config=config, schema=schema)
     detectionTask.log.setLevel(log_level)
 
-    # Do measurement too, so we can get x- and y-coord centroids
+    table = afwTable.SourceTable.make(schema)
+    sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
+    if doMeasure:
+        sources = doMeasurement(exp, sources, schema)
+
+    if asDF:
+        import pandas as pd
+        sources = pd.DataFrame({col: sources.columns[col] for col in sources.schema.getNames()})
+    return sources
+
+
+def doMeasurement(exp, sources, schema, asDF=False):
+    import lsst.meas.base as measBase
+    # Do measurement too, so we can get improved x- and y-coord centroids
 
     config = measBase.SingleFrameMeasurementTask.ConfigClass()
     # Use the minimum set of plugins required.
@@ -1359,9 +1371,6 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     config.doReplaceWithNoise = False
     measureTask = measBase.SingleFrameMeasurementTask(schema, config=config)
     measureTask.log.setLevel(log_level)
-
-    table = afwTable.SourceTable.make(schema)
-    sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
 
     measureTask.measure(exp, sources)
 
