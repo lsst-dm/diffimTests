@@ -238,7 +238,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
     var_im1 = im1.copy()
     if templateNoNoise:
-        var_im1[:] = 0.
+        var_im1[:] = 1.  # setting it to zero just leads to all kinds of badness
     var_im2 = im2.copy()
 
     # variation in y-width of psf in science image across (x-dim of) image
@@ -1280,13 +1280,67 @@ class Exposure(object):
         im1ex.setWcs(wcs)
         return im1ex
 
-    def doDetection(self, threshold=5.0, doSmooth=True):
-        return doDetection(self.asAfwExposure(), threshold=threshold, doSmooth=doSmooth)
+    def doDetection(self, threshold=5.0, doSmooth=True, asDF=True):
+        return doDetection(self.asAfwExposure(), threshold=threshold, doSmooth=doSmooth, asDF=asDF)
+
+    def doForcedPhot(self, centroids, transientsOnly=False, asDF=False):
+        doForcedPhotometry(centroids, self.asAfwExposure(), transientsOnly=transientsOnly, asDF=asDF)
 
     def doMeasurePsf(self):
         res = measurePsf(self.asAfwExposure())
         self.psf = afwPsfToArray(res.psf, self.asAfwExposure())  # .computeImage()
         return res
+
+# Centroids is a 4-column matrix with x, y, flux(template), flux(science)
+# transientsOnly means that sources with flux(template)==0 are skipped.
+def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
+    import lsst.afw.table as afwTable
+    import lsst.afw.geom as afwGeom
+    import lsst.afw.detection as afwDetection
+    import lsst.meas.base as measBase
+
+    schema = afwTable.SourceTable.makeMinimalSchema()
+    centroidKey = afwTable.Point2DKey.addFields(schema, 'centroid', 'centroid', 'pixel')
+    schema.getAliasMap().set('slot_Centroid', 'centroid')
+    #schema.addField('centroid_x', type=float, doc='x pixel coord')
+    #schema.addField('centroid_y', type=float, doc='y pixel coord')
+    schema.addField('inputFlux_template', type=float, doc='input flux in template')
+    schema.addField('inputFlux_science', type=float, doc='input flux in science image')
+    table = afwTable.SourceTable.make(schema)
+    sources = afwTable.SourceCatalog(table)
+
+    footprint_radius = 5  # pixels
+    expWcs = exposure.getWcs()
+
+    for row in centroids:
+        if transientsOnly and row[2] != 0.:
+            continue
+        record = sources.addNew()
+        coord = expWcs.pixelToSky(row[0], row[1])
+        record.setCoord(coord)
+        record.set(centroidKey, afwGeom.Point2D(row[0], row[1]))
+        record.set('inputFlux_template', row[2])
+        record.set('inputFlux_science', row[3])
+
+        fpCenter = afwGeom.Point2I(afwGeom.Point2D(row[0], row[1])) #expWcs.skyToPixel(coord))
+        footprint = afwDetection.Footprint(fpCenter, footprint_radius)
+        record.setFootprint(footprint)
+
+    sources = sources.copy(deep=True)  # make it contiguous
+
+    config = measBase.ForcedMeasurementTask.ConfigClass()
+    config.plugins.names = ['base_TransformedCentroid', 'base_PsfFlux']
+    config.slots.shape = None
+    config.slots.centroid = 'base_TransformedCentroid'
+    config.slots.modelFlux = 'base_PsfFlux'
+    measurement = measBase.ForcedMeasurementTask(schema, config=config)
+    measCat = measurement.generateMeasCat(exposure, sources, expWcs)
+    measurement.attachTransformedFootprints(measCat, sources, exposure, expWcs)
+    measurement.run(measCat, exposure, sources, expWcs)
+
+    if asDF:
+        measCat = pd.DataFrame({col: measCat.columns[col] for col in measCat.schema.getNames()})
+    return measCat, sources
 
 
 def makeWcs(offset=0, naxis1=1024, naxis2=1153):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
@@ -1316,6 +1370,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
                 doMeasure=True, asDF=True):
     # Modeled from meas_algorithms/tests/testMeasure.py
     import lsst.meas.algorithms as measAlg
+    import lsst.meas.base as measBase
     import lsst.afw.table as afwTable
     import lsst.log
 
@@ -1328,20 +1383,7 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     detectionTask = measAlg.SourceDetectionTask(config=config, schema=schema)
     detectionTask.log.setLevel(log_level)
 
-    table = afwTable.SourceTable.make(schema)
-    sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
-    if doMeasure:
-        sources = doMeasurement(exp, sources, schema)
-
-    if asDF:
-        import pandas as pd
-        sources = pd.DataFrame({col: sources.columns[col] for col in sources.schema.getNames()})
-    return sources
-
-
-def doMeasurement(exp, sources, schema, asDF=False):
-    import lsst.meas.base as measBase
-    # Do measurement too, so we can get improved x- and y-coord centroids
+    # Do measurement too, so we can get x- and y-coord centroids
 
     config = measBase.SingleFrameMeasurementTask.ConfigClass()
     # Use the minimum set of plugins required.
@@ -1371,6 +1413,9 @@ def doMeasurement(exp, sources, schema, asDF=False):
     config.doReplaceWithNoise = False
     measureTask = measBase.SingleFrameMeasurementTask(schema, config=config)
     measureTask.log.setLevel(log_level)
+
+    table = afwTable.SourceTable.make(schema)
+    sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
 
     measureTask.measure(exp, sources)
 
@@ -1585,7 +1630,8 @@ class DiffimTest(object):
         P_D_ZOGY, F_D = computeZOGYDiffimPsf(self.im1.im, self.im2.im,
                                              self.im1.psf, self.im2.psf,
                                              sig1=self.im1.sig, sig2=self.im2.sig, F_r=1., F_n=1.)
-        self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, self.im1.var + self.im2.var)
+        self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, (self.im1.var + self.im2.var) /
+                               (self.im1.sig**2. + self.im2.sig**2.))
 
         if computeScorr:
             S_corr_ZOGY, S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
@@ -1747,4 +1793,21 @@ class DiffimTest(object):
             detections['sources'] = src
 
         return detections
+
+    def doForcedPhot(self, transientsOnly=False, asDF=False):
+        mc1, sources = doForcedPhotometry(self.centroids, self.im1.asAfwExposure(),
+                                          transientsOnly=transientsOnly, asDF=asDF)
+        mc2, _ = doForcedPhotometry(self.centroids, self.im2.asAfwExposure(),
+                                    transientsOnly=transientsOnly, asDF=asDF)
+        mc_ZOGY = mc_AL = mc_ALd = None
+        if self.D_ZOGY is not None:
+            mc_ZOGY, _ = doForcedPhotometry(self.centroids, self.D_ZOGY.asAfwExposure(),
+                                            transientsOnly=transientsOnly, asDF=asDF)
+        if self.res is not None:
+            mc_AL, _ = doForcedPhotometry(self.centroids, self.res.subtractedExposure,
+                                          transientsOnly=transientsOnly, asDF=asDF)
+            mc_ALd, _ = doForcedPhotometry(self.centroids, self.res.decorrelatedDiffim,
+                                          transientsOnly=transientsOnly, asDF=asDF)
+
+        return sources, mc1, mc2, mc_ZOGY, mc_AL, mc_ALd
 
