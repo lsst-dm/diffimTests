@@ -5,6 +5,7 @@ import scipy.stats
 from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
 import scipy.ndimage.filters
 import scipy.signal
+import pandas as pd  # We're going to store the results as pandas dataframes.
 
 log_level = None
 try:
@@ -14,7 +15,10 @@ try:
     import lsst.meas.algorithms as measAlg
     import lsst.afw.table as afwTable
     import lsst.ip.diffim as ipDiffim  # for detection - needs NaiveDipoleCentroid (registered by my routine)
+    import lsst.afw.detection as afwDetection
+    import lsst.meas.base as measBase
     import lsst.log
+
     lsst.log.Log.getLogger('afw').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('afw.math').setLevel(lsst.log.ERROR)
     lsst.log.Log.getLogger('afw.image').setLevel(lsst.log.ERROR)
@@ -55,10 +59,10 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
     import matplotlib
     matplotlib.style.use('ggplot')
     from mpl_toolkits.axes_grid1 import ImageGrid
+    from matplotlib.offsetbox import AnchoredText
+    from matplotlib.patheffects import withStroke
 
     def add_inner_title(ax, title, loc, size=None, **kwargs):
-        from matplotlib.offsetbox import AnchoredText
-        from matplotlib.patheffects import withStroke
         if size is None:
             size = dict(size=plt.rcParams['legend.fontsize'], color=titlecol[0])
         at = AnchoredText(title, loc=loc, prop=size,
@@ -1280,7 +1284,7 @@ class Exposure(object):
         im1ex.setWcs(wcs)
         return im1ex
 
-    def doDetection(self, threshold=5.0, doSmooth=True, asDF=True):
+    def doDetection(self, threshold=5.0, doSmooth=True, asDF=False):
         return doDetection(self.asAfwExposure(), threshold=threshold, doSmooth=doSmooth, asDF=asDF)
 
     def doForcedPhot(self, centroids, transientsOnly=False, asDF=False):
@@ -1293,12 +1297,7 @@ class Exposure(object):
 
 # Centroids is a 4-column matrix with x, y, flux(template), flux(science)
 # transientsOnly means that sources with flux(template)==0 are skipped.
-def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
-    import lsst.afw.table as afwTable
-    import lsst.afw.geom as afwGeom
-    import lsst.afw.detection as afwDetection
-    import lsst.meas.base as measBase
-
+def centroidsToCatalog(centroids, expWcs, transientsOnly=False):
     schema = afwTable.SourceTable.makeMinimalSchema()
     centroidKey = afwTable.Point2DKey.addFields(schema, 'centroid', 'centroid', 'pixel')
     schema.getAliasMap().set('slot_Centroid', 'centroid')
@@ -1310,7 +1309,6 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
     sources = afwTable.SourceCatalog(table)
 
     footprint_radius = 5  # pixels
-    expWcs = exposure.getWcs()
 
     for row in centroids:
         if transientsOnly and row[2] != 0.:
@@ -1327,7 +1325,11 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
         record.setFootprint(footprint)
 
     sources = sources.copy(deep=True)  # make it contiguous
+    return sources, schema
 
+def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
+    expWcs = exposure.getWcs()
+    sources, schema = centroidsToCatalog(centroids, expWcs, transientsOnly=transientsOnly)
     config = measBase.ForcedMeasurementTask.ConfigClass()
     config.plugins.names = ['base_TransformedCentroid', 'base_PsfFlux']
     config.slots.shape = None
@@ -1341,7 +1343,6 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
     if asDF:
         measCat = pd.DataFrame({col: measCat.columns[col] for col in measCat.schema.getNames()})
     return measCat, sources
-
 
 def makeWcs(offset=0, naxis1=1024, naxis2=1153):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
     import lsst.daf.base as dafBase
@@ -1365,15 +1366,9 @@ def makeWcs(offset=0, naxis1=1024, naxis2=1153):  # Taken from IP_DIFFIM/tests/t
     metadata.setDouble("CD2_1", -8.27440751733828E-07)
     return afwImage.makeWcs(metadata)
 
-
 def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='both', doSmooth=True,
-                doMeasure=True, asDF=True):
+                doMeasure=True, asDF=False):
     # Modeled from meas_algorithms/tests/testMeasure.py
-    import lsst.meas.algorithms as measAlg
-    import lsst.meas.base as measBase
-    import lsst.afw.table as afwTable
-    import lsst.log
-
     schema = afwTable.SourceTable.makeMinimalSchema()
     config = measAlg.SourceDetectionTask.ConfigClass()
     config.thresholdPolarity = thresholdPolarity
@@ -1438,7 +1433,7 @@ def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
     im = exp.getMaskedImage().getImage()
     im -= np.median(im.getArray())
 
-    sources = doDetection(exp, threshold=detectThresh, asDF=False)
+    sources = doDetection(exp, threshold=detectThresh)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 
@@ -1476,11 +1471,6 @@ def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
 # Compute mean of variance plane. Can actually get std of image plane if
 # actuallyDoImage=True and statToDo=afwMath.VARIANCECLIP
 def computeVarianceMean(exposure, actuallyDoImage=False, statToDo=afwMath.MEANCLIP):
-    try:
-        import lsst.afw.math as afwMath
-    except Exception as e:
-        print e
-        return None
     statsControl = afwMath.StatisticsControl()
     statsControl.setNumSigmaClip(3.)
     statsControl.setNumIter(3)
@@ -1599,11 +1589,11 @@ class DiffimTest(object):
 
     def computeAstrometricOffsets(self, column='base_GaussianCentroid', fluxCol='base_PsfFlux',
                                   threshold=2.5):
-        src1 = self.im1.doDetection()
+        src1 = self.im1.doDetection(asDF=True)
         src1 = src1[~src1[column + '_flag'] & ~src1[fluxCol + '_flag']]
         src1 = src1[[column + '_x', column + '_y', fluxCol + '_flux']]
         src1.reindex()
-        src2 = self.im2.doDetection()
+        src2 = self.im2.doDetection(asDF=True)
         src2 = src2[~src2[column + '_flag'] & ~src2[fluxCol + '_flag']]
         src2 = src2[[column + '_x', column + '_y', fluxCol + '_flux']]
         src2.reindex()
@@ -1649,10 +1639,6 @@ class DiffimTest(object):
 
     def doALInStack(self, doWarping=False, doDecorr=True, doPreConv=False,
                     spatialBackgroundOrder=0, spatialKernelOrder=0):
-        import lsst.ip.diffim as ipDiffim
-        import lsst.meas.algorithms as measAlg
-        import lsst.log
-
         im1 = self.im1.asAfwExposure()
         im2 = self.im2.asAfwExposure()
 
@@ -1725,10 +1711,9 @@ class DiffimTest(object):
     def reset(self):
         self.res = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
 
+    # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
-                zogyImageSpace=True, returnSources=False):
-        import pandas as pd  # We're going to store the results as pandas dataframes.
-
+                zogyImageSpace=True, matchDist=np.sqrt(1.5), returnSources=False):
         D_ZOGY = S_ZOGY = res = D_AL = None
         src = {}
         # Run diffim first
@@ -1754,40 +1739,44 @@ class DiffimTest(object):
             try:
                 if subMethod is 'ALstack':  # Only fair to increase detection thresh if decorr. is off
                     src_AL = doDetection(self.res.subtractedExposure, threshold=5.5)
-                    src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
                     src['ALstack'] = src_AL
                 elif subMethod is 'ALstack_decorr':
                     src_AL2 = doDetection(self.res.decorrelatedDiffim)
-                    src_AL2 = src_AL2[~src_AL2['base_PsfFlux_flag']]
                     src['ALstack_decorr'] = src_AL2
                 elif subMethod is 'ZOGY':
                     src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
-                    src_ZOGY = src_ZOGY[~src_ZOGY['base_PsfFlux_flag']]
                     src['ZOGY'] = src_ZOGY
                 elif subMethod is 'ZOGY_S':
                     src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), doSmooth=False)
-                    src_SZOGY = src_SZOGY[~src_SZOGY['base_PsfFlux_flag']]
                     src['SZOGY'] = src_SZOGY
                 elif subMethod is 'AL' and D_AL is not None:
                     src_AL = doDetection(D_AL.asAfwExposure())
-                    src_AL = src_AL[~src_AL['base_PsfFlux_flag']]
                     src['AL'] = src_AL
             except Exception as e:
                 print(e)
                 pass
 
         # Compare detections to input sources and get true positives and false negatives
-        changedCentroid = np.array(self.centroids[self.changedCentroidInd, :])
+        #changedCentroid = np.array(self.centroids[self.changedCentroidInd, :])
+        changedCentroid, _ = centroidsToCatalog(np.array(self.centroids[self.changedCentroidInd, :]),
+                                                self.im1.asAfwExposure().getWcs())
 
         detections = {}
         for key in src:
-            dist = np.sqrt(np.add.outer(src[key].base_NaiveCentroid_x, -changedCentroid[:, 0])**2. + \
-               np.add.outer(src[key].base_NaiveCentroid_y, -changedCentroid[:, 1])**2.) # in pixels
-            matches = np.where(dist <= 1.5)
-            true_pos = len(np.unique(matches[0]))
-            false_neg = changedCentroid.shape[0] - len(np.unique(matches[1]))
-            false_pos = src[key].shape[0] - len(np.unique(matches[0]))
+            #dist = np.sqrt(np.add.outer(src[key].base_NaiveCentroid_x, -changedCentroid[:, 0])**2. + \
+            #   np.add.outer(src[key].base_NaiveCentroid_y, -changedCentroid[:, 1])**2.) # in pixels
+            #matches = np.where(dist <= matchDist)
+            srces = src[key]
+            srces = srces[~srces['base_PsfFlux_flag']]  # this works!
+            matches = afwTable.matchXy(changedCentroid, srces, matchDist)  # these should not need uniquifying
+            true_pos = len(matches)
+            false_neg = len(changedCentroid) - len(matches)
+            false_pos = len(srces) - len(matches)
             detections[key] = {'TP': true_pos, 'FN': false_neg, 'FP': false_pos}
+
+        # Compare detections to input sources and get input SNRs
+        sources, mc1, mc2, mc_ZOGY, mc_AL, mc_ALd = self.doForcedPhot(transientsOnly=True)
+        
 
         if returnSources:
             detections['sources'] = src
