@@ -33,6 +33,19 @@ except Exception as e:
     print e
     #print "LSSTSW has not been set up."
 
+class sizeme():
+    """ Class to change html fontsize of object's representation"""
+    def __init__(self, ob, size=50, height=120):
+        self.ob = ob
+        self.size = size
+        self.height = height
+    def _repr_html_(self):
+        repl_tuple = (self.size, self.height, self.ob._repr_html_())
+        return u'<span style="font-size:{0}%; line-height:{1}%">{2}</span>'.format(*repl_tuple)
+
+def catalogToDF(cat):
+    return pd.DataFrame({col: cat.columns[col] for col in cat.schema.getNames()})
+
 def zscale_image(input_img, contrast=0.25):
     """This emulates ds9's zscale feature. Returns the suggested minimum and
     maximum values to display."""
@@ -653,6 +666,9 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
 # Assume 1st column is x-coord and 2nd is y-coord. 
 # If 3-column then 3rd column is flux and use flux**2 as weighting on shift calculation
 # We need some severe filtering if we have lots of sources
+
+# TBD: use afwTable.matchXy(src1, src2, matchDist)
+# https://github.com/lsst/meas_astrom/blob/master/include/lsst/meas/astrom/makeMatchStatistics.h
 def computeOffsets(src1, src2, threshold=2.5, fluxWeighted=True):
     dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
                    np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
@@ -1295,6 +1311,7 @@ class Exposure(object):
         self.psf = afwPsfToArray(res.psf, self.asAfwExposure())  # .computeImage()
         return res
 
+
 # Centroids is a 4-column matrix with x, y, flux(template), flux(science)
 # transientsOnly means that sources with flux(template)==0 are skipped.
 def centroidsToCatalog(centroids, expWcs, transientsOnly=False):
@@ -1325,17 +1342,20 @@ def centroidsToCatalog(centroids, expWcs, transientsOnly=False):
         record.setFootprint(footprint)
 
     sources = sources.copy(deep=True)  # make it contiguous
-    return sources, schema
+    return sources
 
 def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
     expWcs = exposure.getWcs()
-    sources, schema = centroidsToCatalog(centroids, expWcs, transientsOnly=transientsOnly)
+    if type(centroids) is afwTable.SourceCatalog:
+        sources = centroids
+    else:
+        sources = centroidsToCatalog(centroids, expWcs, transientsOnly=transientsOnly)
     config = measBase.ForcedMeasurementTask.ConfigClass()
     config.plugins.names = ['base_TransformedCentroid', 'base_PsfFlux']
     config.slots.shape = None
     config.slots.centroid = 'base_TransformedCentroid'
     config.slots.modelFlux = 'base_PsfFlux'
-    measurement = measBase.ForcedMeasurementTask(schema, config=config)
+    measurement = measBase.ForcedMeasurementTask(sources.getSchema(), config=config)
     measCat = measurement.generateMeasCat(exposure, sources, expWcs)
     measurement.attachTransformedFootprints(measCat, sources, exposure, expWcs)
     measurement.run(measCat, exposure, sources, expWcs)
@@ -1756,16 +1776,14 @@ class DiffimTest(object):
                 print(e)
                 pass
 
+        import lsst.afw.table.catalogMatches as catMatch
+        import lsst.daf.base as dafBase
         # Compare detections to input sources and get true positives and false negatives
-        #changedCentroid = np.array(self.centroids[self.changedCentroidInd, :])
-        changedCentroid, _ = centroidsToCatalog(np.array(self.centroids[self.changedCentroidInd, :]),
-                                                self.im1.asAfwExposure().getWcs())
+        changedCentroid = centroidsToCatalog(np.array(self.centroids[self.changedCentroidInd, :]),
+                                             self.im1.asAfwExposure().getWcs())
 
-        detections = {}
+        detections = matchCat = {}
         for key in src:
-            #dist = np.sqrt(np.add.outer(src[key].base_NaiveCentroid_x, -changedCentroid[:, 0])**2. + \
-            #   np.add.outer(src[key].base_NaiveCentroid_y, -changedCentroid[:, 1])**2.) # in pixels
-            #matches = np.where(dist <= matchDist)
             srces = src[key]
             srces = srces[~srces['base_PsfFlux_flag']]  # this works!
             matches = afwTable.matchXy(changedCentroid, srces, matchDist)  # these should not need uniquifying
@@ -1774,29 +1792,35 @@ class DiffimTest(object):
             false_pos = len(srces) - len(matches)
             detections[key] = {'TP': true_pos, 'FN': false_neg, 'FP': false_pos}
 
-        # Compare detections to input sources and get input SNRs
-        sources, mc1, mc2, mc_ZOGY, mc_AL, mc_ALd = self.doForcedPhot(transientsOnly=True)
-        
+            # Cross-match detections to input sources and get input fluxes and im1/im2 SNRs
+            #metadata = dafBase.PropertyList()
+            #matchCat[key] = 
+
+
+        # sources, pp1, pp2, pp_ZOGY, pp_AL, pp_ALd = self.doForcedPhot(transientsOnly=False)
+        # if mc_ZOGY is not None:
+        #     matches = afwTable.matchXy(pp_ZOGY, sources, 1.0)
+        #     matchedCat = catMatch.matchesToCatalog(matches, metadata)
+
 
         if returnSources:
             detections['sources'] = src
 
         return detections
 
-    def doForcedPhot(self, transientsOnly=False, asDF=False):
-        mc1, sources = doForcedPhotometry(self.centroids, self.im1.asAfwExposure(),
-                                          transientsOnly=transientsOnly, asDF=asDF)
-        mc2, _ = doForcedPhotometry(self.centroids, self.im2.asAfwExposure(),
-                                    transientsOnly=transientsOnly, asDF=asDF)
+    def doForcedPhot(self, centroids=None, transientsOnly=False, asDF=False):
+        if centroids is None:
+            centroids = centroidsToCatalog(self.centroids, self.im1.asAfwExposure().getWcs(),
+                                           transientsOnly=transientsOnly)
+
+        mc1, sources = doForcedPhotometry(centroids, self.im1.asAfwExposure(), asDF=asDF)
+        mc2, _ = doForcedPhotometry(centroids, self.im2.asAfwExposure(), asDF=asDF)
         mc_ZOGY = mc_AL = mc_ALd = None
         if self.D_ZOGY is not None:
-            mc_ZOGY, _ = doForcedPhotometry(self.centroids, self.D_ZOGY.asAfwExposure(),
-                                            transientsOnly=transientsOnly, asDF=asDF)
+            mc_ZOGY, _ = doForcedPhotometry(centroids, self.D_ZOGY.asAfwExposure(), asDF=asDF)
         if self.res is not None:
-            mc_AL, _ = doForcedPhotometry(self.centroids, self.res.subtractedExposure,
-                                          transientsOnly=transientsOnly, asDF=asDF)
-            mc_ALd, _ = doForcedPhotometry(self.centroids, self.res.decorrelatedDiffim,
-                                          transientsOnly=transientsOnly, asDF=asDF)
+            mc_AL, _ = doForcedPhotometry(centroids, self.res.subtractedExposure, asDF=asDF)
+            mc_ALd, _ = doForcedPhotometry(centroids, self.res.decorrelatedDiffim, asDF=asDF)
 
         return sources, mc1, mc2, mc_ZOGY, mc_AL, mc_ALd
 
