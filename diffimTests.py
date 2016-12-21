@@ -43,9 +43,6 @@ class sizeme():
         repl_tuple = (self.size, self.height, self.ob._repr_html_())
         return u'<span style="font-size:{0}%; line-height:{1}%">{2}</span>'.format(*repl_tuple)
 
-def catalogToDF(cat):
-    return pd.DataFrame({col: cat.columns[col] for col in cat.schema.getNames()})
-
 def zscale_image(input_img, contrast=0.25):
     """This emulates ds9's zscale feature. Returns the suggested minimum and
     maximum values to display."""
@@ -1311,6 +1308,38 @@ class Exposure(object):
         self.psf = afwPsfToArray(res.psf, self.asAfwExposure())  # .computeImage()
         return res
 
+### Catalog utilities below!
+
+def catalogToDF(cat):
+    return pd.DataFrame({col: cat.columns[col] for col in cat.schema.getNames()})
+
+# This is NOT functional for all catalogs (i.e., catalog -> DF works, but catalog -> DF -> catalog may not.
+def dfToCatalog(df, centroidSlot='centroid'):
+    schema = afwTable.SourceTable.makeMinimalSchema()
+    if centroidSlot is not None:
+        centroidKey = afwTable.Point2DKey.addFields(schema, centroidSlot, centroidSlot, 'pixel')
+        schema.getAliasMap().set('slot_Centroid', centroidSlot)
+    for col in df.columns.values:
+        dt = df[col].dtype.type
+        if df[col].dtype.name == 'bool':  # booleans and int64 not supported in tables?
+            dt = int
+        elif df[col].dtype.name == 'int64' or df[col].dtype.name == 'long':
+            dt = long
+        try:
+            schema.addField(col, type=dt, doc=col)
+        except Exception as e:
+            pass
+    table = afwTable.SourceTable.make(schema)
+    sources = afwTable.SourceCatalog(table)
+
+    for index, row in df.iterrows():
+        record = sources.addNew()
+        for col in df.columns.values:
+            val = row[col]
+            record.set(col, val)
+
+    sources = sources.copy(deep=True)  # make it contiguous
+    return sources
 
 # Centroids is a 4-column matrix with x, y, flux(template), flux(science)
 # transientsOnly means that sources with flux(template)==0 are skipped.
@@ -1361,7 +1390,7 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
     measurement.run(measCat, exposure, sources, expWcs)
 
     if asDF:
-        measCat = pd.DataFrame({col: measCat.columns[col] for col in measCat.schema.getNames()})
+        measCat = catalogToDF(measCat) #pd.DataFrame({col: measCat.columns[col] for col in measCat.schema.getNames()})
     return measCat, sources
 
 def makeWcs(offset=0, naxis1=1024, naxis2=1153):  # Taken from IP_DIFFIM/tests/testImagePsfMatch.py
@@ -1435,8 +1464,8 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
     measureTask.measure(exp, sources)
 
     if asDF:
-        import pandas as pd
-        sources = pd.DataFrame({col: sources.columns[col] for col in sources.schema.getNames()})
+        #import pandas as pd
+        sources = catalogToDF(sources) #pd.DataFrame({col: sources.columns[col] for col in sources.schema.getNames()})
 
     return sources
 
@@ -1792,16 +1821,10 @@ class DiffimTest(object):
             false_pos = len(srces) - len(matches)
             detections[key] = {'TP': true_pos, 'FN': false_neg, 'FP': false_pos}
 
-            # Cross-match detections to input sources and get input fluxes and im1/im2 SNRs
-            #metadata = dafBase.PropertyList()
-            #matchCat[key] = 
-
-
-        # sources, pp1, pp2, pp_ZOGY, pp_AL, pp_ALd = self.doForcedPhot(transientsOnly=False)
+        # sources, fp1, fp2, fp_ZOGY, fp_AL, fp_ALd = self.doForcedPhot(transientsOnly=True)
         # if mc_ZOGY is not None:
         #     matches = afwTable.matchXy(pp_ZOGY, sources, 1.0)
         #     matchedCat = catMatch.matchesToCatalog(matches, metadata)
-
 
         if returnSources:
             detections['sources'] = src
