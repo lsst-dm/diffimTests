@@ -160,6 +160,12 @@ def singleGaussian2d(x, y, xc, yc, sigma_x=1., sigma_y=1., theta=0., offset=0.):
     out /= out.sum()
     return out
 
+def doubleGaussian2d(x, y, xc, yc, a=0.9, sigma_x1=1., sigma_y1=1., theta1=0.,
+                     sigma_x2=2., sigma_y2=2., theta2=0., offset=0.):
+    g1 = a * singleGaussian2d(x, y, xc, yc, sigma_x1, sigma_y1, theta1, offset)
+    g1 += (1-a) * singleGaussian2d(x, y, xc, yc, sigma_x2, sigma_y2, theta2, offset)
+    return g1
+
 # Make the two "images". im1 is the template, im2 is the science
 # image.
 # NOTE: having sources near the edges really messes up the
