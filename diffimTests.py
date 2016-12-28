@@ -1282,6 +1282,18 @@ class Exposure(object):
     def setMetaData(self, key, value):
         self.metaData[key] = value
 
+    def calcSNR(self, flux, skyLimited=False):
+        psf = self.psf
+        sky = self.sig**2.
+
+        psf = psf / psf.max()
+        nPix = np.sum(psf) * 2.  # not sure where the 2 comes from but it works.
+        #print nPix, np.pi*1.8*2.2*4  # and it equals pi*r1*r2*4.
+        out = flux / (np.sqrt(flux + nPix * sky))
+        if skyLimited:  #  only sky noise matters
+            out = flux / (np.sqrt(nPix * sky))
+        return out
+
     def asAfwExposure(self):
         bbox = afwGeom.Box2I(afwGeom.Point2I(0, 0), afwGeom.Point2I(self.im.shape[0]-1, self.im.shape[1]-1))
         im1ex = afwImage.ExposureF(bbox)
