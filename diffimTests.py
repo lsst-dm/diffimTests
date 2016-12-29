@@ -1577,10 +1577,10 @@ class DiffimTest(object):
             except Exception as e:
                 pass
 
-            self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
+            self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = self.ALres = None
 
     # Ideally call runTest() first so the images are filled in.
-    def doPlot(self, **kwargs):
+    def doPlot(self, centroidCoord=None, **kwargs):
         #fig = plt.figure(1, (12, 12))
         imagesToPlot = [self.im1.im, self.im1.var, self.im2.im, self.im2.var]
         titles = ['Template', 'Template var', 'Science img', 'Science var']
@@ -1590,12 +1590,12 @@ class DiffimTest(object):
         if self.D_ZOGY is not None:
             titles.append('ZOGY')
             imagesToPlot.append(self.D_ZOGY.im)
-        if self.res is not None:
+        if self.ALres is not None:
             titles.append('A&L')
-            imagesToPlot.append(self.res.decorrelatedDiffim)
-        if self.D_ZOGY is not None and self.res is not None:
+            imagesToPlot.append(self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray())
+        if self.D_ZOGY is not None and self.ALres is not None:
             titles.append('A&L - ZOGY')  # Plot difference of diffims
-            alIm = self.res.decorrelatedDiffim.getMaskedImage().getImage().getArray()
+            alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
             stats = computeClippedImageStats(alIm)
             alIm = alIm - stats[0]  # need to renormalize the AL image
             alIm /= stats[1]
@@ -1603,6 +1603,11 @@ class DiffimTest(object):
             zIm = self.D_ZOGY.im - stats[0]
             zIm /= stats[1]
             imagesToPlot.append(alIm - self.D_ZOGY.im)
+
+        if centroidCoord is not None:
+            cx, cy = centroidCoord[0], centroidCoord[1]
+            for ind, im in enumerate(imagesToPlot):
+                imagesToPlot[ind] = im[(cx-25):(cx+25), (cy-25):(cy+25)]
         plotImageGrid(imagesToPlot, titles=titles, **kwargs)
 
 
@@ -1777,7 +1782,7 @@ class DiffimTest(object):
         return result
 
     def reset(self):
-        self.res = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
+        self.ALres = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
 
     # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
@@ -1787,7 +1792,8 @@ class DiffimTest(object):
         # Run diffim first
         for subMethod in subtractMethods:
             if subMethod is 'ALstack' or subMethod is 'ALstack_decorr':
-                res = self.res = self.doALInStack(doPreConv=False, doDecorr=True)
+                if self.ALres is None:
+                    res = self.ALres = self.doALInStack(doPreConv=False, doDecorr=True)
             if subMethod is 'ZOGY_S':
                 if self.S_corr_ZOGY is None:
                     self.doZOGY(computeScorr=True, inImageSpace=zogyImageSpace)
@@ -1806,10 +1812,10 @@ class DiffimTest(object):
             # Run detection next
             try:
                 if subMethod is 'ALstack':  # Only fair to increase detection thresh if decorr. is off
-                    src_AL = doDetection(self.res.subtractedExposure, threshold=5.5)
+                    src_AL = doDetection(self.ALres.subtractedExposure, threshold=5.5)
                     src['ALstack'] = src_AL
                 elif subMethod is 'ALstack_decorr':
-                    src_AL2 = doDetection(self.res.decorrelatedDiffim)
+                    src_AL2 = doDetection(self.ALres.decorrelatedDiffim)
                     src['ALstack_decorr'] = src_AL2
                 elif subMethod is 'ZOGY':
                     src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
@@ -1860,9 +1866,9 @@ class DiffimTest(object):
         mc_ZOGY = mc_AL = mc_ALd = None
         if self.D_ZOGY is not None:
             mc_ZOGY, _ = doForcedPhotometry(centroids, self.D_ZOGY.asAfwExposure(), asDF=asDF)
-        if self.res is not None:
-            mc_AL, _ = doForcedPhotometry(centroids, self.res.subtractedExposure, asDF=asDF)
-            mc_ALd, _ = doForcedPhotometry(centroids, self.res.decorrelatedDiffim, asDF=asDF)
+        if self.ALres is not None:
+            mc_AL, _ = doForcedPhotometry(centroids, self.ALres.subtractedExposure, asDF=asDF)
+            mc_ALd, _ = doForcedPhotometry(centroids, self.ALres.decorrelatedDiffim, asDF=asDF)
 
         return sources, mc1, mc2, mc_ZOGY, mc_AL, mc_ALd
 
