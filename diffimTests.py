@@ -101,9 +101,12 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
     for i in range(len(images)):
         ii = images[i]
         if hasattr(ii, 'computeImage'):
-            img = afwImage.ImageD(ii.getDimensions())
-            ii.computeImage(img, doNormalize=False)
-            ii = img
+            if hasattr(ii, 'getDimensions'):
+                img = afwImage.ImageD(ii.getDimensions())
+                ii.computeImage(img, doNormalize=False)
+                ii = img
+            else:
+                ii = ii.computeImage()
         if hasattr(ii, 'getImage'):
             ii = ii.getImage()
         if hasattr(ii, 'getMaskedImage'):
@@ -252,7 +255,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         fluxes = samples[0:n_sources]
 
     border = 2  #5
-    if avoidBorder > 0: # number of pixels to avoid putting sources near image boundary
+    if avoidBorder > 2: # number of pixels to avoid putting sources near image boundary
         border = avoidBorder
     if avoidAllOverlaps == 0.:  # Don't care where stars go, just add them randomly.
         xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
@@ -1268,6 +1271,7 @@ def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
         return out
 
     pcf = post_conv_psf(psf=psf, kernel=kappa, svar=svar, tvar=tvar)
+    pcf = fixEvenKernel(pcf)
     pcf = pcf.real / pcf.real.sum()
     return pcf
 
@@ -1624,6 +1628,12 @@ class DiffimTest(object):
         #fig = plt.figure(1, (12, 12))
         imagesToPlot = [self.im1.im, self.im1.var, self.im2.im, self.im2.var]
         titles = ['Template', 'Template var', 'Science img', 'Science var']
+        cx = cy = sz = None
+        if centroidCoord is not None:
+            cx, cy = centroidCoord[0], centroidCoord[1]
+            sz = 25
+            if len(centroidCoord) == 3:
+                sz = centroidCoord[2]
         if self.D_AL is not None:
             imagesToPlot.append(self.D_AL.im)
             titles.append('A&L')
@@ -1638,32 +1648,38 @@ class DiffimTest(object):
         if self.D_ZOGY is not None and self.ALres is not None:
             titles.append('A&L(dec) - ZOGY')  # Plot difference of diffims
             alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
+            if centroidCoord is not None:
+                alIm = alIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
             stats = computeClippedImageStats(alIm)
             alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
-            alIm /= stats[1]
             stats = computeClippedImageStats(self.D_ZOGY.im)
-            zIm = (self.D_ZOGY.im - stats[0]) / stats[1]
+            zIm = self.D_ZOGY.im
+            if centroidCoord is not None:
+                zIm = zIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
+            zIm = (zIm - stats[0]) / stats[1]
             imagesToPlot.append(alIm - zIm)
         if self.ALres is not None:
             titles.append('A&L(dec) - A&L')  # Plot difference of diffims
             alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
-            stats = computeClippedImageStats(alIm)
-            alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
+            #if centroidCoord is not None:
+            #    alIm = alIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
+            #stats = computeClippedImageStats(alIm)
+            #alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
             zIm = self.ALres.subtractedExposure.getMaskedImage().getImage().getArray()
-            stats = computeClippedImageStats(zIm)
-            zIm = (zIm - stats[0]) / stats[1]
+            #if centroidCoord is not None:
+            #    zIm = zIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
+            #stats = computeClippedImageStats(zIm)
+            #zIm = (zIm - stats[0]) / stats[1]
             imagesToPlot.append(alIm - zIm)
 
         if centroidCoord is not None:
-            cx, cy = centroidCoord[0], centroidCoord[1]
-            sz = 25
-            if len(centroidCoord) == 3:
-                sz = centroidCoord[2]
             for ind, im in enumerate(imagesToPlot):
+                if (titles[ind] == 'A&L(dec) - ZOGY'): # or (titles[ind] == 'A&L(dec) - A&L'):
+                    continue
                 imagesToPlot[ind] = im[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
 
         plotImageGrid(imagesToPlot, titles=titles, **kwargs)
-        #return imagesToPlot, titles
+        return imagesToPlot, titles
 
 
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
@@ -1819,6 +1835,13 @@ class DiffimTest(object):
             #    /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
             #diffim.getMaskedImage().getVariance().getArray()[:, ] \
             #    /= np.sqrt(self.im1.metaData['sky'] + self.im1.metaData['sky'])
+
+            # For some reason, border areas of img and variance planes can become infinite. Fix it.
+            img = diffim.getMaskedImage().getImage().getArray()
+            img[~np.isfinite(img)] = np.nan
+            img = diffim.getMaskedImage().getVariance().getArray()
+            img[~np.isfinite(img)] = np.nan
+            # TBD: also need to update the mask as it is not (apparently) set correctly.
 
             psf = afwPsfToArray(result.subtractedExposure.getPsf(), result.subtractedExposure)  # .computeImage().getArray()
             # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
