@@ -191,8 +191,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    theta1=0., theta2=-45., offset=[0., 0.], randAstromVariance=0., psf_yvary_factor=0.,
                    varFlux1=0, varFlux2=np.repeat(750, 50), im2background=0., n_sources=1500,
                    templateNoNoise=False, skyLimited=False, sourceFluxRange=(250, 60000),
-                   variablesNearCenter=False, avoidBorder=False, sourceFluxDistrib='exponential',
-                   psfSize=21, seed=66, fast=True, verbose=False):
+                   variablesNearCenter=False, avoidBorder=False, avoidAllOverlaps=0.,
+                   sourceFluxDistrib='exponential', psfSize=21, seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -232,8 +232,26 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     border = 2  #5
     if avoidBorder:
         border = 22   # number of pixels to avoid putting sources near image boundary
-    xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
-    yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
+    if avoidAllOverlaps == 0.:  # Don't care where stars go, just add them randomly.
+        xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
+        yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
+    else:  # `avoidAllOverlaps` gives radius (pixels) of exclusion
+        xposns = np.random.uniform(xim.min()+border, xim.max()-border, 1)
+        yposns = np.random.uniform(yim.min()+border, yim.max()-border, 1)
+        for i in range(n_sources-1):
+            xpos, ypos = xposns[-1], yposns[-1]
+            dists = np.sqrt((xpos - xposns)**2. + (ypos - yposns)**2.)
+            notTooManyTries = 0
+            while((dists.min() < avoidAllOverlaps) and (notTooManyTries < 100)):
+                xpos = np.random.uniform(xim.min()+border, xim.max()-border, 1)[0]
+                ypos = np.random.uniform(yim.min()+border, yim.max()-border, 1)[0]
+                dists = np.sqrt((xpos - xposns)**2. + (ypos - yposns)**2.)
+                notTooManyTries += 1
+            xposns = np.append(xposns, [xpos])
+            yposns = np.append(yposns, [ypos])
+        xposns = np.array(xposns)
+        yposns = np.array(yposns)
+
     fluxSortedInds = np.argsort(xposns**2. + yposns**2.)[::-1]
 
     if not hasattr(varFlux1, "__len__"):
