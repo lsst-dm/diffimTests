@@ -186,6 +186,7 @@ def doubleGaussian2d(x, y, xc, yc, a=0.9, sigma_x1=1., sigma_y1=1., theta1=0.,
 #      (2) allow enforce sky-limited (i.e., no shot noise in variance from stars) (DONE - skyLimited)
 #      (3) add variable relative background by polynomial;
 #      (4) add randomness to PSF shapes of stars
+#      (5) add doubleGaussian2d as possible PSF shape (doubleGaussian2d is implemented but not as PSF shape here)
 
 def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1.8, 2.2],
                    theta1=0., theta2=-45., offset=[0., 0.], randAstromVariance=0., psf_yvary_factor=0.,
@@ -1617,22 +1618,19 @@ class DiffimTest(object):
             titles.append('A&L(dec) - ZOGY')  # Plot difference of diffims
             alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
             stats = computeClippedImageStats(alIm)
-            alIm = alIm - stats[0]  # need to renormalize the AL image
+            alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
             alIm /= stats[1]
             stats = computeClippedImageStats(self.D_ZOGY.im)
-            zIm = self.D_ZOGY.im - stats[0]
-            zIm /= stats[1]
+            zIm = (self.D_ZOGY.im - stats[0]) / stats[1]
             imagesToPlot.append(alIm - zIm)
         if self.ALres is not None:
             titles.append('A&L(dec) - A&L')  # Plot difference of diffims
             alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
             stats = computeClippedImageStats(alIm)
-            alIm = alIm - stats[0]  # need to renormalize the AL image
-            alIm /= stats[1]
+            alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
             zIm = self.ALres.subtractedExposure.getMaskedImage().getImage().getArray()
             stats = computeClippedImageStats(zIm)
-            zIm = zIm - stats[0]
-            zIm /= stats[1]
+            zIm = (zIm - stats[0]) / stats[1]
             imagesToPlot.append(alIm - zIm)
 
         if centroidCoord is not None:
