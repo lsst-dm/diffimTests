@@ -166,6 +166,8 @@ def doubleGaussian2d(x, y, xc, yc, a=0.9, sigma_x1=1., sigma_y1=1., theta1=0.,
     g1 += (1-a) * singleGaussian2d(x, y, xc, yc, sigma_x2, sigma_y2, theta2, offset)
     return g1
 
+#def moffat2d(
+
 # Make the two "images". im1 is the template, im2 is the science
 # image.
 # NOTE: having sources near the edges really messes up the
@@ -192,11 +194,17 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    theta1=0., theta2=-45., offset=[0., 0.], randAstromVariance=0., psf_yvary_factor=0.,
                    varFlux1=0, varFlux2=np.repeat(750, 50), im2background=0., n_sources=1500,
                    templateNoNoise=False, skyLimited=False, sourceFluxRange=(250, 60000),
-                   variablesNearCenter=False, avoidBorder=False, avoidAllOverlaps=0.,
+                   variablesNearCenter=False, avoidBorder=30, avoidAllOverlaps=0.,
                    sourceFluxDistrib='exponential', psfSize=21, seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
+    # Turn input PSF FWHM into sigmas
+    sigma_to_fwhm = 2.35482
+    psf1[0] /= sigma_to_fwhm
+    psf1[1] /= sigma_to_fwhm
+    psf2[0] /= sigma_to_fwhm
+    psf2[1] /= sigma_to_fwhm
     if verbose:
         print 'Template PSF:', psf1, theta1
         print 'Science PSF:', psf2, theta2
@@ -231,8 +239,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         fluxes = samples[0:n_sources]
 
     border = 2  #5
-    if avoidBorder:
-        border = 22   # number of pixels to avoid putting sources near image boundary
+    if avoidBorder > 0: # number of pixels to avoid putting sources near image boundary
+        border = avoidBorder
     if avoidAllOverlaps == 0.:  # Don't care where stars go, just add them randomly.
         xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
         yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
@@ -1635,8 +1643,11 @@ class DiffimTest(object):
 
         if centroidCoord is not None:
             cx, cy = centroidCoord[0], centroidCoord[1]
+            sz = 25
+            if len(centroidCoord) == 3:
+                sz = centroidCoord[2]
             for ind, im in enumerate(imagesToPlot):
-                imagesToPlot[ind] = im[(cx-25):(cx+25), (cy-25):(cy+25)]
+                imagesToPlot[ind] = im[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
 
         plotImageGrid(imagesToPlot, titles=titles, **kwargs)
         #return imagesToPlot, titles
