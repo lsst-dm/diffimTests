@@ -121,7 +121,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
         if cbar and clim_orig is not None:
             ii = np.clip(ii, clim[0], clim[1])
         if clim[0] == clim[1]:
-            clim[1] += clim[0] / 10.  # in case there's nothing in the image
+            clim = (clim[0], clim[1] + clim[0] / 10.) # in case there's nothing in the image
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
                              extent=extent, clim=clim, **kwds)
         if cbar:
@@ -1609,10 +1609,12 @@ class DiffimTest(object):
             titles.append('ZOGY')
             imagesToPlot.append(self.D_ZOGY.im)
         if self.ALres is not None:
-            titles.append('A&L')
+            titles.append('A&L(dec)')
             imagesToPlot.append(self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray())
+            titles.append('A&L')
+            imagesToPlot.append(self.ALres.subtractedExposure.getMaskedImage().getImage().getArray())
         if self.D_ZOGY is not None and self.ALres is not None:
-            titles.append('A&L - ZOGY')  # Plot difference of diffims
+            titles.append('A&L(dec) - ZOGY')  # Plot difference of diffims
             alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
             stats = computeClippedImageStats(alIm)
             alIm = alIm - stats[0]  # need to renormalize the AL image
@@ -1620,13 +1622,26 @@ class DiffimTest(object):
             stats = computeClippedImageStats(self.D_ZOGY.im)
             zIm = self.D_ZOGY.im - stats[0]
             zIm /= stats[1]
-            imagesToPlot.append(alIm - self.D_ZOGY.im)
+            imagesToPlot.append(alIm - zIm)
+        if self.ALres is not None:
+            titles.append('A&L(dec) - A&L')  # Plot difference of diffims
+            alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
+            stats = computeClippedImageStats(alIm)
+            alIm = alIm - stats[0]  # need to renormalize the AL image
+            alIm /= stats[1]
+            zIm = self.ALres.subtractedExposure.getMaskedImage().getImage().getArray()
+            stats = computeClippedImageStats(zIm)
+            zIm = zIm - stats[0]
+            zIm /= stats[1]
+            imagesToPlot.append(alIm - zIm)
 
         if centroidCoord is not None:
             cx, cy = centroidCoord[0], centroidCoord[1]
             for ind, im in enumerate(imagesToPlot):
                 imagesToPlot[ind] = im[(cx-25):(cx+25), (cy-25):(cy+25)]
+
         plotImageGrid(imagesToPlot, titles=titles, **kwargs)
+        #return imagesToPlot, titles
 
 
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
