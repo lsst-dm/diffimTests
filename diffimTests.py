@@ -215,12 +215,9 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
-    # Turn input PSF FWHM into sigmas
-    sigma_to_fwhm = 2.35482
-    psf1[0] /= sigma_to_fwhm
-    psf1[1] /= sigma_to_fwhm
-    psf2[0] /= sigma_to_fwhm
-    psf2[1] /= sigma_to_fwhm
+    # Input PSF is in sigmas, in units of pixels.
+    # For LSST, avg. seeing is ~0.7" or ~3.5 pixels (FWHM), or for sigma is 3.5/2.35482 = 1.48.
+    # Thus the default PSF is slightly worse than average (template) and fairly bad (science) 
     if verbose:
         print 'Template PSF:', psf1, theta1
         print 'Science PSF:', psf2, theta2
