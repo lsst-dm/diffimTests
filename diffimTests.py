@@ -256,6 +256,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
         fluxes = samples[0:n_sources]
 
+    # Place the stars
     border = 2  #5
     if avoidBorder > border: # number of pixels to avoid putting sources near image boundary
         border = avoidBorder
@@ -1895,8 +1896,8 @@ class DiffimTest(object):
 
             # Run detection next
             try:
-                if subMethod is 'ALstack':  # Only fair to increase detection thresh if decorr. is off
-                    src_AL = doDetection(self.ALres.subtractedExposure, threshold=5.5)
+                if subMethod is 'ALstack':  # Note we DONT set it to 5.5 -- best for noise-free template.
+                    src_AL = doDetection(self.ALres.subtractedExposure, threshold=5.0)
                     src['ALstack'] = src_AL
                 elif subMethod is 'ALstack_decorr':
                     src_AL2 = doDetection(self.ALres.decorrelatedDiffim)
@@ -2002,12 +2003,13 @@ class DiffimTest(object):
             df[label[i] + '_fluxSigma'] = fp_d['base_PsfFlux_fluxSigma']
 
             if actuallyPlot:
+                # Plot all sources
                 plt.scatter(srces,
                             fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
-                            color=color[i], alpha=alpha, label=None, s=10)
-                plt.scatter(srces,
-                            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
-                            color='k', marker='x', alpha=alpha, label=None, s=10)
+                            color=color[i], alpha=alpha, label=label[i])
+                #plt.scatter(srces,
+                #            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
+                #            color='k', marker='x', alpha=alpha, label=None)
 
             if not xaxisIsScienceForcedPhot:
                 matches = afwTable.matchXy(sources, src[label[i]], 1.0)
@@ -2034,9 +2036,11 @@ class DiffimTest(object):
 
             df[label[i] + '_detected'] = detected
             if actuallyPlot:
+                mStyle = matplotlib.markers.MarkerStyle('o', 'none')
                 plt.scatter(sources_detected,
                             fp_ZOGY_detected['base_PsfFlux_flux']/fp_ZOGY_detected['base_PsfFlux_fluxSigma'],
-                            label=label[i], s=20, color=color[i], alpha=alpha) #, edgecolors='r')
+                            #label=label[i], s=20, color=color[i], alpha=alpha) #, edgecolors='r')
+                            label=None, s=30, edgecolors='k', facecolors='none', marker='o', alpha=alpha)
 
         if addPresub: # Add measurements in original science and template images
             df['templateSNR'] = fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma']
@@ -2054,7 +2058,7 @@ class DiffimTest(object):
 
         if actuallyPlot:
             plt.scatter(srces, snrCalced, color='k', alpha=alpha-0.2, s=7, label='Input SNR')
-            plt.scatter([10000], [10], color='k', marker='x', label='Missed')
+            plt.scatter([10000], [10], s=20, edgecolors='k', facecolors='none', marker='o', label='Detected')
             plt.legend(loc='upper left', scatterpoints=3)
             if not xaxisIsScienceForcedPhot:
                 plt.xlabel('input flux')
