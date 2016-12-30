@@ -257,7 +257,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         fluxes = samples[0:n_sources]
 
     border = 2  #5
-    if avoidBorder > 2: # number of pixels to avoid putting sources near image boundary
+    if avoidBorder > border: # number of pixels to avoid putting sources near image boundary
         border = avoidBorder
     if avoidAllOverlaps == 0.:  # Don't care where stars go, just add them randomly.
         xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
@@ -265,17 +265,23 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     else:  # `avoidAllOverlaps` gives radius (pixels) of exclusion
         xposns = np.random.uniform(xim.min()+border, xim.max()-border, 1)
         yposns = np.random.uniform(yim.min()+border, yim.max()-border, 1)
+        nTriedAndFailed = 0
         for i in range(n_sources-1):
             xpos, ypos = xposns[-1], yposns[-1]
             dists = np.sqrt((xpos - xposns)**2. + (ypos - yposns)**2.)
             notTooManyTries = 0
-            while((dists.min() < avoidAllOverlaps) and (notTooManyTries < 100)):
+            maxTries = 100
+            while((dists.min() < avoidAllOverlaps) and (notTooManyTries < maxTries)):
                 xpos = np.random.uniform(xim.min()+border, xim.max()-border, 1)[0]
                 ypos = np.random.uniform(yim.min()+border, yim.max()-border, 1)[0]
                 dists = np.sqrt((xpos - xposns)**2. + (ypos - yposns)**2.)
                 notTooManyTries += 1
             xposns = np.append(xposns, [xpos])
             yposns = np.append(yposns, [ypos])
+            if notTooManyTries > 99:
+                nTriedAndFailed += 1
+            if nTriedAndFailed > 20:  # for very crowded fields, don't try too hard.
+                maxTries = 1
         xposns = np.array(xposns)
         yposns = np.array(yposns)
 
