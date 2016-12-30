@@ -1682,108 +1682,6 @@ class DiffimTest(object):
         plotImageGrid(imagesToPlot, titles=titles, **kwargs)
         return imagesToPlot, titles
 
-    # Plot SNRs vs. input fluxes for the diffims and the input images.
-    # Derived from notebook '30. 3a. Start from the basics-force phot and matching-restart'.
-    def doPlotWithDetectionsHighlighted(self, transientsOnly=True, addPresub=False,
-                                        xaxisIsScienceForcedPhot=False, alpha=0.5):
-
-        import matplotlib.pyplot as plt
-        import matplotlib
-        matplotlib.style.use('ggplot')
-
-        #fp_DIFFIM=fp_ZOGY, label='ZOGY', color='b', alpha=1.0,
-
-        res = self.runTest(zogyImageSpace=True, returnSources=True, matchDist=np.sqrt(1.5))
-        src = res['sources']
-        del res['sources']
-        print res
-
-        cats = self.doForcedPhot(transientsOnly=transientsOnly)
-        sources, fp1, fp2, fp_ZOGY, fp_AL, fp_ALd = cats
-
-        # if xaxisIsScienceForcedPhot is True, then don't use sources['inputFlux_science'] --
-        #    use fp2['base_PsfFlux_flux'] instead.
-        if not xaxisIsScienceForcedPhot:
-            srces = sources['inputFlux_science']
-        else:
-            srces = fp2['base_PsfFlux_flux']
-
-        df = pd.DataFrame()
-        df['inputFlux'] = sources['inputFlux_science']
-        df['templateFlux'] = fp1['base_PsfFlux_flux']
-        df['scienceFlux'] = fp2['base_PsfFlux_flux']
-        df['inputId'] = sources['id']
-        df['inputCentroid_x'] = sources['centroid_x']
-        df['inputCentroid_y'] = sources['centroid_y']
-
-        fp_DIFFIM = [fp_ZOGY, fp_AL, fp_ALd]
-        label = ['ZOGY', 'ALstack', 'ALstack_decorr']
-        color = ['b', 'r', 'g']
-
-        for i, fp_d in enumerate(fp_DIFFIM):
-            df[label[i] + '_SNR'] = fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma']
-            df[label[i] + '_flux'] = fp_d['base_PsfFlux_flux']
-            df[label[i] + '_fluxSigma'] = fp_d['base_PsfFlux_fluxSigma']
-
-            plt.scatter(srces, 
-                        fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'], 
-                        color=color[i], alpha=alpha, label=None, s=10)
-            plt.scatter(srces, 
-                        fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'], 
-                        color='k', marker='x', alpha=alpha, label=None, s=10)
-
-            if not xaxisIsScienceForcedPhot:
-                matches = afwTable.matchXy(sources, src[label[i]], 1.0)
-                metadata = dafBase.PropertyList()
-                matchCat = catMatch.matchesToCatalog(matches, metadata)
-                sources_detected = catalogToDF(sources)
-                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
-                sources_detected = sources_detected[detected]
-                sources_detected = sources_detected['inputFlux_science']
-                fp_ZOGY_detected = catalogToDF(fp_d)
-                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
-                fp_ZOGY_detected = fp_ZOGY_detected[detected]
-            else:
-                matches = afwTable.matchXy(fp2, src[label[i]], 1.0)
-                metadata = dafBase.PropertyList()
-                matchCat = catMatch.matchesToCatalog(matches, metadata)
-                sources_detected = catalogToDF(fp2)
-                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
-                sources_detected = sources_detected[detected]
-                sources_detected = sources_detected['base_PsfFlux_flux']
-                fp_ZOGY_detected = catalogToDF(fp_d)
-                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
-                fp_ZOGY_detected = fp_ZOGY_detected[detected]
-
-            df[label[i] + '_detected'] = detected
-            plt.scatter(sources_detected,
-                        fp_ZOGY_detected['base_PsfFlux_flux']/fp_ZOGY_detected['base_PsfFlux_fluxSigma'],
-                        label=label[i], s=20, color=color[i], alpha=alpha) #, edgecolors='r')
-
-        if addPresub: # Add measurements in original science and template images
-            df['templateSNR'] = fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma']
-            plt.scatter(srces,
-                        fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma'],
-                        label='template', color='y', alpha=alpha)
-            df['scienceSNR'] = fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma']
-            plt.scatter(srces,
-                        fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma'],
-                        label='science', color='orange', alpha=alpha-0.2)
-
-        snrCalced = self.im2.calcSNR(sources['inputFlux_science'], skyLimited=True)
-        df['inputSNR'] = snrCalced
-        plt.scatter(srces, snrCalced, color='k', alpha=alpha-0.2, s=7, label='Input SNR')
-        plt.scatter([10000], [10], color='k', marker='x', label='Missed')
-        plt.legend(loc='upper left', scatterpoints=3)
-        if not xaxisIsScienceForcedPhot:
-            plt.xlabel('input flux')
-        else:
-            plt.xlabel('science flux (measured)')
-        plt.ylabel('measured SNR')
-
-        return df
-
-
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
     # on im2-im1.
     def reverseImages(self):
@@ -2052,3 +1950,110 @@ class DiffimTest(object):
 
         return sources, mc1, mc2, mc_ZOGY, mc_AL, mc_ALd
 
+    # Plot SNRs vs. input fluxes for the diffims and the input images.
+    # Derived from notebook '30. 3a. Start from the basics-force phot and matching-restart'.
+    # Can just return the dataframe without plotting if desired.
+    def doPlotWithDetectionsHighlighted(self, transientsOnly=True, addPresub=False,
+                                        xaxisIsScienceForcedPhot=False, alpha=0.5, actuallyPlot=True):
+
+        if actuallyPlot:
+            import matplotlib.pyplot as plt
+            import matplotlib
+            matplotlib.style.use('ggplot')
+
+        #fp_DIFFIM=fp_ZOGY, label='ZOGY', color='b', alpha=1.0,
+
+        res = self.runTest(zogyImageSpace=True, returnSources=True, matchDist=np.sqrt(1.5))
+        src = res['sources']
+        del res['sources']
+        print res
+
+        cats = self.doForcedPhot(transientsOnly=transientsOnly)
+        sources, fp1, fp2, fp_ZOGY, fp_AL, fp_ALd = cats
+
+        # if xaxisIsScienceForcedPhot is True, then don't use sources['inputFlux_science'] --
+        #    use fp2['base_PsfFlux_flux'] instead.
+        if not xaxisIsScienceForcedPhot:
+            srces = sources['inputFlux_science']
+        else:
+            srces = fp2['base_PsfFlux_flux']
+
+        df = pd.DataFrame()
+        df['inputFlux'] = sources['inputFlux_science']
+        df['templateFlux'] = fp1['base_PsfFlux_flux']
+        df['scienceFlux'] = fp2['base_PsfFlux_flux']
+        df['inputId'] = sources['id']
+        df['inputCentroid_x'] = sources['centroid_x']
+        df['inputCentroid_y'] = sources['centroid_y']
+
+        fp_DIFFIM = [fp_ZOGY, fp_AL, fp_ALd]
+        label = ['ZOGY', 'ALstack', 'ALstack_decorr']
+        color = ['b', 'r', 'g']
+
+        for i, fp_d in enumerate(fp_DIFFIM):
+            df[label[i] + '_SNR'] = fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma']
+            df[label[i] + '_flux'] = fp_d['base_PsfFlux_flux']
+            df[label[i] + '_fluxSigma'] = fp_d['base_PsfFlux_fluxSigma']
+
+            if actuallyPlot:
+                plt.scatter(srces,
+                            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
+                            color=color[i], alpha=alpha, label=None, s=10)
+                plt.scatter(srces,
+                            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
+                            color='k', marker='x', alpha=alpha, label=None, s=10)
+
+            if not xaxisIsScienceForcedPhot:
+                matches = afwTable.matchXy(sources, src[label[i]], 1.0)
+                metadata = dafBase.PropertyList()
+                matchCat = catMatch.matchesToCatalog(matches, metadata)
+                sources_detected = catalogToDF(sources)
+                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
+                sources_detected = sources_detected[detected]
+                sources_detected = sources_detected['inputFlux_science']
+                fp_ZOGY_detected = catalogToDF(fp_d)
+                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
+                fp_ZOGY_detected = fp_ZOGY_detected[detected]
+            else:
+                matches = afwTable.matchXy(fp2, src[label[i]], 1.0)
+                metadata = dafBase.PropertyList()
+                matchCat = catMatch.matchesToCatalog(matches, metadata)
+                sources_detected = catalogToDF(fp2)
+                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
+                sources_detected = sources_detected[detected]
+                sources_detected = sources_detected['base_PsfFlux_flux']
+                fp_ZOGY_detected = catalogToDF(fp_d)
+                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
+                fp_ZOGY_detected = fp_ZOGY_detected[detected]
+
+            df[label[i] + '_detected'] = detected
+            if actuallyPlot:
+                plt.scatter(sources_detected,
+                            fp_ZOGY_detected['base_PsfFlux_flux']/fp_ZOGY_detected['base_PsfFlux_fluxSigma'],
+                            label=label[i], s=20, color=color[i], alpha=alpha) #, edgecolors='r')
+
+        if addPresub: # Add measurements in original science and template images
+            df['templateSNR'] = fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma']
+            df['scienceSNR'] = fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma']
+            if actuallyPlot:
+                plt.scatter(srces,
+                            fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma'],
+                            label='template', color='y', alpha=alpha)
+                plt.scatter(srces,
+                            fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma'],
+                            label='science', color='orange', alpha=alpha-0.2)
+
+        snrCalced = self.im2.calcSNR(sources['inputFlux_science'], skyLimited=True)
+        df['inputSNR'] = snrCalced
+
+        if actuallyPlot:
+            plt.scatter(srces, snrCalced, color='k', alpha=alpha-0.2, s=7, label='Input SNR')
+            plt.scatter([10000], [10], color='k', marker='x', label='Missed')
+            plt.legend(loc='upper left', scatterpoints=3)
+            if not xaxisIsScienceForcedPhot:
+                plt.xlabel('input flux')
+            else:
+                plt.xlabel('science flux (measured)')
+            plt.ylabel('measured SNR')
+
+        return df
