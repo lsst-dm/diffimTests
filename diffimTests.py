@@ -169,9 +169,10 @@ def doubleGaussian2d(x, y, xc, yc, a=0.9, sigma_x1=1., sigma_y1=1., theta1=0.,
                      sigma_x2=2., sigma_y2=2., theta2=0., offset=0.):
     g1 = a * singleGaussian2d(x, y, xc, yc, sigma_x1, sigma_y1, theta1, offset)
     g1 += (1-a) * singleGaussian2d(x, y, xc, yc, sigma_x2, sigma_y2, theta2, offset)
+    g1 /= g1.sum()
     return g1
 
-def moffat2d(x, y, xc, yc, gamma, alpha, amplitude=1.0):
+def moffat2d(x, y, xc, yc, fwhm=1., alpha=4.765):
     """Two dimensional Moffat.
 
     Parameters
@@ -186,8 +187,13 @@ def moffat2d(x, y, xc, yc, gamma, alpha, amplitude=1.0):
         Power index of the Moffat model.
     """
 
-    rr_gg = ((x - xc) ** 2 + (y - yc) ** 2) / gamma ** 2
-    return amplitude * (1 + rr_gg) ** (-alpha)
+    #fwhm = 2. * gamma * np.sqrt(2**(1./alpha) - 1)
+    gamma = fwhm / (2. * np.sqrt(2**(1./alpha) - 1))
+    print gamma
+    rr_gg = ((x - xc)**2. + (y - yc)**2.) / gamma**2.
+    out = (1 + rr_gg)**(-alpha)
+    out /= out.sum()
+    return out
 
 # Make the two "images". im1 is the template, im2 is the science
 # image.
