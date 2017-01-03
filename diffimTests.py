@@ -189,7 +189,6 @@ def moffat2d(x, y, xc, yc, fwhm=1., alpha=4.765):
 
     #fwhm = 2. * gamma * np.sqrt(2**(1./alpha) - 1)
     gamma = fwhm / (2. * np.sqrt(2**(1./alpha) - 1))
-    print gamma
     rr_gg = ((x - xc)**2. + (y - yc)**2.) / gamma**2.
     out = (1 + rr_gg)**(-alpha)
     out /= out.sum()
