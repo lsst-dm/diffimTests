@@ -2,6 +2,7 @@ import numpy as np
 import scipy.stats
 #import pandas as pd  # We're going to store the results as pandas dataframes.
 
+
 class sizeme():
     """ Class to change html fontsize of object's representation"""
     def __init__(self, ob, size=50, height=120):
@@ -18,6 +19,11 @@ def getImageGrid(im):
     yim = np.arange(np.int(-np.floor(im.shape[1]/2.)), np.int(np.floor(im.shape[1]/2)))
     x0im, y0im = np.meshgrid(xim, yim)
     return x0im, y0im
+
+
+def mad(data, axis=None):
+    """ Median absolute deviation"""
+    return np.median(np.absolute(data - np.median(data, axis)), axis)
 
 
 def computeClippedImageStats(im, low=3, high=3, ignore=None):

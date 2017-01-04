@@ -258,8 +258,7 @@ class DiffimTest(object):
                 pass
 
         # Compare detections to input sources and get true positives and false negatives
-        changedCentroid = centroidsToCatalog(np.array(self.centroids[self.changedCentroidInd, :]),
-                                             self.im1.asAfwExposure().getWcs())
+        changedCentroid = self.getCentroidsCatalog(transientsOnly=False)
 
         import lsst.afw.table as afwTable
         detections = matchCat = {}
@@ -282,10 +281,14 @@ class DiffimTest(object):
 
         return detections
 
+    def getCentroidsCatalog(self, transientsOnly=False):
+        centroids = centroidsToCatalog(self.centroids, self.im1.asAfwExposure().getWcs(),
+                                       transientsOnly=transientsOnly)
+        return centroids
+
     def doForcedPhot(self, centroids=None, transientsOnly=False, asDF=False):
         if centroids is None:
-            centroids = centroidsToCatalog(self.centroids, self.im1.asAfwExposure().getWcs(),
-                                           transientsOnly=transientsOnly)
+            centroids = self.getCentroidsCatalog(transientsOnly=transientsOnly)
 
         mc1, sources = doForcedPhotometry(centroids, self.im1.asAfwExposure(), asDF=asDF)
         mc2, _ = doForcedPhotometry(centroids, self.im2.asAfwExposure(), asDF=asDF)
