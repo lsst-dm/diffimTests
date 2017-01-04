@@ -82,7 +82,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
         fluxes = samples[0:n_sources]
 
-    fluxes = np.sort(fluxes)[::-1]
+    #fluxes = np.sort(fluxes)[::-1]
 
     # Place the stars
     border = 2  #5
