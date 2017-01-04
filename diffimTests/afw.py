@@ -4,6 +4,7 @@ try:
     import lsst.afw.image as afwImage
     import lsst.afw.math as afwMath
     import lsst.afw.geom as afwGeom
+    import lsst.meas.algorithms as measAlg
 except:
     pass
 
@@ -92,11 +93,13 @@ def afwPsfToArray(psf, img):
     ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
     return psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
 
-def afwPsfToShape(psf, img):
-    bbox = img.getBBox()
-    xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
-    ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
-    return psf.computeShape(afwGeom.Point2D(xcen, ycen))
+def afwPsfToShape(psf, img=None):
+    if img is not None:
+        bbox = img.getBBox()
+        xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+        ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+        return psf.computeShape(afwGeom.Point2D(xcen, ycen))
+    return psf.computeShape()
 
 
 # Compute mean of variance plane. Can actually get std of image plane if

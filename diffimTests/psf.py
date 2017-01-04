@@ -2,7 +2,7 @@ import numpy as np
 import scipy.stats
 
 
-def makePsf(psfSize=22, sigma=1., theta=0., offset=[0, 0], x0=None, y0=None,
+def makePsf(psfSize=22, sigma=[1., 1.], theta=0., offset=[0., 0.], x0=None, y0=None,
             type='gaussian'):
     if x0 is None or y0 is None:
         x = np.arange(-psfSize+1, psfSize, 1)
@@ -17,6 +17,20 @@ def makePsf(psfSize=22, sigma=1., theta=0., offset=[0, 0], x0=None, y0=None,
         psf = moffat2d(x0, y0, offset[0], offset[1], (sigma[0]+sigma[1])/2*2.35482) # no elongation for this one
     elif type == 'kolmogorov':
         psf = kolmogorov2d((sigma[0]+sigma[1])/2*2.35482)
+
+    if psf.shape[0] == x0.shape[0] and psf.shape[1] == x0.shape[1]:
+        return psf
+
+    # Kolmogorov doesn't listen to my input dimensions, so fix it here.
+    if psf.shape[0] > x0.shape[0]:
+        pos_max = np.unravel_index(np.argmax(psf), psf.shape)
+        psf = psf[(pos_max[0]-x0.shape[0]//2+1):(pos_max[0]+x0.shape[0]//2+2),
+                  (pos_max[1]-x0.shape[1]//2+1):(pos_max[1]+x0.shape[1]//2+2)]
+    elif psf.shape[0] < x0.shape[0]:
+        psf = np.pad(psf, (((x0.shape[0]-psf.shape[0])//2, (x0.shape[0]-psf.shape[0])//2),
+                           ((x0.shape[1]-psf.shape[1])//2, (x0.shape[1]-psf.shape[1])//2)),
+                     mode='constant')
+
     return psf
 
 
@@ -84,8 +98,8 @@ def moffat2d(x, y, xc, yc, fwhm=1., alpha=4.765):
 
 def kolmogorov2d(fwhm=1.0):
     import galsim
-    gsp = galsim.GSParams(folding_threshold=1.0/512., maximum_fft_size=12288)
-    psf = galsim.Kolmogorov(fwhm=fwhm, flux=1, gsparams=gsp)
+    #gsp = galsim.GSParams(folding_threshold=1.0/512., maximum_fft_size=12288)
+    psf = galsim.Kolmogorov(fwhm=fwhm*0.2, flux=1) #, gsparams=gsp)
     im = psf.drawImage(method='real_space', scale=0.2)
     bounds = im.getBounds()
     arr = im.image.array.reshape(bounds.getXMax(), bounds.getXMax())
