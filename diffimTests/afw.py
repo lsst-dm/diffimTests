@@ -11,12 +11,15 @@ except:
 from .decorrelation import fixEvenKernel
 
 
-def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure):
+def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure, coord=None):
     spatialKernel = psfMatchingKernel
     kimg = afwImage.ImageD(spatialKernel.getDimensions())
     bbox = subtractedExposure.getBBox()
-    xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
-    ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+    if coord is None:
+        xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+        ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+    else:
+        xcen, ycen = coord[0], coord[1]
     spatialKernel.computeImage(kimg, True, xcen, ycen)
     return kimg.getArray()
 
@@ -87,19 +90,27 @@ def arrayToAfwPsf(array):
     psfNew = measAlg.KernelPsf(psfcK)
     return psfNew
 
-def afwPsfToArray(psf, img):
-    bbox = img.getBBox()
-    xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
-    ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
-    return psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
-
-def afwPsfToShape(psf, img=None):
-    if img is not None:
+def afwPsfToArray(psf, img=None, coord=None):
+    if coord is None and img is not None:
         bbox = img.getBBox()
         xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
         ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
-        return psf.computeShape(afwGeom.Point2D(xcen, ycen))
-    return psf.computeShape()
+    elif coord is not None:
+        xcen, ycen = coord[0], coord[1]
+    else:
+        xcen = ycen = 256, 256
+    return psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
+
+def afwPsfToShape(psf, img=None, coord=None):
+    if coord is None and img is not None:
+        bbox = img.getBBox()
+        xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+        ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+    elif coord is not None:
+        xcen, ycen = coord[0], coord[1]
+    else:
+        return psf.computeShape()
+    return psf.computeShape(afwGeom.Point2D(xcen, ycen))
 
 
 # Compute mean of variance plane. Can actually get std of image plane if

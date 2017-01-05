@@ -1,7 +1,7 @@
 import numpy as np
 
 from .utils import computeClippedImageStats
-from .tasks import doDetection, doForcedPhotometry, measurePsf
+from .tasks import doDetection, doForcedPhotometry, doMeasurePsf
 
 class Exposure(object):
     def __init__(self, im, psf=None, var=None, metaData=None):
@@ -57,7 +57,7 @@ class Exposure(object):
         doForcedPhotometry(centroids, self.asAfwExposure(), transientsOnly=transientsOnly, asDF=asDF)
 
     def doMeasurePsf(self):
-        res = measurePsf(self.asAfwExposure())
+        res = doMeasurePsf(self.asAfwExposure())
         self.psf = afwPsfToArray(res.psf, self.asAfwExposure())  # .computeImage()
         return res
 

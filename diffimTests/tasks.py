@@ -117,6 +117,7 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
         measCat = catalogToDF(measCat) #pd.DataFrame({col: measCat.columns[col] for col in measCat.schema.getNames()})
     return measCat, sources
 
+
 def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='both', doSmooth=True,
                 doMeasure=True, asDF=False):
     # Modeled from meas_algorithms/tests/testMeasure.py
@@ -170,24 +171,29 @@ def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='bo
 
     return sources
 
-def measurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0):
+
+def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, spatialOrder=1):
     # The old (meas_algorithms) SdssCentroid assumed this by default if it
     # wasn't specified; meas_base requires us to be explicit.
-    shape = exp.getPsf().computeImage().getDimensions()
-    psf = measAlg.DoubleGaussianPsf(shape[0], shape[1], 0.01)
+    if exp.getPsf() is not None:
+        shape = exp.getPsf().computeImage().getDimensions()
+    else:
+        shape = [21, 21]
+    psf = measAlg.DoubleGaussianPsf(shape[0], shape[1], startSize)
     exp.setPsf(psf)
 
     im = exp.getMaskedImage().getImage()
     im -= np.median(im.getArray())
 
     sources = doDetection(exp, threshold=detectThresh)
+    #print 'N SOURCES:', len(sources)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 
     if measurePsfAlg is 'psfex':
         try:
             import lsst.meas.extensions.psfex.psfexPsfDeterminer
-            config.psfDeterminer['psfex'].spatialOrder = 1  # 2 is default, 0 seems to kill it
+            config.psfDeterminer['psfex'].spatialOrder = spatialOrder  # 2 is default, 0 seems to kill it
             config.psfDeterminer['psfex'].recentroid = True
             config.psfDeterminer['psfex'].sizeCellX = 256  # default is 256
             config.psfDeterminer['psfex'].sizeCellY = 256
