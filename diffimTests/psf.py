@@ -125,3 +125,26 @@ def computeMoments(psf):
     return xmoment, ymoment
 
 
+def loadPsf(filename, asArray=True, forceReMeasure=False):
+    import lsst.afw.image as afwImage
+    from .afw import afwPsfToShape, afwPsfToArray
+    from .tasks import doMeasurePsf
+
+    #afwData = os.getenv('AFWDATA_DIR')
+    #im = afwImage.ExposureF(afwData + '/CFHT/D4/cal-53535-i-797722_1.fits')
+
+    im = afwImage.ExposureF(filename)
+    if im.getPsf() is None or forceReMeasure:
+        startSize = 6.0
+        if im.getPsf() is not None:
+            shape = afwPsfToShape(im.getPsf(), im)
+            startSize = shape.getDeterminantRadius() * 2.
+        res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize, spatialOrder=2)
+        psf = res.psf
+    else:
+        psf = im.getPsf()
+
+    if asArray:
+        psf = afwPsfToArray(psf, im)
+
+    return psf

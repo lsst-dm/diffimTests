@@ -76,6 +76,7 @@ def doConvolve(exposure, kernel, use_scipy=False):
 
     return outExp, kern
 
+
 def arrayToAfwKernel(array):
     kernelImg = afwImage.ImageD(array.shape[0], array.shape[1])
     kernelImg.getArray()[:, :] = array
@@ -85,10 +86,12 @@ def arrayToAfwKernel(array):
     kern.setCtrY(maxloc[1])
     return kern
 
+
 def arrayToAfwPsf(array):
     psfcK = arrayToAfwKernel(array)
     psfNew = measAlg.KernelPsf(psfcK)
     return psfNew
+
 
 def afwPsfToArray(psf, img=None, coord=None):
     if coord is None and img is not None:
@@ -100,6 +103,7 @@ def afwPsfToArray(psf, img=None, coord=None):
     else:
         xcen = ycen = 256, 256
     return psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
+
 
 def afwPsfToShape(psf, img=None, coord=None):
     if coord is None and img is not None:
