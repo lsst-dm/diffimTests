@@ -126,23 +126,39 @@ def computeMoments(psf):
 
 
 def loadPsf(filename, asArray=True, forceReMeasure=False):
+    import os
     import lsst.afw.image as afwImage
+    import lsst.afw.detection as afwDet
     from .afw import afwPsfToShape, afwPsfToArray
     from .tasks import doMeasurePsf
 
     #afwData = os.getenv('AFWDATA_DIR')
-    #im = afwImage.ExposureF(afwData + '/CFHT/D4/cal-53535-i-797722_1.fits')
+    #filename = afwData + '/CFHT/D4/cal-53535-i-797722_1.fits'
 
-    im = afwImage.ExposureF(filename)
-    if im.getPsf() is None or forceReMeasure:
-        startSize = 6.0
-        if im.getPsf() is not None:
-            shape = afwPsfToShape(im.getPsf(), im)
-            startSize = shape.getDeterminantRadius() * 2.
-        res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize, spatialOrder=2)
-        psf = res.psf
+    PSFLIBDIR = './psfLib/'
+
+    cacheName = PSFLIBDIR + os.path.basename(filename).replace('.fits', '_psf.fits')
+    if os.path.exists(cacheName) and not forceReMeasure:
+        psf = afwDet.Psf.readFits(cacheName)
     else:
-        psf = im.getPsf()
+        im = afwImage.ExposureF(filename)
+        if im.getPsf() is None or forceReMeasure:
+            startSize = 6.0
+            if im.getPsf() is not None:
+                shape = afwPsfToShape(im.getPsf(), im)
+                startSize = shape.getDeterminantRadius() * 2.
+            res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize, spatialOrder=2)
+            psf = res.psf
+        else:
+            psf = im.getPsf()
+
+
+    if not os.path.exists(cacheName) or forceReMeasure:
+        try:
+            os.mkdir(PSFLIBDIR)
+        except Exception as e:
+            pass
+        psf.writeFits(cacheName)
 
     if asArray:
         psf = afwPsfToArray(psf, im)

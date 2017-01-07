@@ -101,7 +101,7 @@ def afwPsfToArray(psf, img=None, coord=None):
     elif coord is not None:
         xcen, ycen = coord[0], coord[1]
     else:
-        xcen = ycen = 256, 256
+        xcen = ycen = 256.
     return psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
 
 
