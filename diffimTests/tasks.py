@@ -183,7 +183,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     exp.setPsf(psf)
 
     im = exp.getMaskedImage().getImage()
-    im -= np.median(im.getArray())
+    im -= np.median(im.getArray())  # why did I do this?  seems to help sometimes.
 
     sources = doDetection(exp, threshold=detectThresh)
     #print 'N SOURCES:', len(sources)

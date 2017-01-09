@@ -102,7 +102,12 @@ def afwPsfToArray(psf, img=None, coord=None):
         xcen, ycen = coord[0], coord[1]
     else:
         xcen = ycen = 256.
-    return psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
+    out = None
+    try:
+        out = psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
+    except:
+        pass
+    return out
 
 
 def afwPsfToShape(psf, img=None, coord=None):
@@ -114,7 +119,12 @@ def afwPsfToShape(psf, img=None, coord=None):
         xcen, ycen = coord[0], coord[1]
     else:
         return psf.computeShape()
-    return psf.computeShape(afwGeom.Point2D(xcen, ycen))
+    out = None
+    try:
+        out = psf.computeShape(afwGeom.Point2D(xcen, ycen))
+    except:
+        pass
+    return out
 
 
 # Compute mean of variance plane. Can actually get std of image plane if

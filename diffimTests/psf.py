@@ -136,10 +136,12 @@ def loadPsf(filename, asArray=True, forceReMeasure=False):
     #filename = afwData + '/CFHT/D4/cal-53535-i-797722_1.fits'
 
     PSFLIBDIR = './psfLib/'
+    source = None
 
     cacheName = PSFLIBDIR + os.path.basename(filename).replace('.fits', '_psf.fits')
     if os.path.exists(cacheName) and not forceReMeasure:
         psf = afwDet.Psf.readFits(cacheName)
+        source = 'cached'
     else:
         im = afwImage.ExposureF(filename)
         if im.getPsf() is None or forceReMeasure:
@@ -149,9 +151,10 @@ def loadPsf(filename, asArray=True, forceReMeasure=False):
                 startSize = shape.getDeterminantRadius() * 2.
             res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize, spatialOrder=2)
             psf = res.psf
+            source = 'measured'
         else:
             psf = im.getPsf()
-
+            source = 'loaded from image'
 
     if not os.path.exists(cacheName) or forceReMeasure:
         try:
@@ -163,4 +166,4 @@ def loadPsf(filename, asArray=True, forceReMeasure=False):
     if asArray:
         psf = afwPsfToArray(psf, im)
 
-    return psf
+    return psf, source
