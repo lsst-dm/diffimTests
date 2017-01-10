@@ -1,24 +1,36 @@
 import numpy as np
 import scipy.stats
 
+from .afw import afwPsfToArray
+
+try:
+    from lsst.afw.detection import Psf
+except:
+    print "LSSTSW has not been set up."
+
 
 def makePsf(psfSize=22, sigma=[1., 1.], theta=0., offset=[0., 0.], x0=None, y0=None,
-            type='gaussian'):
+            psfType='gaussian'):
     if x0 is None or y0 is None:
         x = np.arange(-psfSize+1, psfSize, 1)
         y = x.copy()
         y0, x0 = np.meshgrid(x, y)
     psf = None
-    if type == 'gaussian':
-        psf = singleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
-    elif type == 'doubleGaussian':
-        psf = doubleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
-    elif type == 'moffat':
-        width = (sigma[0] + sigma[1]) / 2. * 2.35482
-        psf = moffat2d(x0, y0, offset[0], offset[1], width) # no elongation for this one
-    elif type == 'kolmogorov':
-        width = (sigma[0] + sigma[1]) / 2. * 2.35482
-        psf = kolmogorov2d(width)  # or this one.
+    if isinstance(psfType, str):
+        if psfType == 'gaussian':
+            psf = singleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
+        elif psfType == 'doubleGaussian':
+            psf = doubleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
+        elif psfType == 'moffat':
+            width = (sigma[0] + sigma[1]) / 2. * 2.35482
+            psf = moffat2d(x0, y0, offset[0], offset[1], width) # no elongation for this one
+        elif psfType == 'kolmogorov':
+            width = (sigma[0] + sigma[1]) / 2. * 2.35482
+            psf = kolmogorov2d(width)  # or this one.
+    elif isinstance(psfType, Psf):
+        psf = afwPsfToArray(psfType, centroid=offset)
+    elif isinstance(psfType, np.ndarray):
+        psf = psfType
 
     if psf.shape[0] == x0.shape[0] and psf.shape[1] == x0.shape[1]:
         return psf

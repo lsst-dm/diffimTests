@@ -167,8 +167,9 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             offset1 = [yposns[i]-np.floor(yposns[i]),
                        xposns[i]-np.floor(xposns[i])]
             tmp = makePsf(psfSize=starSize, sigma=psf1, theta=theta1, offset=offset1, x0=x0star, y0=y0star,
-                          type=psfType)
+                          psfType=psfType)
             #tmp = makePsf(psfSize=starSize, sigma=psf1, theta=theta1, offset=offset1)
+            tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp *= flux
             offset2 = [xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2]
             if not templateNoNoise:
@@ -181,7 +182,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         else:
             #tmp = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
             tmp = makePsf(0., sigma=psf1, theta=theta1, offset=[xposns[i], yposns[i]], x0=x0im, y=y0im,
-                          type=psfType)
+                          psfType=psfType)
+            tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp *= flux
             if not templateNoNoise:
                 tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
@@ -209,7 +211,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             offset1 = [yposn-np.floor(yposn), xposn-np.floor(xposn)]
             #tmp = makePsf(starSize, [psf2[0], psf2[1] + psf2_yvary[i]], theta2, offset=offset1)
             tmp = makePsf(psfSize=starSize, sigma=psftmp, theta=theta2, offset=offset1,
-                          x0=x0star, y0=y0star, type=psfType)
+                          x0=x0star, y0=y0star, psfType=psfType)
+            tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp *= flux
             offset2 = [xposn+imSize[0]//2, yposn+imSize[1]//2]
             tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
@@ -221,7 +224,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         else:
             #tmp = singleGaussian2d(x0im, y0im, xposn, yposn, psftmp[0], psftmp[1], theta=theta2)
             tmp = makePsf(psfSize=0, sigma=psftmp, theta=theta2, offset=[xposn, yposn], x0=x0im, y0=y0im,
-                          type=psfType)
+                          psfType=psfType)
+            tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp *= flux
             tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im2 += tmp
@@ -239,10 +243,10 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     if psfSize is None:
         psfSize = imSize
 
-    im1_psf = makePsf(psfSize, sigma=psf1, theta=theta1, type=psfType)
+    im1_psf = makePsf(psfSize, sigma=psf1, theta=theta1, psfType=psfType)
     #im2_psf = makePsf(psfSize, psf2, theta2, offset)
     # Don't include any astrometric "error" in the PSF, see how well the diffim algo. handles it.
-    im2_psf = makePsf(psfSize, sigma=psf2, theta=theta2, type=psfType)
+    im2_psf = makePsf(psfSize, sigma=psf2, theta=theta2, psfType=psfType)
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
     return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
 

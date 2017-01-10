@@ -5,6 +5,7 @@ try:
     import lsst.afw.math as afwMath
     import lsst.afw.geom as afwGeom
     import lsst.meas.algorithms as measAlg
+    from lsst.afw.detection import Psf
 except:
     pass
 
@@ -93,7 +94,9 @@ def arrayToAfwPsf(array):
     return psfNew
 
 
-def afwPsfToArray(psf, img=None, coord=None):
+# coord gives pixel coord of image at which to compute the PSF image (i.e., if it's spatially varying)
+# centroid gives a pixel coord to recenter the kernel image
+def afwPsfToArray(psf, img=None, coord=None, centroid=None):
     if coord is None and img is not None:
         bbox = img.getBBox()
         xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
@@ -104,7 +107,10 @@ def afwPsfToArray(psf, img=None, coord=None):
         xcen = ycen = 256.
     out = None
     try:
-        out = psf.computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
+        img = psf.computeImage(afwGeom.Point2D(xcen, ycen))
+        if centroid is not None:
+            img = Psf.recenterKernelImage(img, afwGeom.Point2D(centroid[0], centroid[1]))
+        out = img.getArray()
     except:
         pass
     return out
