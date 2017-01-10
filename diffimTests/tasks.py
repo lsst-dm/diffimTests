@@ -217,6 +217,6 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     psfDeterminer = config.psfDeterminer.apply()
     #print type(psfDeterminer)
     task = measurePsf.MeasurePsfTask(schema=schema, config=config)
-    task.log.setLevel(log_level)
+    #task.log.setLevel(log_level)
     result = task.run(exp, sources)
     return result

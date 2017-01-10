@@ -145,12 +145,27 @@ def loadPsf(filename, asArray=True, forceReMeasure=False):
     else:
         im = afwImage.ExposureF(filename)
         if im.getPsf() is None or forceReMeasure:
-            startSize = 6.0
+            startSize = 0.1
             if im.getPsf() is not None:
                 shape = afwPsfToShape(im.getPsf(), im)
                 startSize = shape.getDeterminantRadius() * 2.
-            res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize, spatialOrder=2)
-            psf = res.psf
+            res = None
+            try:
+                res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize, spatialOrder=2)
+            except:
+                pass
+            if res is None or res.psf.computeShape().getIxx() < 1.0:
+                try:
+                    res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize*10., spatialOrder=1)
+                except:
+                    pass
+            if res is None or res.psf.computeShape().getIxx() < 1.0:
+                try:
+                    res = doMeasurePsf(im, detectThresh=10.0, startSize=startSize*60., spatialOrder=1)
+                except:
+                    pass
+            if res is not None:
+                psf = res.psf
             source = 'measured'
         else:
             psf = im.getPsf()
