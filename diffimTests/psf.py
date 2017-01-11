@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats
+import scipy.ndimage.interpolation
 
 from .afw import afwPsfToArray
 
@@ -26,9 +27,9 @@ def makePsf(psfSize=22, sigma=[1., 1.], theta=0., offset=[0., 0.], x0=None, y0=N
             psf = moffat2d(x0, y0, offset[0], offset[1], width) # no elongation for this one
         elif psfType == 'kolmogorov':
             width = (sigma[0] + sigma[1]) / 2. * 2.35482
-            psf = kolmogorov2d(width)  # or this one.
+            psf = kolmogorov2d(width, [offset[0]+0.5, offset[1]+0.5])  # or this one.
     elif isinstance(psfType, Psf):
-        psf = afwPsfToArray(psfType, centroid=offset)
+        psf = afwPsfToArray(psfType)
     elif isinstance(psfType, np.ndarray):
         psf = psfType
 
@@ -44,6 +45,10 @@ def makePsf(psfSize=22, sigma=[1., 1.], theta=0., offset=[0., 0.], x0=None, y0=N
         psf = np.pad(psf, (((x0.shape[0]-psf.shape[0])//2, (x0.shape[0]-psf.shape[0])//2),
                            ((x0.shape[1]-psf.shape[1])//2, (x0.shape[1]-psf.shape[1])//2)),
                      mode='constant')
+
+    if isinstance(psfType, Psf) or isinstance(psfType, np.ndarray):
+        if np.abs(np.array(offset)).sum() > 0:
+            psf = scipy.ndimage.interpolation.shift(psf, [offset[0], offset[1]])  # spline interpolation for shift
 
     psfsum = psf.sum()
     if psfsum != 1.0:
@@ -115,7 +120,6 @@ def moffat2d(x, y, xc, yc, fwhm=1., alpha=4.765):
 
 def kolmogorov2d(fwhm=1.0, offset=[0., 0.]):
     import galsim
-    import scipy.ndimage.interpolation
     #gsp = galsim.GSParams(folding_threshold=1.0/512., maximum_fft_size=12288)
     psf = galsim.Kolmogorov(fwhm=fwhm*0.2, flux=1) #, gsparams=gsp)
     im = psf.drawImage(method='real_space', scale=0.2)
@@ -123,9 +127,9 @@ def kolmogorov2d(fwhm=1.0, offset=[0., 0.]):
     arr = im.image.array.reshape(bounds.getXMax(), bounds.getXMax())
     if np.abs(np.array(offset)).sum() > 0:
         arr = scipy.ndimage.interpolation.shift(arr, [offset[0], offset[1]])  # spline interpolation for shift
-    else:
+    #else:
         # For the PSF, need to offset by -0.5 in each direction, just because.
-        arr = scipy.ndimage.interpolation.shift(arr, [-0.5, -0.5])
+    #    arr = scipy.ndimage.interpolation.shift(arr, [-0.5, -0.5])
     arr /= arr.sum()
     return arr
 

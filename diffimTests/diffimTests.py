@@ -66,12 +66,16 @@ class DiffimTest(object):
             if centroidCoord is not None:
                 alIm = alIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
             stats = computeClippedImageStats(alIm)
+            print 'A&L(dec):', stats
             alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
             stats = computeClippedImageStats(self.D_ZOGY.im)
+            print 'ZOGY:', stats
             zIm = self.D_ZOGY.im
             if centroidCoord is not None:
                 zIm = zIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
             zIm = (zIm - stats[0]) / stats[1]
+            stats = computeClippedImageStats(alIm - zIm)
+            print 'A&L(dec) - ZOGY:', stats
             imagesToPlot.append(alIm - zIm)
         if self.ALres is not None:
             titles.append('A&L(dec) - A&L')  # Plot difference of diffims
