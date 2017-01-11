@@ -17,6 +17,7 @@ def makePsf(psfSize=22, sigma=[1., 1.], theta=0., offset=[0., 0.], x0=None, y0=N
         y = x.copy()
         y0, x0 = np.meshgrid(x, y)
     psf = None
+    psfFromFile = False
     if isinstance(psfType, str):
         if psfType == 'gaussian':
             psf = singleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
@@ -24,13 +25,20 @@ def makePsf(psfSize=22, sigma=[1., 1.], theta=0., offset=[0., 0.], x0=None, y0=N
             psf = doubleGaussian2d(x0, y0, offset[0], offset[1], sigma[0], sigma[1], theta=theta)
         elif psfType == 'moffat':
             width = (sigma[0] + sigma[1]) / 2. * 2.35482
-            psf = moffat2d(x0, y0, offset[0], offset[1], width) # no elongation for this one
+            psf = moffat2d(x0, y0, offset[0], offset[1], width)  # no elongation for this one
         elif psfType == 'kolmogorov':
             width = (sigma[0] + sigma[1]) / 2. * 2.35482
             psf = kolmogorov2d(width, [offset[0]+0.5, offset[1]+0.5])  # or this one.
-    elif isinstance(psfType, Psf):
+        else:  # Try to load psf from psfLib, assuming psfType is a filename
+            psf, source = loadPsf(psfType, asArray=False)
+            if psf is not None:
+                psfFromFile = True
+                psf = afwPsfToArray(psf)
+
+    elif isinstance(psfType, Psf):  # An actual afwDet.Psf.
         psf = afwPsfToArray(psfType)
-    elif isinstance(psfType, np.ndarray):
+
+    elif isinstance(psfType, np.ndarray):  # A numpy array
         psf = psfType
 
     if psf.shape[0] == x0.shape[0] and psf.shape[1] == x0.shape[1]:
@@ -46,7 +54,7 @@ def makePsf(psfSize=22, sigma=[1., 1.], theta=0., offset=[0., 0.], x0=None, y0=N
                            ((x0.shape[1]-psf.shape[1])//2, (x0.shape[1]-psf.shape[1])//2)),
                      mode='constant')
 
-    if isinstance(psfType, Psf) or isinstance(psfType, np.ndarray):
+    if isinstance(psfType, Psf) or isinstance(psfType, np.ndarray) or psfFromFile:
         if np.abs(np.array(offset)).sum() > 0:
             psf = scipy.ndimage.interpolation.shift(psf, [offset[0], offset[1]])  # spline interpolation for shift
 
@@ -153,12 +161,13 @@ def loadPsf(filename, asArray=True, forceReMeasure=False):
 
     PSFLIBDIR = './psfLib/'
     source = None
+    psf = None
 
     cacheName = PSFLIBDIR + os.path.basename(filename).replace('.fits', '_psf.fits')
     if os.path.exists(cacheName) and not forceReMeasure:
         psf = afwDet.Psf.readFits(cacheName)
         source = 'cached'
-    else:
+    elif os.path.exists(filename):
         im = afwImage.ExposureF(filename)
         if im.getPsf() is None or forceReMeasure:
             startSize = 0.1
@@ -187,14 +196,14 @@ def loadPsf(filename, asArray=True, forceReMeasure=False):
             psf = im.getPsf()
             source = 'loaded from image'
 
-    if not os.path.exists(cacheName) or forceReMeasure:
+    if psf is not None and not os.path.exists(cacheName) or forceReMeasure:
         try:
             os.mkdir(PSFLIBDIR)
         except Exception as e:
             pass
         psf.writeFits(cacheName)
 
-    if asArray:
+    if asArray and psf is not None:
         psf = afwPsfToArray(psf, im)
 
     return psf, source
