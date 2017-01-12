@@ -73,3 +73,17 @@ def computePixelCovariance(diffim, diffim2=None):
     np.fill_diagonal(tmp2, np.NaN)
     stat = np.nansum(tmp2)/np.sum(np.diag(out))  # print sum of off-diag / sum of diag
     return out, stat
+
+
+import functools
+
+def memoize(obj):
+    cache = obj.cache = {}
+
+    @functools.wraps(obj)
+    def memoizer(*args, **kwargs):
+        key = str(args) + str(kwargs)
+        if key not in cache:
+            cache[key] = obj(*args, **kwargs)
+        return cache[key]
+    return memoizer

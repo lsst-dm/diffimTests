@@ -32,10 +32,19 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    theta1=0., theta2=-45., psfType='gaussian', offset=[0., 0.], randAstromVariance=0.,
                    psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(750, 50), im2background=0.,
                    n_sources=1500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(250, 60000),
-                   variablesNearCenter=False, avoidBorder=30, avoidAllOverlaps=0.,
+                   variablesNearCenter=False, avoidBorder=1.1, avoidAllOverlaps=0.,
                    sourceFluxDistrib='exponential', psfSize=21, seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
+
+    if not hasattr(sky, "__len__"):
+        sky = [sky, sky]
+    if not hasattr(psf1, "__len__"):
+        psf1 = [psf1, psf1]
+    if not hasattr(psf2, "__len__"):
+        psf2 = [psf2, psf2]
+    if not hasattr(offset, "__len__"):
+        offset = [offset, offset]
 
     # Input PSF is in sigmas, in units of pixels.
     # For LSST, avg. seeing is ~0.7" or ~3.5 pixels (FWHM), or for sigma is 3.5/2.35482 = 1.48.
@@ -78,8 +87,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
     # Place the stars
     border = 2  #5
-    if avoidBorder > border: # number of pixels to avoid putting sources near image boundary
-        border = avoidBorder
+    if avoidBorder * psfSize > border: # number of pixels to avoid putting sources near image boundary
+        border = int(avoidBorder * psfSize)
     if avoidAllOverlaps == 0.:  # Don't care where stars go, just add them randomly.
         xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
         yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
@@ -146,7 +155,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         astromNoiseX = np.random.normal(0., randAstromVariance, len(fluxes))
         astromNoiseY = np.random.normal(0., randAstromVariance, len(fluxes))
 
-    starSize = 22  # make stars using "psf's" of this size (instead of whole image)
+    starSize = psfSize + 1  # make stars using "psf's" of this size (instead of whole image)
     xstar = np.arange(-starSize+1, starSize, 1)
     ystar = xstar.copy()
     y0star, x0star = np.meshgrid(xstar, ystar)
@@ -170,10 +179,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             nDidFast += 1
             offset1 = [yposns[i]-np.floor(yposns[i]),
                        xposns[i]-np.floor(xposns[i])]
-            tmp = makePsf(psfSize=starSize, sigma=psf1, theta=theta1, offset=offset1, x0=x0star, y0=y0star,
-                          psfType=psfType[0])
-            #tmp = makePsf(psfSize=starSize, sigma=psf1, theta=theta1, offset=offset1)
-            tmp *= flux
+            tmp = flux * makePsf(psfType=psfType[0], sigma=psf1, theta=theta1, offset=offset1,
+                                 x0=x0star, y0=y0star, psfSize=starSize)
             offset2 = [xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2]
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             if not templateNoNoise:
@@ -184,10 +191,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                 var_im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
                         (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
         else:
-            #tmp = singleGaussian2d(x0im, y0im, xposns[i], yposns[i], psf1[0], psf1[1], theta=theta1)
-            tmp = makePsf(0., sigma=psf1, theta=theta1, offset=[xposns[i], yposns[i]], x0=x0im, y=y0im,
-                          psfType=psfType[0])
-            tmp *= flux
+            tmp = flux * makePsf(psfType=psfType[0], sigma=psf1, theta=theta1,
+                                 offset=[xposns[i], yposns[i]], x0=x0im, y0=y0im, psfSize=0)
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             if not templateNoNoise:
                 tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
@@ -213,10 +218,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
            xposn < imSize[0]//2 - starSize and yposn < imSize[1]//2 - starSize:
             nDidFast += 1
             offset1 = [yposn-np.floor(yposn), xposn-np.floor(xposn)]
-            #tmp = makePsf(starSize, [psf2[0], psf2[1] + psf2_yvary[i]], theta2, offset=offset1)
-            tmp = makePsf(psfSize=starSize, sigma=psftmp, theta=theta2, offset=offset1,
-                          x0=x0star, y0=y0star, psfType=psfType[1])
-            tmp *= flux
+            tmp = flux * makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2,
+                                 offset=offset1, x0=x0star, y0=y0star, psfSize=starSize)
             offset2 = [xposn+imSize[0]//2, yposn+imSize[1]//2]
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
@@ -226,10 +229,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                 var_im2[(offset2[1]-starSize+1):(offset2[1]+starSize),
                         (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
         else:
-            #tmp = singleGaussian2d(x0im, y0im, xposn, yposn, psftmp[0], psftmp[1], theta=theta2)
-            tmp = makePsf(psfSize=0, sigma=psftmp, theta=theta2, offset=[xposn, yposn], x0=x0im, y0=y0im,
-                          psfType=psfType[1])
-            tmp *= flux
+            tmp = flux * makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2,
+                                 offset=[xposn, yposn], x0=x0im, y0=y0im, psfSize=0)
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im2 += tmp
@@ -247,10 +248,10 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     if psfSize is None:
         psfSize = imSize
 
-    im1_psf = makePsf(psfSize, sigma=psf1, theta=theta1, psfType=psfType[0])
+    im1_psf = makePsf(psfType=psfType[0], sigma=psf1, theta=theta1, psfSize=psfSize)
     #im2_psf = makePsf(psfSize, psf2, theta2, offset)
     # Don't include any astrometric "error" in the PSF, see how well the diffim algo. handles it.
-    im2_psf = makePsf(psfSize, sigma=psf2, theta=theta2, psfType=psfType[1])
+    im2_psf = makePsf(psfType=psfType[1], sigma=psf2, theta=theta2, psfSize=psfSize)
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
     return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
 

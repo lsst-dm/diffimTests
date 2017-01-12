@@ -79,7 +79,7 @@ def doConvolve(exposure, kernel, use_scipy=False):
 
 
 def arrayToAfwKernel(array):
-    kernelImg = afwImage.ImageD(array.shape[0], array.shape[1])
+    kernelImg = afwImage.ImageD(array.shape[1], array.shape[0])
     kernelImg.getArray()[:, :] = array
     kern = afwMath.FixedKernel(kernelImg)
     maxloc = np.unravel_index(np.argmax(array), array.shape)

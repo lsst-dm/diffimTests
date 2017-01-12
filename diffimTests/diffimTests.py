@@ -262,7 +262,7 @@ class DiffimTest(object):
                 pass
 
         # Compare detections to input sources and get true positives and false negatives
-        changedCentroid = self.getCentroidsCatalog(transientsOnly=False)
+        changedCentroid = self.getCentroidsCatalog(transientsOnly=True)
 
         import lsst.afw.table as afwTable
         detections = matchCat = {}
@@ -414,7 +414,7 @@ class DiffimTest(object):
                 plt.scatter(srces, snrCalced, color='k', alpha=alpha-0.2, s=7, label='Input SNR')
             else:
                 plt.plot(srces, snrCalced, color='k', alpha=alpha-0.2, label='Input SNR')
-            plt.scatter([10000], [10], s=20, edgecolors='r', facecolors='none', marker='o', label='Detected')
+            plt.scatter([10000], [10], s=30, edgecolors='r', facecolors='none', marker='o', label='Detected')
             plt.legend(loc='upper left', scatterpoints=3)
             if not xaxisIsScienceForcedPhot:
                 plt.xlabel('input flux')

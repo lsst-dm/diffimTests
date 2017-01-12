@@ -23,7 +23,8 @@ def zscale_image(input_img, contrast=0.25):
 
 
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
-                  cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r', 'y'], **kwds):
+                  cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r', 'y'],
+                  same_zscale=True, **kwds):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
@@ -57,6 +58,9 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
                       cbar_location="right", cbar_mode="single", cbar_size='3%')
     extentWasNone = False
     clim_orig = clim
+
+    imagesToPlot = []
+
     for i in range(len(images)):
         ii = images[i]
         if hasattr(ii, 'computeImage'):
@@ -78,6 +82,17 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
             ii = ii.getArray()
         if extent is not None and not extentWasNone:
             ii = ii[extent[0]:extent[1], extent[2]:extent[3]]
+
+        imagesToPlot.append(ii)
+
+    if clim_orig is None and same_zscale:
+        tmp_im = [ii.flatten() for ii in imagesToPlot]
+        tmp_im = np.concatenate(tmp_im)
+        clim = zscale_image(tmp_im)
+        del tmp_im
+
+    for i in range(len(imagesToPlot)):
+        ii = imagesToPlot[i]
         if clim_orig is None:
             clim = zscale_image(ii)
         if cbar and clim_orig is not None:
