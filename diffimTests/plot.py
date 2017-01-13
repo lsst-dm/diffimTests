@@ -86,7 +86,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
         imagesToPlot.append(ii)
 
     if clim_orig is None and same_zscale:
-        tmp_im = [ii.flatten() for ii in imagesToPlot]
+        tmp_im = [iii.flatten() for iii in imagesToPlot]
         tmp_im = np.concatenate(tmp_im)
         clim = zscale_image(tmp_im)
         del tmp_im

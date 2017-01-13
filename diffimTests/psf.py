@@ -152,6 +152,7 @@ def moffat2d(x, y, xc, yc, fwhm=1., alpha=4.765):
     gamma = fwhm / (2. * np.sqrt(2**(1./alpha) - 1))
     rr_gg = ((x - xc)**2. + (y - yc)**2.) / gamma**2.
     out = (1 + rr_gg)**(-alpha)
+    #print gamma, alpha
     out /= out.sum()
     return out
 
@@ -173,11 +174,11 @@ def kolmogorov2d(fwhm=1.0, xoffset=0., yoffset=0.):
     return arr
 
 
-def computeMoments(psf):
+def computeMoments(psf, p=1.):
     xgrid, ygrid = np.meshgrid(np.arange(-psf.shape[0]//2.+1, psf.shape[0]//2.+1),
                                np.arange(-psf.shape[1]//2.+1, psf.shape[1]//2.+1))
-    xmoment = np.average(xgrid, weights=psf.T)
-    ymoment = np.average(ygrid, weights=psf.T)
+    xmoment = np.average(xgrid**p, weights=psf.T**p)
+    ymoment = np.average(ygrid**p, weights=psf.T**p)
     return xmoment, ymoment
 
 

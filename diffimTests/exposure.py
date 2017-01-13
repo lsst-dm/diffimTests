@@ -2,6 +2,7 @@ import numpy as np
 
 from .utils import computeClippedImageStats
 from .tasks import doDetection, doForcedPhotometry, doMeasurePsf
+from .psf import computeMoments
 
 class Exposure(object):
     def __init__(self, im, psf=None, var=None, metaData=None):
@@ -21,9 +22,17 @@ class Exposure(object):
         psf = self.psf
         sky = self.sig**2.
 
-        psf = psf / psf.max()
-        nPix = np.sum(psf) * 2.  # not sure where the 2 comes from but it works.
+        #nPix = np.sum(psf / psf.max()) * 2.  # not sure where the 2 comes from but it works for Gaussian PSFs
         #print nPix, np.pi*1.8*2.2*4  # and it equals pi*r1*r2*4.
+
+        xgrid, ygrid = np.meshgrid(np.arange(-psf.shape[0]//2.+1, psf.shape[0]//2.+1),
+                                   np.arange(-psf.shape[1]//2.+1, psf.shape[1]//2.+1))
+        reffsquared = np.sum((xgrid + ygrid)**2. * psf)
+        nPix = np.pi * reffsquared * 2.  # again, why the two? This is equal to the above for Gaussian PSFs
+
+        #moments = computeMoments(psf, p=2.)
+        #nPix = np.pi * moments[0] * moments[1] * 4.
+
         out = flux / (np.sqrt(flux + nPix * sky))
         if skyLimited:  #  only sky noise matters
             out = flux / (np.sqrt(nPix * sky))

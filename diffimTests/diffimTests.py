@@ -310,7 +310,7 @@ class DiffimTest(object):
     # Can just return the dataframe without plotting if desired.
     def doPlotWithDetectionsHighlighted(self, transientsOnly=True, addPresub=False,
                                         xaxisIsScienceForcedPhot=False, alpha=0.5,
-                                        divideByInput=True, actuallyPlot=True):
+                                        divideByInput=True, actuallyPlot=True, skyLimited=True):
 
         import lsst.afw.table as afwTable
         import lsst.daf.base as dafBase
@@ -346,7 +346,7 @@ class DiffimTest(object):
         df['inputCentroid_x'] = sources['centroid_x']
         df['inputCentroid_y'] = sources['centroid_y']
 
-        snrCalced = self.im2.calcSNR(sources['inputFlux_science'], skyLimited=True)
+        snrCalced = self.im2.calcSNR(sources['inputFlux_science'], skyLimited=skyLimited)
         df['inputSNR'] = snrCalced
 
         fp_DIFFIM = [fp_ZOGY, fp_AL, fp_ALd]
