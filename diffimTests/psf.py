@@ -53,8 +53,8 @@ def makePsf(psfType='gaussian', sigma=[1., 1.], theta=0., offset=[0., 0.], x0=No
     if applyScalingRotation:
         if sigma[0] != sigma[1]:
             psf = scipy.ndimage.interpolation.zoom(psf, [sigma[0]/width, sigma[1]/width])
-        if theta != 0.:
-            psf = scipy.ndimage.interpolation.rotate(psf, theta)
+            if theta != 0.:
+                psf = scipy.ndimage.interpolation.rotate(psf, theta)
 
     # Apply the shift
     #if isinstance(psfType, Psf) or isinstance(psfType, np.ndarray) or psfFromFile:

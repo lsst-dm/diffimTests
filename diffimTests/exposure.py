@@ -3,6 +3,7 @@ import numpy as np
 from .utils import computeClippedImageStats
 from .tasks import doDetection, doForcedPhotometry, doMeasurePsf
 from .psf import computeMoments
+from .afw import arrayToAfwPsf
 
 class Exposure(object):
     def __init__(self, im, psf=None, var=None, metaData=None):
@@ -22,16 +23,32 @@ class Exposure(object):
         psf = self.psf
         sky = self.sig**2.
 
-        #nPix = np.sum(psf / psf.max()) * 2.  # not sure where the 2 comes from but it works for Gaussian PSFs
-        #print nPix, np.pi*1.8*2.2*4  # and it equals pi*r1*r2*4.
+        if True:  # Try #1 -- works for Gaussian PSFs
+            nPix = np.sum(psf / psf.max()) * 2.  # not sure where the 2 comes from but it works for Gaussian PSFs
+            #print nPix, np.pi*2.1*2.1*4  # and it equals pi*r1*r2*4.
 
-        xgrid, ygrid = np.meshgrid(np.arange(-psf.shape[0]//2.+1, psf.shape[0]//2.+1),
-                                   np.arange(-psf.shape[1]//2.+1, psf.shape[1]//2.+1))
-        reffsquared = np.sum((xgrid + ygrid)**2. * psf)
-        nPix = np.pi * reffsquared * 2.  # again, why the two? This is equal to the above for Gaussian PSFs
+        if False:  # Try #2 -- also works for Gaussian PSFs
+            xgrid, ygrid = np.meshgrid(np.arange(-psf.shape[0]//2.+1, psf.shape[0]//2.+1),
+                                       np.arange(-psf.shape[1]//2.+1, psf.shape[1]//2.+1))
+            reffsquared = np.sum((xgrid + ygrid)**2. * psf)
+            nPix = np.pi * reffsquared * 2.  # again, why the two? This is equal to the above for Gaussian PSFs
+            #print nPix
 
-        #moments = computeMoments(psf, p=2.)
-        #nPix = np.pi * moments[0] * moments[1] * 4.
+        if True:  # Try #3 -- same
+            moments = computeMoments(psf, p=2.)
+            nPix = np.pi * moments[0] * moments[1] * 4.
+            #print nPix
+
+        if False:
+            # Try #4 -- Surprisingly, the below does exactly the same as the 3 tries above for Gaussian PSFs, but
+            # different values for (e.g.) Moffat.
+            shape = arrayToAfwPsf(psf).computeShape()
+            A = shape.getIxx() + shape.getIyy()
+            B = np.sqrt((shape.getIxx() - shape.getIyy())**2. + 4. * shape.getIxy()**2.)
+            Rmaj = np.sqrt((A + B) / 2.)
+            Rmin = np.sqrt((A - B) / 2.)
+            nPix = np.pi * Rmaj * Rmin * 4.  # Note this is the same as shape.getArea() * 4.
+            #print nPix
 
         out = flux / (np.sqrt(flux + nPix * sky))
         if skyLimited:  #  only sky noise matters
