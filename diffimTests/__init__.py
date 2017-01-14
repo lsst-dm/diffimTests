@@ -43,6 +43,7 @@ from .exposure import *
 from .diffimTests import *
 from .catalog import *
 from .plot import *
+from . import multi
 #from . import afw
 #from . import tasks
 #from . import psf
