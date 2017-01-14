@@ -24,8 +24,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=1000, **kwargs):
     templateNoNoise = kwargs.get('templateNoNoise', True)
     skyLimited = kwargs.get('skyLimited', True)
 
-    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2,
-                         varFlux2=np.repeat(flux, n_varSources),
+    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=np.repeat(flux, n_varSources),
                          n_sources=n_sources, sourceFluxRange=(200, 20000),
                          templateNoNoise=templateNoNoise, skyLimited=skyLimited, avoidAllOverlaps=15.,
                          seed=seed)
@@ -37,11 +36,11 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=1000, **kwargs):
 
 
 # Using flux=600 for SNR=5 (see cell #4 of notebook '30. 4a. other psf models-real PSFs')
-def runMultiDiffimTests(varSourceFlux=600., n_runs=100):
+def runMultiDiffimTests(varSourceFlux=600., n_runs=100, **kwargs):
     inputs = [(f, seed) for f in [varSourceFlux] for seed in np.arange(66, 66+n_runs, 1)]
     print 'RUNNING:', len(inputs)
     num_cores = getNumCores()
-    testResults = Parallel(n_jobs=num_cores, verbose=2)(delayed(runTest)(flux=i[0], seed=i[1])
+    testResults = Parallel(n_jobs=num_cores, verbose=2)(delayed(runTest)(flux=i[0], seed=i[1], **kwargs)
                                                         for i in inputs)
     return testResults
 
