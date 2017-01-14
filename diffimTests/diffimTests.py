@@ -28,6 +28,9 @@ class DiffimTest(object):
             self.im2 = Exposure(im2, P_n, im2_var)
             self.im2.setMetaData('sky', kwargs.get('sky', 300.))
 
+            self.psf1_orig = self.im1.psf
+            self.psf2_orig = self.im2.psf
+
             self.astrometricOffsets = kwargs.get('offset', [0, 0])
             try:
                 dx, dy = self.computeAstrometricOffsets(threshold=2.5)  # dont make this threshold smaller!
@@ -104,6 +107,7 @@ class DiffimTest(object):
     # on im2-im1.
     def reverseImages(self):
         self.im1, self.im2 = self.im2, self.im1
+        self.psf1_orig, self.psf2_orig = self.psf2_orig, self.psf1_orig
         self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
 
     def clone(self):
@@ -210,6 +214,14 @@ class DiffimTest(object):
                              spatialKernelOrder=spatialKernelOrder)
 
         return result
+
+    def doReMeasurePsfs(self, whichImages=[1, 2]):
+        self.psf1_orig = self.im1.psf
+        self.psf2_orig = self.im2.psf
+        if 1 in whichImages:
+            self.im1.doMeasurePsf(self.im1.asAfwExposure())
+        if 2 in whichImages:
+            self.im2.doMeasurePsf(self.im2.asAfwExposure())
 
     def reset(self):
         self.ALres = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
