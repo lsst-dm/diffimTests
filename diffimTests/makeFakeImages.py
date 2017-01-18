@@ -30,7 +30,7 @@ __all__ = ['makeFakeImages']
 
 def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1.8, 2.2],
                    theta1=0., theta2=-45., psfType='gaussian', offset=[0., 0.], randAstromVariance=0.,
-                   psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(750, 50), im2background=0.,
+                   psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(620, 10), im2background=0.,
                    n_sources=1500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(250, 60000),
                    variablesNearCenter=False, avoidBorder=1.1, avoidAllOverlaps=0.,
                    sourceFluxDistrib='exponential', psfSize=21, seed=66, fast=True, verbose=False):
@@ -181,7 +181,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                        xposns[i]-np.floor(xposns[i])]
             tmp = flux * makePsf(psfType=psfType[0], sigma=psf1, theta=theta1, offset=offset1,
                                  x0=x0star, y0=y0star, psfSize=starSize)
-            offset2 = [xposns[i]+imSize[0]//2, yposns[i]+imSize[1]//2]
+            offset2 = [int(xposns[i]+imSize[0]//2), int(yposns[i]+imSize[1]//2)]
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             if not templateNoNoise:
                 tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
@@ -220,7 +220,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             offset1 = [yposn-np.floor(yposn), xposn-np.floor(xposn)]
             tmp = flux * makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2,
                                  offset=offset1, x0=x0star, y0=y0star, psfSize=starSize)
-            offset2 = [xposn+imSize[0]//2, yposn+imSize[1]//2]
+            offset2 = [int(xposn+imSize[0]//2), int(yposn+imSize[1]//2)]
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im2[(offset2[1]-starSize+1):(offset2[1]+starSize),

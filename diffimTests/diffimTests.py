@@ -338,7 +338,7 @@ class DiffimTest(object):
         res = self.runTest(zogyImageSpace=True, returnSources=True, matchDist=np.sqrt(1.5))
         src = res['sources']
         del res['sources']
-        print res
+        #print res
 
         cats = self.doForcedPhot(transientsOnly=transientsOnly)
         sources, fp1, fp2, fp_ZOGY, fp_AL, fp_ALd = cats
@@ -379,31 +379,35 @@ class DiffimTest(object):
                 #            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
                 #            color='k', marker='x', alpha=alpha, label=None)
 
+            matchDist = np.sqrt(1.5)
+            fp_ZOGY_detected = catalogToDF(fp_d)
+            detected = []
             if not xaxisIsScienceForcedPhot:
-                matches = afwTable.matchXy(sources, src[label[i]], 1.0)
-                metadata = dafBase.PropertyList()
-                matchCat = catMatch.matchesToCatalog(matches, metadata)
+                matches = afwTable.matchXy(sources, src[label[i]], matchDist)
                 sources_detected = catalogToDF(sources)
-                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
-                sources_detected = sources_detected[detected]
-                sources_detected = sources_detected['inputFlux_science']
-                fp_ZOGY_detected = catalogToDF(fp_d)
-                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
-                fp_ZOGY_detected = fp_ZOGY_detected[detected]
+                if len(matches) > 0:
+                    metadata = dafBase.PropertyList()
+                    matchCat = catMatch.matchesToCatalog(matches, metadata)
+                    detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
+                    detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
+                else:
+                    detected = np.repeat(False, len(sources))
+                sources_detected = sources_detected[detected]['inputFlux_science']
             else:
-                matches = afwTable.matchXy(fp2, src[label[i]], 1.0)
-                metadata = dafBase.PropertyList()
-                matchCat = catMatch.matchesToCatalog(matches, metadata)
+                matches = afwTable.matchXy(fp2, src[label[i]], matchDist)
                 sources_detected = catalogToDF(fp2)
-                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
-                sources_detected = sources_detected[detected]
-                sources_detected = sources_detected['base_PsfFlux_flux']
-                fp_ZOGY_detected = catalogToDF(fp_d)
-                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
-                fp_ZOGY_detected = fp_ZOGY_detected[detected]
+                if len(matches) > 0:
+                    metadata = dafBase.PropertyList()
+                    matchCat = catMatch.matchesToCatalog(matches, metadata)
+                    detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
+                    detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
+                else:
+                    detected = np.repeat(False, len(fp2))
+                sources_detected = sources_detected[detected]['base_PsfFlux_flux']
+            fp_ZOGY_detected = fp_ZOGY_detected[detected]
 
             df[label[i] + '_detected'] = detected
-            if actuallyPlot:
+            if actuallyPlot and len(detected) > 0:
                 mStyle = matplotlib.markers.MarkerStyle('o', 'none')
                 plt.scatter(sources_detected,
                             fp_ZOGY_detected['base_PsfFlux_flux']/fp_ZOGY_detected['base_PsfFlux_fluxSigma'],
@@ -426,7 +430,8 @@ class DiffimTest(object):
                 plt.scatter(srces, snrCalced, color='k', alpha=alpha-0.2, s=7, label='Input SNR')
             else:
                 plt.plot(srces, snrCalced, color='k', alpha=alpha-0.2, label='Input SNR')
-            plt.scatter([10000], [10], s=30, edgecolors='r', facecolors='none', marker='o', label='Detected')
+            if len(detected) > 0:
+                plt.scatter([10000], [10], s=30, edgecolors='r', facecolors='none', marker='o', label='Detected')
             plt.legend(loc='upper left', scatterpoints=3)
             if not xaxisIsScienceForcedPhot:
                 plt.xlabel('input flux')
@@ -434,4 +439,4 @@ class DiffimTest(object):
                 plt.xlabel('science flux (measured)')
             plt.ylabel('measured SNR')
 
-        return df
+        return res, df
