@@ -101,6 +101,12 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
 
     res['flux'] = flux
     res['df'] = df
+    res['sky'] = sky
+    res['n_varSources'] = n_varSources
+    res['n_sources'] = n_sources
+    res['templateNoNoise'] = templateNoNoise
+    res['skyLimited'] = skyLimited
+    res['seed'] = seed
 
     if remeasurePsfs[0] or remeasurePsfs[1]:
         out = {'psf1': psf1, 'psf2': psf2,
@@ -180,6 +186,7 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True):
         axes[1].set_title(title)
         legend = axes[1].legend(loc='upper left', shadow=True)
 
+    return TP, FP, FN
 
 def plotSnrResults(tr, title='', doPrint=True):
     import pandas as pd
