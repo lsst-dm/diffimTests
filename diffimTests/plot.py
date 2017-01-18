@@ -209,3 +209,18 @@ def mosaicDIASources(repo_dir, visitid, ccdnum=10, cutout_size=30,
         #if is_dipole:
         #print(source_n, source_id)
         plt.ylabel(str(source_n) + dipoleLabel)
+
+
+class PdfPages(object):
+    def __init__(self, filename, **kwargs):
+        from matplotlib.backends.backend_pdf import PdfPages as pdfp
+        self.filename = filename
+        self.pdf = pdfp(filename)
+
+    def next(self):
+        import matplotlib.pyplot as plt
+        self.pdf.savefig()
+        plt.close()
+
+    def close(self):
+        self.pdf.close()
