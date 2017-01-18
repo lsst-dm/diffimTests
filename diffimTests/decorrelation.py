@@ -24,7 +24,8 @@ def computeDecorrelationKernel(kappa, tvar=0.04, svar=0.04, preConvKernel=None, 
         pc = fixOddKernel(preConvKernel)
         pcft = numpy.fft.fft2(pc)
 
-    kft = np.sqrt((svar + tvar + delta) / (svar * np.abs(pcft)**2 + tvar * np.abs(kft)**2 + delta))
+    print 'HERE:', tvar, svar
+    kft = np.sqrt((tvar + svar + delta) / (tvar * np.abs(pcft)**2 + svar * np.abs(kft)**2 + delta))
     #if preConvKernel is not None:
     #    kft = numpy.fft.fftshift(kft)  # I can't figure out why we need to fftshift sometimes but not others.
     pck = numpy.fft.ifft2(kft)

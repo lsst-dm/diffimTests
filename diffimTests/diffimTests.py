@@ -380,31 +380,28 @@ class DiffimTest(object):
                 #            color='k', marker='x', alpha=alpha, label=None)
 
             matchDist = np.sqrt(1.5)
-            fp_ZOGY_detected = catalogToDF(fp_d)
-            detected = []
             if not xaxisIsScienceForcedPhot:
                 matches = afwTable.matchXy(sources, src[label[i]], matchDist)
+                metadata = dafBase.PropertyList()
+                matchCat = catMatch.matchesToCatalog(matches, metadata)
                 sources_detected = catalogToDF(sources)
-                if len(matches) > 0:
-                    metadata = dafBase.PropertyList()
-                    matchCat = catMatch.matchesToCatalog(matches, metadata)
-                    detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
-                    detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
-                else:
-                    detected = np.repeat(False, len(sources))
-                sources_detected = sources_detected[detected]['inputFlux_science']
+                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
+                sources_detected = sources_detected[detected]
+                sources_detected = sources_detected['inputFlux_science']
+                fp_ZOGY_detected = catalogToDF(fp_d)
+                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
+                fp_ZOGY_detected = fp_ZOGY_detected[detected]
             else:
                 matches = afwTable.matchXy(fp2, src[label[i]], matchDist)
+                metadata = dafBase.PropertyList()
+                matchCat = catMatch.matchesToCatalog(matches, metadata)
                 sources_detected = catalogToDF(fp2)
-                if len(matches) > 0:
-                    metadata = dafBase.PropertyList()
-                    matchCat = catMatch.matchesToCatalog(matches, metadata)
-                    detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
-                    detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
-                else:
-                    detected = np.repeat(False, len(fp2))
-                sources_detected = sources_detected[detected]['base_PsfFlux_flux']
-            fp_ZOGY_detected = fp_ZOGY_detected[detected]
+                detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
+                sources_detected = sources_detected[detected]
+                sources_detected = sources_detected['base_PsfFlux_flux']
+                fp_ZOGY_detected = catalogToDF(fp_d)
+                detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
+                fp_ZOGY_detected = fp_ZOGY_detected[detected]
 
             df[label[i] + '_detected'] = detected
             if actuallyPlot and len(detected) > 0:
@@ -414,7 +411,7 @@ class DiffimTest(object):
                             #label=label[i], s=20, color=color[i], alpha=alpha) #, edgecolors='r')
                             label=None, s=30, edgecolors=color[i], facecolors='none', marker='o', alpha=1.0)
 
-        if addPresub: # Add measurements in original science and template images
+        if addPresub:  # Add measurements in original science and template images
             df['templateSNR'] = fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma']
             df['scienceSNR'] = fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma']
             if actuallyPlot:

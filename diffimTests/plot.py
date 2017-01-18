@@ -97,8 +97,10 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
             clim = zscale_image(ii)
         if cbar and clim_orig is not None:
             ii = np.clip(ii, clim[0], clim[1])
-        if clim[0] == clim[1]:
+        if np.isclose(clim[0], clim[1]):
             clim = (clim[0], clim[1] + clim[0] / 10.)  # in case there's nothing in the image
+        if np.isclose(clim[0], clim[1]):
+            clim = (clim[0] - 0.1, clim[1] + 0.1)  # in case there's nothing in the image
         im = igrid[i].imshow(ii, origin='lower', interpolation=interpolation, cmap=cmap,
                              extent=extent, clim=clim, **kwds)
         if cbar:

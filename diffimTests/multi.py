@@ -29,7 +29,8 @@ def computeNormedPsfRms(psf1, psf2):
     return rms1weighted
 
 
-def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False, False], **kwargs):
+def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False, False],
+            returnObj=False, **kwargs):
     sky = kwargs.get('sky', 300.)
     psf1 = kwargs.get('psf1', [1.6, 1.6])
     psf2 = kwargs.get('psf2', [1.8, 2.2])
@@ -82,8 +83,6 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         except Exception as e:
             psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = None
 
-
-
     # This function below is set to *not* plot but it runs `runTest` and outputs the `runTest` results
     # and a dataframe with forced photometry results. So we use this instead of `runTest` directly.
     # Note `addPresub=True` may not always be necessary and will slow it down a bit.
@@ -121,6 +120,8 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         for key in out.keys():
             res[key] = out[key]
 
+    if returnObj:
+        res['obj'] = testObj
     return res
 
 
@@ -135,7 +136,7 @@ def runMultiDiffimTests(varSourceFlux=620., n_runs=100, num_cores=None, **kwargs
     return testResults
 
 
-def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True):
+def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuallyPlot=True):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
@@ -157,6 +158,9 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True):
         print 'FN:', '\n', FN.mean()
         print 'FP:', '\n', FP.mean()
         print 'TP:', '\n', TP.mean()
+
+    if not actuallyPlot:
+        return TP, FP, FN
 
     matplotlib.rcParams['figure.figsize'] = (18.0, 6.0)
     fig, axes = plt.subplots(nrows=1, ncols=2)
@@ -246,7 +250,4 @@ def plotSnrResults(tr, title='', doPrint=True):
     g.set_xticklabels(g.get_xticklabels(), rotation=60)
     plt.title(title)
 
-    #plt.figure(4)
-    #plt.subplot(224)
-    #plt.scatter([1], [1])
-
+    return df

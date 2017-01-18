@@ -111,7 +111,7 @@ def afwPsfToArray(psf, img=None, coord=None, centroid=None):
         if centroid is not None:
             img = Psf.recenterKernelImage(img, afwGeom.Point2D(centroid[0], centroid[1]))
         out = img.getArray()
-    except:
+    except:  # Maybe it's a psf matching kernel -- use alPsfMatchingKernelToArray
         pass
     return out
 
@@ -153,6 +153,7 @@ def computeVarianceMean(exposure, actuallyDoImage=False, statToDo=afwMath.MEANCL
 
 # Compute ALZC correction kernel from matching kernel
 # Here we use a constant kernel, just compute it for the center of the image.
+# NOT USED ANYMORE! But this version of the function was migrated to the stack.
 def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure, psfMatchingKernel, log):
     kimg = alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure)
     # Compute the images' sigmas (sqrt of variance)

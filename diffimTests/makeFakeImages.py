@@ -139,8 +139,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
     var_im1 = im1.copy()
     if templateNoNoise:
-        #var_im1[:] = 1.  # setting it to a single value just leads to all kinds of badness
-        var_im1[:] = np.random.poisson(2., size=x0im.shape).astype(float)
+        var_im1[:] = 1.  # setting it to a single value just leads to all kinds of badness
+    #    var_im1[:] = np.random.poisson(2., size=x0im.shape).astype(float)
     var_im2 = im2.copy()
 
     # variation in y-width of psf in science image across (x-dim of) image
