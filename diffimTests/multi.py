@@ -98,31 +98,28 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         src = res['sources']
         del res['sources']
 
-    res['flux'] = flux
-    res['df'] = df
-    res['sky'] = sky
-    res['n_varSources'] = n_varSources
-    res['n_sources'] = n_sources
-    res['templateNoNoise'] = templateNoNoise
-    res['skyLimited'] = skyLimited
-    res['seed'] = seed
+    out = {'result': res, 'flux': flux, 'df': df}
+    out['sky'] = sky
+    out['n_varSources'] = n_varSources
+    out['n_sources'] = n_sources
+    out['templateNoNoise'] = templateNoNoise
+    out['skyLimited'] = skyLimited
+    out['seed'] = seed
 
     if remeasurePsfs[0] or remeasurePsfs[1]:
-        out = {'psf1': psf1, 'psf2': psf2,
-               'inputPsf1': actualPsf1, 'inputPsf2': actualPsf2,
-               'rms1': rms1, 'rms2': rms2,
-               'shape1': shape1, 'shape2': shape2,
-               'inputShape1': inputShape1, 'inputShape2': inputShape2,
-               'moments1': moments1, 'moments2': moments2,
-               'nSources': n_sources, 'seed': seed,
-               'normedRms1': normedRms1, 'normedRms2': normedRms2}
-
-        for key in out.keys():
-            res[key] = out[key]
+        psfout = {'psf1': psf1, 'psf2': psf2,
+                  'inputPsf1': actualPsf1, 'inputPsf2': actualPsf2,
+                  'rms1': rms1, 'rms2': rms2,
+                  'shape1': shape1, 'shape2': shape2,
+                  'inputShape1': inputShape1, 'inputShape2': inputShape2,
+                  'moments1': moments1, 'moments2': moments2,
+                  'nSources': n_sources, 'seed': seed,
+                  'normedRms1': normedRms1, 'normedRms2': normedRms2}
+        out['psfInfo'] = psfout
 
     if returnObj:
-        res['obj'] = testObj
-    return res
+        out['obj'] = testObj
+    return out
 
 
 # Using flux=620 for SNR=5 (see cell #4 of notebook '30. 4a. other psf models-real PSFs')
@@ -145,9 +142,9 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuall
     sns.set(style="whitegrid", palette="pastel", color_codes=True)
 
     methods = ['ALstack', 'ZOGY', 'SZOGY', 'ALstack_decorr']
-    FN = pd.DataFrame({key: np.array([t[key]['FN'] for t in tr]) for key in methods})
-    FP = pd.DataFrame({key: np.array([t[key]['FP'] for t in tr]) for key in methods})
-    TP = pd.DataFrame({key: np.array([t[key]['TP'] for t in tr]) for key in methods})
+    FN = pd.DataFrame({key: np.array([t['result'][key]['FN'] for t in tr]) for key in methods})
+    FP = pd.DataFrame({key: np.array([t['result'][key]['FP'] for t in tr]) for key in methods})
+    TP = pd.DataFrame({key: np.array([t['result'][key]['TP'] for t in tr]) for key in methods})
     title_suffix = 's'
     if doRates:
         FN /= (FN + TP)
