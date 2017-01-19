@@ -77,6 +77,16 @@ def computePixelCovariance(diffim, diffim2=None):
     return out, stat
 
 
+def dumpObjects(tuple, filename):
+    import cPickle, gzip
+    cPickle.dump(tuple, file=gzip.GzipFile(filename + '.gz', 'wb'))
+
+
+def loadObjects(tuple, filename):
+    import cPickle, gzip
+    return cPickle.load(file=gzip.GzipFile(filename + '.gz', 'rb'))
+
+
 import functools
 
 def memoize(obj):
