@@ -89,8 +89,8 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     global_dict['K_n'] = K_n
 
     # Note these are reverse-labelled, this is CORRECT!
-    im1c = scipy.signal.convolve2d(im1, K_n, mode='same', boundary='fill', fillvalue=0.)
-    im2c = scipy.signal.convolve2d(im2, K_r, mode='same', boundary='fill', fillvalue=0.)
+    im1c = scipy.signal.convolve2d(im1, K_n, mode='same', boundary='fill', fillvalue=np.nan)
+    im2c = scipy.signal.convolve2d(im2, K_r, mode='same', boundary='fill', fillvalue=np.nan)
     D = im2c - im1c
 
     return D
