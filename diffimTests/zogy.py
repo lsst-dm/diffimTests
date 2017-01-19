@@ -89,8 +89,8 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     global_dict['K_n'] = K_n
 
     # Note these are reverse-labelled, this is CORRECT!
-    im1c = scipy.signal.convolve2d(im1, K_n, mode='same', boundary='fill', fillvalue=np.nan)
-    im2c = scipy.signal.convolve2d(im2, K_r, mode='same', boundary='fill', fillvalue=np.nan)
+    im1c = scipy.ndimage.filters.convolve(im1, K_n, mode='constant', cval=np.nan)
+    im2c = scipy.ndimage.filters.convolve(im2, K_r, mode='constant', cval=np.nan)
     D = im2c - im1c
 
     return D
@@ -142,19 +142,19 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
     if padSize > 0:
         k_n = k_n[padSize:-padSize, padSize:-padSize]
         k_r = k_r[padSize:-padSize, padSize:-padSize]
-    var1c = scipy.ndimage.filters.convolve(var_im1, k_r**2., mode='constant')
-    var2c = scipy.ndimage.filters.convolve(var_im2, k_n**2., mode='constant')
+    var1c = scipy.ndimage.filters.convolve(var_im1, k_r**2., mode='constant', cval=np.nan)
+    var2c = scipy.ndimage.filters.convolve(var_im2, k_n**2., mode='constant', cval=np.nan)
 
     fGradR = fGradN = 0.
     if xVarAst + yVarAst > 0:  # Do the astrometric variance correction
-        S_R = scipy.ndimage.filters.convolve(im1, k_r, mode='constant')
+        S_R = scipy.ndimage.filters.convolve(im1, k_r, mode='constant', cval=np.nan)
         gradRx, gradRy = np.gradient(S_R)
         fGradR = xVarAst * gradRx**2. + yVarAst * gradRy**2.
-        S_N = scipy.ndimage.filters.convolve(im2, k_n, mode='constant')
+        S_N = scipy.ndimage.filters.convolve(im2, k_n, mode='constant', cval=np.nan)
         gradNx, gradNy = np.gradient(S_N)
         fGradN = xVarAst * gradNx**2. + yVarAst * gradNy**2.
 
     PD_bar = np.fliplr(np.flipud(P_D))
-    S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant') * F_D
+    S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant', cval=np.nan) * F_D
     S_corr = S / np.sqrt(var1c + var2c + fGradR + fGradN)
     return S_corr, S, D, P_D, F_D, var1c, var2c

@@ -42,7 +42,7 @@ class DiffimTest(object):
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = self.ALres = None
 
     # Ideally call runTest() first so the images are filled in.
-    def doPlot(self, centroidCoord=None, **kwargs):
+    def doPlot(self, centroidCoord=None, include_Szogy=False, **kwargs):
         #fig = plt.figure(1, (12, 12))
         imagesToPlot = [self.im1.im, self.im1.var, self.im2.im, self.im2.var]
         titles = ['Template', 'Template var', 'Science img', 'Science var']
@@ -93,6 +93,9 @@ class DiffimTest(object):
             #stats = computeClippedImageStats(zIm)
             #zIm = (zIm - stats[0]) / stats[1]
             imagesToPlot.append(alIm - zIm)
+        if include_Szogy and self.S_corr_ZOGY is not None:
+            titles.append('S_corr(ZOGY)')
+            imagesToPlot.append(self.S_corr_ZOGY.im)
 
         if centroidCoord is not None:
             for ind, im in enumerate(imagesToPlot):
