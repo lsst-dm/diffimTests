@@ -36,7 +36,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     psf2 = kwargs.get('psf2', [1.8, 2.2])
     templateNoNoise = kwargs.get('templateNoNoise', True)
     skyLimited = kwargs.get('skyLimited', True)
-    addPresub = kwargs.get('addPresub', True)
+    addPresub = kwargs.get('addPresub', True)  # Probably want this True, but it slows things down
 
     testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=np.repeat(flux, n_varSources),
                          n_sources=n_sources, sourceFluxRange=(200, 20000),

@@ -82,9 +82,9 @@ def dumpObjects(tuple, filename):
     cPickle.dump(tuple, file=gzip.GzipFile(filename + '.gz', 'wb'))
 
 
-def loadObjects(tuple, filename):
+def loadObjects(filename):
     import cPickle, gzip
-    return cPickle.load(file=gzip.GzipFile(filename + '.gz', 'rb'))
+    return cPickle.load(gzip.GzipFile(filename + '.gz', 'rb'))
 
 
 import functools
