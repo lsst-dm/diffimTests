@@ -42,6 +42,7 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
 
 
 def computePixelCovariance(diffim, diffim2=None):
+    diffim[np.isnan(diffim)] = 0.
     diffim = diffim/diffim.std()
     shifted_imgs2 = None
     shifted_imgs = [
@@ -57,6 +58,7 @@ def computePixelCovariance(diffim, diffim2=None):
     shifted_imgs = np.vstack([i.flatten() for i in shifted_imgs])
     #out = np.corrcoef(shifted_imgs)
     if diffim2 is not None:
+        diffim2[np.isnan(diffim2)] = 0.
         shifted_imgs2 = [
             diffim2,
             np.roll(diffim2, 1, 0), np.roll(diffim2, -1, 0), np.roll(diffim2, 1, 1), np.roll(diffim2, -1, 1),

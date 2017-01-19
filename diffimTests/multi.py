@@ -93,7 +93,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
                                                           skyLimited=skyLimited)
     except Exception as e:
         print 'ERROR IN SEED:', seed
-        raise e
+        #raise e
         res = testObj.runTest(returnSources=True)  # Getting exceptions when no matches, so do this instead.
         src = res['sources']
         del res['sources']

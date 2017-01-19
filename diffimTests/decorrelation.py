@@ -17,6 +17,7 @@ def computeDecorrelationKernel(kappa, tvar=0.04, svar=0.04, preConvKernel=None, 
 
     @note As currently implemented, kappa is a static (single, non-spatially-varying) kernel.
     """
+    #mk_center = np.unravel_index(np.argmax(kappa), kappa.shape)
     kappa = fixOddKernel(kappa)
     kft = numpy.fft.fft2(kappa)
     pc = pcft = 1.0
@@ -24,8 +25,7 @@ def computeDecorrelationKernel(kappa, tvar=0.04, svar=0.04, preConvKernel=None, 
         pc = fixOddKernel(preConvKernel)
         pcft = numpy.fft.fft2(pc)
 
-    print 'HERE:', tvar, svar
-    kft = np.sqrt((tvar + svar + delta) / (tvar * np.abs(pcft)**2 + svar * np.abs(kft)**2 + delta))
+    kft = np.sqrt((svar + tvar + delta) / (svar * np.abs(pcft)**2 + tvar * np.abs(kft)**2 + delta))
     #if preConvKernel is not None:
     #    kft = numpy.fft.fftshift(kft)  # I can't figure out why we need to fftshift sometimes but not others.
     pck = numpy.fft.ifft2(kft)
@@ -33,12 +33,19 @@ def computeDecorrelationKernel(kappa, tvar=0.04, svar=0.04, preConvKernel=None, 
     #    pck = numpy.fft.ifftshift(pck.real)
     fkernel = fixEvenKernel(pck.real)
 
+    # Make the center of the fkernel be the same as the "center" of the matching kernel.
+    #pck_center = np.unravel_index(np.argmax(fkernel), fkernel.shape)
+    #tmp = np.roll(fkernel, mk_center[0]-pck_center[0], axis=0)
+    #tmp = np.roll(tmp, mk_center[1]-pck_center[1], axis=1)
+    #fkernel = tmp
+
     # I think we may need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers...
     # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
-    if False:  # TBD: figure this out. For now, we are turning it off.
-        fkernel = fkernel[::-1, :]
+    if True:  # TBD: figure this out. For now, we are turning it off.
+        fkernel = fkernel[::-1, ::-1]
 
     return fkernel
+
 
 def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
     """! Compute the (decorrelated) difference image's new PSF.
@@ -64,7 +71,7 @@ def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
         psf_ft = numpy.fft.fft2(psf)
         kernel = fixOddKernel(kernel)
         kft = numpy.fft.fft2(kernel)
-        out = psf_ft * np.sqrt((svar + tvar) / (svar + tvar * kft**2))
+        out = psf_ft * np.sqrt((svar + tvar) / (svar + tvar * np.abs(kft)**2))
         return out
 
     def post_conv_psf(psf, kernel, svar, tvar):
@@ -76,6 +83,7 @@ def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
     pcf = fixEvenKernel(pcf)
     pcf = pcf.real / pcf.real.sum()
     return pcf
+
 
 def fixOddKernel(kernel):
     """! Take a kernel with odd dimensions and make them even for FFT
@@ -96,6 +104,7 @@ def fixOddKernel(kernel):
     if changed:
         out *= (np.mean(kernel) / np.mean(out))  # need to re-scale to same mean for FFT
     return out
+
 
 def fixEvenKernel(kernel):
     """! Take a kernel with even dimensions and make them odd, centered correctly.

@@ -49,7 +49,7 @@ def computeClippedAfwStats(im, numSigmaClip=3., numIter=3, maskIm=None):
     return mean, std, var
 
 
-def doConvolve(exposure, kernel, use_scipy=False):
+def doConvolve(exposure, kernel, use_scipy=False, fix_kernel=False):
     """! Convolve an Exposure with a decorrelation convolution kernel.
     @param exposure Input afw.image.Exposure to be convolved.
     @param kernel Input 2-d numpy.array to convolve the image with
@@ -61,7 +61,9 @@ def doConvolve(exposure, kernel, use_scipy=False):
     @note We re-center the kernel if necessary and return the possibly re-centered kernel
     """
     outExp = kern = None
-    fkernel = fixEvenKernel(kernel)
+    fkernel = kernel
+    if fix_kernel:
+        fkernel = fixEvenKernel(kernel)
     if use_scipy:
         pci = scipy.ndimage.filters.convolve(exposure.getMaskedImage().getImage().getArray(),
                                              fkernel, mode='constant', cval=np.nan)
