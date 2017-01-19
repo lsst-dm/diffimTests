@@ -70,7 +70,7 @@ def getALChebGaussBases(x0, y0, sigGauss=None, degGauss=None, betaGauss=1, verbo
 
 def makeImageBases(im1, basis):
     #basis2 = [scipy.signal.fftconvolve(im1, b, mode='same') for b in basis]
-    basis2 = [scipy.ndimage.filters.convolve(im1, b, mode='constant') for b in basis]
+    basis2 = [scipy.ndimage.filters.convolve(im1, b, mode='constant', cval=np.nan) for b in basis]
     return basis2
 
 def makeSpatialBases(im1, basis, basis2, spatialKernelOrder=2, spatialBackgroundOrder=2, verbose=False):
@@ -231,7 +231,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
 
     im2_orig = im2
     if preConvKernel is not None:
-        im2 = scipy.ndimage.filters.convolve(im2, preConvKernel, mode='constant')
+        im2 = scipy.ndimage.filters.convolve(im2, preConvKernel, mode='constant', cval=np.nan)
 
     basis = getALChebGaussBases(x0, y0, sigGauss=sigGauss, degGauss=degGauss,
                                 betaGauss=betaGauss, verbose=verbose)
@@ -261,7 +261,7 @@ def performAlardLupton(im1, im2, sigGauss=None, degGauss=None, betaGauss=1, kern
             _, sig2, _, _ = computeClippedImageStats(im2)
 
         pck = computeDecorrelationKernel(kfit, sig1**2, sig2**2, preConvKernel=preConvKernel)
-        pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant')
+        pci = scipy.ndimage.filters.convolve(diffim, pck, mode='constant', cval=np.nan)
         if im2Psf is not None:
             psf = computeCorrectedDiffimPsf(kfit, im2Psf, svar=sig1**2, tvar=sig2**2)
         diffim = pci

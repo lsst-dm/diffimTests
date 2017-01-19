@@ -70,28 +70,20 @@ class DiffimTest(object):
                 alIm = alIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
             stats = computeClippedImageStats(alIm)
             print 'A&L(dec):', stats
-            alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
+            #alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
             stats = computeClippedImageStats(self.D_ZOGY.im)
             print 'ZOGY:', stats
             zIm = self.D_ZOGY.im
             if centroidCoord is not None:
                 zIm = zIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
-            zIm = (zIm - stats[0]) / stats[1]
-            stats = computeClippedImageStats(alIm - zIm)
-            print 'A&L(dec) - ZOGY:', stats
+            #zIm = (zIm - stats[0]) / stats[1]
+            print 'A&L(dec) - ZOGY:', computeClippedImageStats(alIm - zIm)
             imagesToPlot.append(alIm - zIm)
         if self.ALres is not None:
             titles.append('A&L(dec) - A&L')  # Plot difference of diffims
             alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
-            #if centroidCoord is not None:
-            #    alIm = alIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
-            #stats = computeClippedImageStats(alIm)
-            #alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
             zIm = self.ALres.subtractedExposure.getMaskedImage().getImage().getArray()
-            #if centroidCoord is not None:
-            #    zIm = zIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
-            #stats = computeClippedImageStats(zIm)
-            #zIm = (zIm - stats[0]) / stats[1]
+            print 'A&L(dec) - A&L:', computeClippedImageStats(alIm - zIm)
             imagesToPlot.append(alIm - zIm)
         if include_Szogy and self.S_corr_ZOGY is not None:
             titles.append('S_corr(ZOGY)')
@@ -149,7 +141,8 @@ class DiffimTest(object):
                                                         im2Psf=self.im2.psf,
                                                         preConvKernel=preConvKernel)
         # This is not entirely correct, we also need to convolve var with the decorrelation kernel (squared):
-        var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL**2., mode='constant')
+        var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL**2., mode='constant',
+                                                            cval=np.nan)
         self.D_AL = Exposure(D_AL, D_psf, var)
         self.D_AL.im /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
         self.D_AL.var /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
@@ -189,8 +182,11 @@ class DiffimTest(object):
         P_D_ZOGY, F_D = computeZOGYDiffimPsf(self.im1.im, self.im2.im,
                                              self.im1.psf, self.im2.psf,
                                              sig1=self.im1.sig, sig2=self.im2.sig, F_r=1., F_n=1.)
-        self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, (self.im1.var + self.im2.var) /
-                               (self.im1.sig**2. + self.im2.sig**2.))
+        D_ZOGY *= np.sqrt(self.im1.sig**2. + self.im2.sig**2.)  # Set to same scale as A&L
+        varZOGY = (self.im1.var + self.im2.var) # / (self.im1.sig**2. + self.im2.sig**2.)  # Same here!
+        D_ZOGY[D_ZOGY == 0.] = np.nan
+        varZOGY[np.isnan(D_ZOGY)] = np.nan
+        self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, varZOGY)
 
         if computeScorr:
             S_corr_ZOGY, S_ZOGY, _, P_D_ZOGY, F_D, var1c, \

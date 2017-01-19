@@ -61,8 +61,6 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
     return D
 
 
-global_dict = {}
-
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., padSize=15):
     sigR, sigN, P_r_hat, P_n_hat, denom, padded_psf1, padded_psf2 = ZOGYUtils(im1, im2, im1_psf, im2_psf,
@@ -71,22 +69,12 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     delta = 0 #.1
     K_r_hat = (P_r_hat + delta) / (denom + delta)
     K_n_hat = (P_n_hat + delta) / (denom + delta)
-    global_dict['K_r_hat'] = K_r_hat
-    global_dict['K_n_hat'] = K_n_hat
     K_r = np.fft.ifft2(K_r_hat).real
     K_n = np.fft.ifft2(K_n_hat).real
-    global_dict['psf1'] = im1_psf
-    global_dict['psf2'] = im2_psf
-    global_dict['padded_psf1'] = padded_psf1
-    global_dict['padded_psf2'] = padded_psf2
-    global_dict['P_r_hat'] = P_r_hat
-    global_dict['P_n_hat'] = P_n_hat
 
     if padSize > 0:
         K_n = K_n[padSize:-padSize, padSize:-padSize]
         K_r = K_r[padSize:-padSize, padSize:-padSize]
-    global_dict['K_r'] = K_r
-    global_dict['K_n'] = K_n
 
     # Note these are reverse-labelled, this is CORRECT!
     im1c = scipy.ndimage.filters.convolve(im1, K_n, mode='constant', cval=np.nan)

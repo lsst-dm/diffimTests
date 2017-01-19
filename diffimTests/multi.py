@@ -106,6 +106,9 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     out['skyLimited'] = skyLimited
     out['seed'] = seed
 
+    out['templateSNR'] = testObj.im1.calcSNR(flux, skyLimited=skyLimited)
+    out['scienceSNR'] = testObj.im2.calcSNR(flux, skyLimited=skyLimited)
+
     if remeasurePsfs[0] or remeasurePsfs[1]:
         psfout = {'psf1': psf1, 'psf2': psf2,
                   'inputPsf1': actualPsf1, 'inputPsf2': actualPsf2,
@@ -214,6 +217,7 @@ def plotSnrResults(tr, title='', doPrint=True):
     legend = plt.legend(loc='upper left', shadow=True)
     plt.xlabel('Science image SNR (measured)')
     plt.ylabel('Difference image SNR')
+    plt.xlim(0, 15)
     plt.title(title)
 
     if doPrint:
@@ -244,6 +248,7 @@ def plotSnrResults(tr, title='', doPrint=True):
     #sns.swarmplot(data=df[['ALstack_SNR', 'ALstack_decorr_SNR', 'ZOGY_SNR', 'scienceSNR', 'inputSNR']],
     #              color='black', size=0.2, ax=g)
     plt.ylabel('SNR')
+    plt.ylim(0, 15)
     g.set_xticklabels(g.get_xticklabels(), rotation=60)
     plt.title(title)
 

@@ -27,6 +27,8 @@ def mad(data, axis=None):
 
 
 def computeClippedImageStats(im, low=3, high=3, ignore=None):
+    import collections
+
     im = im[~(np.isnan(im) | np.isinf(im))]
     if ignore is not None:
         for i in ignore:
@@ -38,7 +40,9 @@ def computeClippedImageStats(im, low=3, high=3, ignore=None):
             tmp = im[(im > low) & (im < upp)]
     mean1 = np.nanmean(tmp)
     sig1 = np.nanstd(tmp)
-    return mean1, sig1, np.nanmin(im), np.nanmax(im)
+
+    stats = collections.namedtuple('stats', 'mean stdev min max')
+    return stats(mean=mean1, stdev=sig1, min=np.nanmin(im), max=np.nanmax(im))
 
 
 def computePixelCovariance(diffim, diffim2=None):
