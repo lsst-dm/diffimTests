@@ -60,3 +60,12 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+#Special for this directory
+pickles/
+OLD/
+trash/
+test_imageDifference/
+zzz*.ipynb
+Untitled*.ipynb
+*.fits
