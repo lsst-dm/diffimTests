@@ -211,9 +211,11 @@ def plotSnrResults(tr, title='', doPrint=True):
 
     plt.subplots(2, 2)
     plt.subplot(221)
-    plt.scatter(df.scienceSNR.values, df.ALstack_SNR.values, label='AL', color='b', alpha=0.4)
-    plt.scatter(df.scienceSNR.values, df.ALstack_decorr_SNR.values, label='AL(decorr)', color='g', alpha=0.4)
-    plt.scatter(df.scienceSNR.values, df.ZOGY_SNR.values, label='ZOGY', color='r', alpha=0.4)
+    good = df.scienceSNR.values < 100.
+    scienceSNR = df.scienceSNR.values[good]
+    plt.scatter(scienceSNR, df.ALstack_SNR.values[good], label='AL', color='b', alpha=0.2)
+    plt.scatter(scienceSNR, df.ALstack_decorr_SNR.values[good], label='AL(decorr)', color='g', alpha=0.2)
+    plt.scatter(scienceSNR, df.ZOGY_SNR.values[good], label='ZOGY', color='r', alpha=0.2)
     legend = plt.legend(loc='upper left', shadow=True)
     plt.xlabel('Science image SNR (measured)')
     plt.ylabel('Difference image SNR')
@@ -232,17 +234,19 @@ def plotSnrResults(tr, title='', doPrint=True):
     plt.subplot(222)
     sns.distplot(df.ALstack_SNR.values[~np.isnan(df.ALstack_SNR.values)], label='AL', norm_hist=False)
     sns.distplot(df.ALstack_decorr_SNR.values[~np.isnan(df.ALstack_decorr_SNR.values)], label='AL(decorr)', norm_hist=False)
-    sns.distplot(df.ZOGY_SNR.values, label='ZOGY', norm_hist=False)
-    sns.distplot(df.ZOGY_SNR.values, label='Science img (measured)', norm_hist=False)
+    sns.distplot(df.ZOGY_SNR.values[~np.isnan(df.ZOGY_SNR.values)], label='ZOGY', norm_hist=False)
+    sns.distplot(scienceSNR, label='Science img (measured)', norm_hist=False)
     #sns.distplot(df.inputSNR.values, label='Input', norm_hist=False)
     plt.plot(np.repeat(df.inputSNR.values.mean(), 2), np.array([0, 0.4]), label='Input SNR', color='k')
     legend = plt.legend(loc='upper left', shadow=True)
     plt.xlabel('SNR')
     plt.ylabel('Frequency')
+    plt.xlim(0, 12)
     plt.title(title)
     #df[['ZOGY_SNR', 'ALstack_SNR']].plot.hist(bins=20, alpha=0.5)
 
     plt.subplot(223)
+    df.scienceSNR.values[~good] = np.nan
     g = sns.violinplot(data=df[['ALstack_SNR', 'ALstack_decorr_SNR', 'ZOGY_SNR', 'scienceSNR', 'inputSNR']],
                        linewidth=0.3, bw=0.25, scale='width')
     #sns.swarmplot(data=df[['ALstack_SNR', 'ALstack_decorr_SNR', 'ZOGY_SNR', 'scienceSNR', 'inputSNR']],

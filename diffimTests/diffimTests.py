@@ -227,7 +227,7 @@ class DiffimTest(object):
 
     # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
-                zogyImageSpace=True, matchDist=np.sqrt(1.5), returnSources=False):
+                zogyImageSpace=False, matchDist=np.sqrt(1.5), returnSources=False):
         D_ZOGY = S_ZOGY = res = D_AL = None
         src = {}
         # Run diffim first
@@ -334,7 +334,7 @@ class DiffimTest(object):
 
         #fp_DIFFIM=fp_ZOGY, label='ZOGY', color='b', alpha=1.0,
 
-        res = self.runTest(zogyImageSpace=True, returnSources=True, matchDist=np.sqrt(1.5))
+        res = self.runTest(returnSources=True, matchDist=np.sqrt(1.5))
         src = res['sources']
         del res['sources']
         #print res
