@@ -41,7 +41,7 @@ def computeDecorrelationKernel(kappa, tvar=0.04, svar=0.04, preConvKernel=None, 
 
     # I think we may need to "reverse" the PSF, as in the ZOGY (and Kaiser) papers...
     # This is the same as taking the complex conjugate in Fourier space before FFT-ing back to real space.
-    if True:  # TBD: figure this out. For now, we are turning it off.
+    if False:  # TBD: figure this out. For now, we are turning it off.
         fkernel = fkernel[::-1, ::-1]
 
     return fkernel

@@ -18,10 +18,9 @@ from .decorrelation import computeDecorrelationKernel, computeCorrectedDiffimPsf
 from .afw import doConvolve, afwPsfToArray
 from .catalog import catalogToDF
 
+
 def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
                 spatialBackgroundOrder=0, spatialKernelOrder=0):
-    #im1 = self.im1.asAfwExposure()
-    #im2 = self.im2.asAfwExposure()
 
     preConvKernel = None
     im2c = im2
@@ -36,6 +35,7 @@ def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
     subconfig = config.kernel.active
     config.kernel.active.spatialKernelOrder = spatialBackgroundOrder  # 1  # make 0 since that is set in the default simulation setup.
     config.kernel.active.spatialBgOrder = spatialKernelOrder
+    #config.kernel.active.alardMinSig = 0.55  # Default is 0.7 but this is better for my simulations ???
     subconfig.afwBackgroundConfig.useApprox = False
     subconfig.constantVarianceWeighting = False
     subconfig.singleKernelClipping = False
@@ -45,6 +45,7 @@ def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
     task = ipDiffim.ImagePsfMatchTask(config=config)
     task.log.setLevel(log_level)
     result = task.subtractExposures(im1, im2c, doWarping=doWarping)
+    result.task = task  # for debugging (e.g. task.metadata.get("ALBasisNGauss")
 
     if doDecorr:
         kimg = alPsfMatchingKernelToArray(result.psfMatchingKernel, im1)

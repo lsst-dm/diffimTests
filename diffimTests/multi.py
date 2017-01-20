@@ -166,15 +166,19 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuall
     fig, axes = plt.subplots(nrows=1, ncols=2)
 
     if not asHist:
-        sns.violinplot(data=TP, cut=True, linewidth=0.3, bw=0.25, ax=axes[0])
-        sns.swarmplot(data=TP, color='black', ax=axes[0])
-        sns.boxplot(data=TP, saturation=0.5, ax=axes[0])
+        sns.violinplot(data=TP, cut=True, linewidth=0.3, bw=0.25, alpha=0.5, ax=axes[0])
+        if TP.shape[0] < 500:
+            sns.swarmplot(data=TP, color='black', size=3, alpha=0.3, ax=axes[0])
+        sns.boxplot(data=TP, saturation=0.5, boxprops={'facecolor': 'None'},
+                    whiskerprops={'linewidth': 0}, showfliers=False, ax=axes[0])
         plt.setp(axes[0], alpha=0.3)
         axes[0].set_ylabel('True positive' + title_suffix)
         axes[0].set_title(title)
         sns.violinplot(data=FP, cut=True, linewidth=0.3, bw=0.5, ax=axes[1])
-        sns.swarmplot(data=FP, color='black', ax=axes[1])
-        sns.boxplot(data=FP, saturation=0.5, ax=axes[1])
+        if FP.shape[0] < 500:
+            sns.swarmplot(data=FP, color='black', size=3, alpha=0.3, ax=axes[1])
+        sns.boxplot(data=FP, saturation=0.5, boxprops={'facecolor': 'None'}, 
+                    whiskerprops={'linewidth': 0}, showfliers=False, ax=axes[1])
         plt.setp(axes[1], alpha=0.3)
         axes[1].set_ylabel('False positive' + title_suffix)
         axes[1].set_title(title)
@@ -235,7 +239,7 @@ def plotSnrResults(tr, title='', doPrint=True):
     sns.distplot(df.ALstack_SNR.values[~np.isnan(df.ALstack_SNR.values)], label='AL', norm_hist=False)
     sns.distplot(df.ALstack_decorr_SNR.values[~np.isnan(df.ALstack_decorr_SNR.values)], label='AL(decorr)', norm_hist=False)
     sns.distplot(df.ZOGY_SNR.values[~np.isnan(df.ZOGY_SNR.values)], label='ZOGY', norm_hist=False)
-    sns.distplot(scienceSNR, label='Science img (measured)', norm_hist=False)
+    sns.distplot(scienceSNR[~np.isnan(scienceSNR)], label='Science img (measured)', norm_hist=False)
     #sns.distplot(df.inputSNR.values, label='Input', norm_hist=False)
     plt.plot(np.repeat(df.inputSNR.values.mean(), 2), np.array([0, 0.4]), label='Input SNR', color='k')
     legend = plt.legend(loc='upper left', shadow=True)
