@@ -11,6 +11,7 @@ from .plot import plotImageGrid
 
 __all__ = ['DiffimTest']
 
+
 class DiffimTest(object):
     def __init__(self, doInit=True, **kwargs):
         self.args = kwargs
@@ -42,7 +43,7 @@ class DiffimTest(object):
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = self.ALres = None
 
     # Ideally call runTest() first so the images are filled in.
-    def doPlot(self, centroidCoord=None, include_Szogy=False, **kwargs):
+    def doPlot(self, centroidCoord=None, include_Szogy=False, addedImgs=None, **kwargs):
         #fig = plt.figure(1, (12, 12))
         imagesToPlot = [self.im1.im, self.im1.var, self.im2.im, self.im2.var]
         titles = ['Template', 'Template var', 'Science img', 'Science var']
@@ -88,6 +89,11 @@ class DiffimTest(object):
         if include_Szogy and self.S_corr_ZOGY is not None:
             titles.append('S_corr(ZOGY)')
             imagesToPlot.append(self.S_corr_ZOGY.im)
+        if addedImgs is not None:
+            for i, img in enumerate(addedImgs):
+                titles.append('Added ' + str(i))
+                print 'Added ' + str(i) + ':', computeClippedImageStats(img)
+                imagesToPlot.append(img)
 
         if centroidCoord is not None:
             for ind, im in enumerate(imagesToPlot):
@@ -103,7 +109,7 @@ class DiffimTest(object):
     def reverseImages(self):
         self.im1, self.im2 = self.im2, self.im1
         self.psf1_orig, self.psf2_orig = self.psf2_orig, self.psf1_orig
-        self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = None
+        self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = self.ALres = None
 
     def clone(self):
         out = DiffimTest(imSize=self.im1.im.shape, sky=self.im1.metaData['sky'],
@@ -112,6 +118,7 @@ class DiffimTest(object):
         out.im1, out.im2 = self.im1, self.im2
         out.centroids, out.changedCentroidInd = self.centroids, self.changedCentroidInd
         out.astrometricOffsets = self.astrometricOffsets
+        out.ALres = self.ALres
         out.D_AL, out.kappa, out.D_ZOGY, \
             out.S_corr_ZOGY, out.S_ZOGY = self.D_AL, self.kappa, self.D_ZOGY, \
                                           self.S_corr_ZOGY, self.S_ZOGY
@@ -182,7 +189,6 @@ class DiffimTest(object):
         P_D_ZOGY, F_D = computeZOGYDiffimPsf(self.im1.im, self.im2.im,
                                              self.im1.psf, self.im2.psf,
                                              sig1=self.im1.sig, sig2=self.im2.sig, F_r=1., F_n=1.)
-        D_ZOGY *= np.sqrt(self.im1.sig**2. + self.im2.sig**2.)  # Set to same scale as A&L
         varZOGY = (self.im1.var + self.im2.var) # / (self.im1.sig**2. + self.im2.sig**2.)  # Same here!
         D_ZOGY[D_ZOGY == 0.] = np.nan
         varZOGY[np.isnan(D_ZOGY)] = np.nan
@@ -428,7 +434,9 @@ class DiffimTest(object):
                 plt.plot(srces, snrCalced, color='k', alpha=alpha-0.2, label='Input SNR')
             if len(detected) > 0:
                 plt.scatter([10000], [10], s=30, edgecolors='r', facecolors='none', marker='o', label='Detected')
-            plt.legend(loc='upper left', scatterpoints=3)
+            legend = plt.legend(loc='upper left', scatterpoints=3)
+            for label in legend.get_texts():
+                label.set_fontsize('x-small')
             if not xaxisIsScienceForcedPhot:
                 plt.xlabel('input flux')
             else:

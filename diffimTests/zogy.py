@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.fft
 import scipy.signal
 
 # Compute the ZOGY eqn. (13):
@@ -37,8 +36,8 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., 
     P_n = psf2 #im2_psf
     sigR = sig1
     sigN = sig2
-    P_r_hat = numpy.fft.fft2(P_r)
-    P_n_hat = numpy.fft.fft2(P_n)
+    P_r_hat = np.fft.fft2(P_r)
+    P_n_hat = np.fft.fft2(P_n)
     denom = np.sqrt((sigN**2 * F_r**2 * np.abs(P_r_hat)**2) + (sigR**2 * F_n**2 * np.abs(P_n_hat)**2))
     #denom = np.sqrt((sigN**2 * F_r**2 * P_r_hat**2) + (sigR**2 * F_n**2 * P_n_hat**2))
 
@@ -50,13 +49,14 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
     sigR, sigN, P_r_hat, P_n_hat, denom, _, _ = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                           sig1, sig2, F_r, F_n, padSize=0)
 
-    R_hat = numpy.fft.fft2(im1)
-    N_hat = numpy.fft.fft2(im2)
+    R_hat = np.fft.fft2(im1)
+    N_hat = np.fft.fft2(im2)
     numerator = (F_r * P_r_hat * N_hat - F_n * P_n_hat * R_hat)
     d_hat = numerator / denom
 
-    d = numpy.fft.ifft2(d_hat)
-    D = numpy.fft.ifftshift(d.real)
+    d = np.fft.ifft2(d_hat)
+    D = np.fft.ifftshift(d.real)
+    D *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
     return D
 
@@ -66,20 +66,22 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     sigR, sigN, P_r_hat, P_n_hat, denom, padded_psf1, padded_psf2 = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                                               sig1, sig2, F_r, F_n,
                                                                               padSize=padSize)
-    delta = 0 #.1
+    delta = 0. #.1
     K_r_hat = (P_r_hat + delta) / (denom + delta)
     K_n_hat = (P_n_hat + delta) / (denom + delta)
     K_r = np.fft.ifft2(K_r_hat).real
     K_n = np.fft.ifft2(K_n_hat).real
 
     if padSize > 0:
-        K_n = K_n[padSize:-padSize, padSize:-padSize]
-        K_r = K_r[padSize:-padSize, padSize:-padSize]
+        ps = padSize // 2
+        K_n = K_n[ps:-ps, ps:-ps]
+        K_r = K_r[ps:-ps, ps:-ps]
 
     # Note these are reverse-labelled, this is CORRECT!
     im1c = scipy.ndimage.filters.convolve(im1, K_n, mode='constant', cval=np.nan)
     im2c = scipy.ndimage.filters.convolve(im2, K_r, mode='constant', cval=np.nan)
     D = im2c - im1c
+    D *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
     return D
 
