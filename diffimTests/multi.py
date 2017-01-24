@@ -38,7 +38,10 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     skyLimited = kwargs.get('skyLimited', True)
     addPresub = kwargs.get('addPresub', True)  # Probably want this True, but it slows things down
 
-    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=np.repeat(flux, n_varSources),
+    varFlux2 = flux
+    if not hasattr(varFlux2, "__len__"):
+        varFlux2 = np.repeat(flux, n_varSources)
+    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=varFlux2,
                          n_sources=n_sources, sourceFluxRange=(200, 20000),
                          templateNoNoise=templateNoNoise, skyLimited=skyLimited, avoidAllOverlaps=15.,
                          seed=seed)
@@ -196,7 +199,7 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuall
 
     return TP, FP, FN
 
-def plotSnrResults(tr, title='', doPrint=True):
+def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
     import pandas as pd
     import numpy as np
 
@@ -223,7 +226,7 @@ def plotSnrResults(tr, title='', doPrint=True):
     legend = plt.legend(loc='upper left', shadow=True)
     plt.xlabel('Science image SNR (measured)')
     plt.ylabel('Difference image SNR')
-    plt.xlim(0, 15)
+    plt.xlim(0, snrMax)
     plt.title(title)
 
     if doPrint:
@@ -245,7 +248,7 @@ def plotSnrResults(tr, title='', doPrint=True):
     legend = plt.legend(loc='upper left', shadow=True)
     plt.xlabel('SNR')
     plt.ylabel('Frequency')
-    plt.xlim(0, 12)
+    plt.xlim(0, snrMax)
     plt.title(title)
     #df[['ZOGY_SNR', 'ALstack_SNR']].plot.hist(bins=20, alpha=0.5)
 
@@ -256,8 +259,16 @@ def plotSnrResults(tr, title='', doPrint=True):
     #sns.swarmplot(data=df[['ALstack_SNR', 'ALstack_decorr_SNR', 'ZOGY_SNR', 'scienceSNR', 'inputSNR']],
     #              color='black', size=0.2, ax=g)
     plt.ylabel('SNR')
-    plt.ylim(0, 15)
+    plt.ylim(0, snrMax)
     g.set_xticklabels(g.get_xticklabels(), rotation=60)
     plt.title(title)
+
+    ax = plt.subplot(224)
+    df2 = df.groupby('inputFlux').mean()
+    df2[['inputSNR', 'ZOGY_detected', 'ALstack_detected', 'ALstack_decorr_detected']].plot(x='inputSNR', alpha=0.5, lw=5,
+                                                                                           ax=ax)
+    plt.ylim(-0.05, 1.05)
+    plt.xlabel('Input transient SNR')
+    plt.ylabel('Fraction detected')
 
     return df
