@@ -41,13 +41,13 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     varFlux2 = flux
     if not hasattr(varFlux2, "__len__"):
         varFlux2 = np.repeat(flux, n_varSources)
-    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=varFlux2,
+    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=flux,
                          n_sources=n_sources, sourceFluxRange=(200, 20000),
                          templateNoNoise=templateNoNoise, skyLimited=skyLimited, avoidAllOverlaps=15.,
                          seed=seed)
 
+    psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
     if remeasurePsfs[0]:  # re-measure the PSF of the template, save the stats on the orig. and new PSF
-        psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = None
         try:
             actualPsf1 = testObj.im1.psf.copy()
             im1 = testObj.im1.asAfwExposure()
@@ -64,10 +64,10 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
             shape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments1 = computeMoments(psf1)
         except Exception as e:
-            psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = None
+            psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
 
+    psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
     if remeasurePsfs[1]:  # re-measure the PSF of the science image, save the stats on the orig. and new PSF
-        psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = None
         try:
             actualPsf2 = testObj.im2.psf.copy()
             im2 = testObj.im2.asAfwExposure()
@@ -84,22 +84,22 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
             shape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments2 = computeMoments(psf2)
         except Exception as e:
-            psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = None
+            psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
 
     # This function below is set to *not* plot but it runs `runTest` and outputs the `runTest` results
     # and a dataframe with forced photometry results. So we use this instead of `runTest` directly.
     # Note `addPresub=True` may not always be necessary and will slow it down a bit.
-    df = None
+    res = df = None
     try:
-        res, df = testObj.doPlotWithDetectionsHighlighted(transientsOnly=True, addPresub=addPresub,
-                                                          xaxisIsScienceForcedPhot=False, actuallyPlot=False,
-                                                          skyLimited=skyLimited)
-    except Exception as e:
-        print 'ERROR IN SEED:', seed
-        #raise e
-        res = testObj.runTest(returnSources=True)  # Getting exceptions when no matches, so do this instead.
-        src = res['sources']
+        res = testObj.runTest(returnSources=True, **kwargs)
+        df, _ = testObj.doPlotWithDetectionsHighlighted(runTestResult=res, transientsOnly=True,
+                                                        addPresub=addPresub, xaxisIsScienceForcedPhot=False,
+                                                        actuallyPlot=False, skyLimited=skyLimited)
         del res['sources']
+
+    except Exception as e:
+        print 'ERROR RUNNING SEED:', seed
+        raise e
 
     out = {'result': res, 'flux': flux, 'df': df}
     out['sky'] = sky
@@ -114,7 +114,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
 
     if remeasurePsfs[0] or remeasurePsfs[1]:
         psfout = {'psf1': psf1, 'psf2': psf2,
-                  'inputPsf1': actualPsf1, 'inputPsf2': actualPsf2,
+                  'inputPsf1': inputPsf1, 'inputPsf2': inputPsf2,
                   'rms1': rms1, 'rms2': rms2,
                   'shape1': shape1, 'shape2': shape2,
                   'inputShape1': inputShape1, 'inputShape2': inputShape2,
@@ -240,7 +240,8 @@ def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
 
     plt.subplot(222)
     sns.distplot(df.ALstack_SNR.values[~np.isnan(df.ALstack_SNR.values)], label='AL', norm_hist=False)
-    sns.distplot(df.ALstack_decorr_SNR.values[~np.isnan(df.ALstack_decorr_SNR.values)], label='AL(decorr)', norm_hist=False)
+    sns.distplot(df.ALstack_decorr_SNR.values[~np.isnan(df.ALstack_decorr_SNR.values)],
+                 label='AL(decorr)', norm_hist=False)
     sns.distplot(df.ZOGY_SNR.values[~np.isnan(df.ZOGY_SNR.values)], label='ZOGY', norm_hist=False)
     sns.distplot(scienceSNR[~np.isnan(scienceSNR)], label='Science img (measured)', norm_hist=False)
     #sns.distplot(df.inputSNR.values, label='Input', norm_hist=False)
@@ -265,8 +266,8 @@ def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
 
     ax = plt.subplot(224)
     df2 = df.groupby('inputFlux').mean()
-    df2[['inputSNR', 'ZOGY_detected', 'ALstack_detected', 'ALstack_decorr_detected']].plot(x='inputSNR', alpha=0.5, lw=5,
-                                                                                           ax=ax)
+    df2[['inputSNR', 'ZOGY_detected', 'ALstack_detected',
+         'ALstack_decorr_detected']].plot(x='inputSNR', alpha=0.5, lw=5, ax=ax)
     plt.ylim(-0.05, 1.05)
     plt.xlabel('Input transient SNR')
     plt.ylabel('Fraction detected')

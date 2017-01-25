@@ -45,10 +45,11 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., 
 
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
-def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
+def performZOGY(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
     sigR, sigN, P_r_hat, P_n_hat, denom, _, _ = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                           sig1, sig2, F_r, F_n, padSize=0)
 
+    # First do the image
     R_hat = np.fft.fft2(im1)
     N_hat = np.fft.fft2(im2)
     numerator = (F_r * P_r_hat * N_hat - F_n * P_n_hat * R_hat)
@@ -58,11 +59,22 @@ def performZOGY(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.
     D = np.fft.ifftshift(d.real)
     D *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
-    return D
+    # Do the exact same thing to the var images, except add them
+    R_hat = np.fft.fft2(var_im1)
+    N_hat = np.fft.fft2(var_im2)
+    numerator = (F_r * P_r_hat * N_hat + F_n * P_n_hat * R_hat)
+    d_hat = numerator / denom
+
+    d = np.fft.ifft2(d_hat)
+    D_var = np.fft.ifftshift(d.real)
+    D_var *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
+
+    return D, D_var
 
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
-def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., padSize=15):
+def performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.,
+                          padSize=15):
     sigR, sigN, P_r_hat, P_n_hat, denom, padded_psf1, padded_psf2 = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                                               sig1, sig2, F_r, F_n,
                                                                               padSize=padSize)
@@ -83,7 +95,13 @@ def performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=
     D = im2c - im1c
     D *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
-    return D
+    # Do the same convolutions to the variance images
+    im1c = scipy.ndimage.filters.convolve(var_im1, K_n, mode='constant', cval=np.nan)
+    im2c = scipy.ndimage.filters.convolve(var_im2, K_r, mode='constant', cval=np.nan)
+    D_var = im2c + im1c
+    D_var *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
+
+    return D, D_var
 
 
 ## Also compute the diffim's PSF (eq. 14)
@@ -110,7 +128,8 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
                       sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None, padSize=15):
     if D is None:
-        D = performZOGYImageSpace(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n, padSize=padSize)
+        D, _ = performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n,
+                                     padSize=padSize)
     P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     # P_r_hat = np.fft.fftshift(P_r_hat)  # Not sure why I need to do this but it seems that I do.
     # P_n_hat = np.fft.fftshift(P_n_hat)

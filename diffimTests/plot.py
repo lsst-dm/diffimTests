@@ -24,7 +24,7 @@ def zscale_image(input_img, contrast=0.25):
 
 def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolation='none',
                   cmap='gray', imScale=2., cbar=True, titles=None, titlecol=['r', 'y'],
-                  same_zscale=True, **kwds):
+                  same_zscale=False, **kwds):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
@@ -88,7 +88,7 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
     if clim_orig is None and same_zscale:
         tmp_im = [iii.flatten() for iii in imagesToPlot]
         tmp_im = np.concatenate(tmp_im)
-        clim = zscale_image(tmp_im)
+        clim = clim_orig = zscale_image(tmp_im)
         del tmp_im
 
     for i in range(len(imagesToPlot)):

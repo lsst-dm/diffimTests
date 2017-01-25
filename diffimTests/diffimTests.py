@@ -170,10 +170,12 @@ class DiffimTest(object):
         return dx, dy
 
     def doZOGY(self, computeScorr=True, inImageSpace=True, padSize=0):
-        D_ZOGY = None
+        D_ZOGY = varZOGY = None
         if inImageSpace:
-            D_ZOGY = performZOGYImageSpace(self.im1.im, self.im2.im, self.im1.psf, self.im2.psf,
-                                           sig1=self.im1.sig, sig2=self.im2.sig, padSize=padSize)
+            D_ZOGY, varZOGY = performZOGYImageSpace(self.im1.im, self.im2.im,
+                                                    self.im1.var, self.im2.var,
+                                                    self.im1.psf, self.im2.psf,
+                                                    sig1=self.im1.sig, sig2=self.im2.sig, padSize=padSize)
         else:  # Do all in fourier space (needs image-sized PSFs)
             padSize = 0
             padSize0 = self.im1.im.shape[0]//2 - self.im1.psf.shape[0]//2
@@ -183,22 +185,25 @@ class DiffimTest(object):
                           constant_values=0)
             psf2 = np.pad(self.im2.psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
                           constant_values=0)
-            D_ZOGY = performZOGY(self.im1.im, self.im2.im, psf1, psf2,
-                                 sig1=self.im1.sig, sig2=self.im2.sig)
+            D_ZOGY, varZOGY = performZOGY(self.im1.im, self.im2.im,
+                                          self.im1.var, self.im2.var,
+                                          psf1, psf2,
+                                          sig1=self.im1.sig, sig2=self.im2.sig)
 
         P_D_ZOGY, F_D = computeZOGYDiffimPsf(self.im1.im, self.im2.im,
                                              self.im1.psf, self.im2.psf,
                                              sig1=self.im1.sig, sig2=self.im2.sig, F_r=1., F_n=1.)
-        varZOGY = (self.im1.var + self.im2.var) # / (self.im1.sig**2. + self.im2.sig**2.)  # Same here!
+        #varZOGY = (self.im1.var + self.im2.var) # / (self.im1.sig**2. + self.im2.sig**2.)  # Same here!
         D_ZOGY[D_ZOGY == 0.] = np.nan
         varZOGY[np.isnan(D_ZOGY)] = np.nan
         self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, varZOGY)
 
         if computeScorr:
             S_corr_ZOGY, S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
-                var2c = performZOGY_Scorr(self.im1.im, self.im2.im, self.im1.var, self.im2.var,
-                                          sig1=self.im1.sig, sig2=self.im2.sig,
+                var2c = performZOGY_Scorr(self.im1.im, self.im2.im,
+                                          self.im1.var, self.im2.var,
                                           im1_psf=self.im1.psf, im2_psf=self.im2.psf,
+                                          sig1=self.im1.sig, sig2=self.im2.sig,
                                           D=D_ZOGY, #xVarAst=dx, yVarAst=dy)
                                           xVarAst=self.astrometricOffsets[0], # these are already variances.
                                           yVarAst=self.astrometricOffsets[1],
@@ -325,9 +330,9 @@ class DiffimTest(object):
     # Plot SNRs vs. input fluxes for the diffims and the input images.
     # Derived from notebook '30. 3a. Start from the basics-force phot and matching-restart'.
     # Can just return the dataframe without plotting if desired.
-    def doPlotWithDetectionsHighlighted(self, transientsOnly=True, addPresub=False,
+    def doPlotWithDetectionsHighlighted(self, runTestResult=None, transientsOnly=True, addPresub=False,
                                         xaxisIsScienceForcedPhot=False, alpha=0.5,
-                                        divideByInput=True, actuallyPlot=True, skyLimited=True):
+                                        divideByInput=False, actuallyPlot=True, skyLimited=True):
 
         import lsst.afw.table as afwTable
         import lsst.daf.base as dafBase
@@ -340,9 +345,12 @@ class DiffimTest(object):
 
         #fp_DIFFIM=fp_ZOGY, label='ZOGY', color='b', alpha=1.0,
 
-        res = self.runTest(returnSources=True, matchDist=np.sqrt(1.5))
+        res = runTestResult
+        if runTestResult is None or (runTestResult is not None and 'sources' not in runTestResult):
+            res = self.runTest(returnSources=True, matchDist=np.sqrt(1.5))
+
         src = res['sources']
-        del res['sources']
+        #del res['sources']
         #print res
 
         cats = self.doForcedPhot(transientsOnly=transientsOnly)
@@ -377,8 +385,10 @@ class DiffimTest(object):
 
             if actuallyPlot:
                 # Plot all sources
-                plt.scatter(srces,
-                            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
+                yvals = fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma']
+                if divideByInput:
+                    yvals /= df['inputSNR']
+                plt.scatter(srces, yvals,
                             color=color[i], alpha=alpha, label=label[i])
                 #plt.scatter(srces,
                 #            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
@@ -393,6 +403,7 @@ class DiffimTest(object):
                 detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
                 sources_detected = sources_detected[detected]
                 sources_detected = sources_detected['inputFlux_science']
+                snrCalced_detected = snrCalced[detected]
                 fp_ZOGY_detected = catalogToDF(fp_d)
                 detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
                 fp_ZOGY_detected = fp_ZOGY_detected[detected]
@@ -404,6 +415,7 @@ class DiffimTest(object):
                 detected = np.in1d(sources_detected['id'], matchCat['ref_id'])
                 sources_detected = sources_detected[detected]
                 sources_detected = sources_detected['base_PsfFlux_flux']
+                snrCalced_detected = snrCalced[detected]
                 fp_ZOGY_detected = catalogToDF(fp_d)
                 detected = np.in1d(fp_ZOGY_detected['id'], matchCat['ref_id'])
                 fp_ZOGY_detected = fp_ZOGY_detected[detected]
@@ -411,8 +423,10 @@ class DiffimTest(object):
             df[label[i] + '_detected'] = detected
             if actuallyPlot and len(detected) > 0:
                 mStyle = matplotlib.markers.MarkerStyle('o', 'none')
-                plt.scatter(sources_detected,
-                            fp_ZOGY_detected['base_PsfFlux_flux']/fp_ZOGY_detected['base_PsfFlux_fluxSigma'],
+                yvals = fp_ZOGY_detected['base_PsfFlux_flux']/fp_ZOGY_detected['base_PsfFlux_fluxSigma']
+                if divideByInput:
+                    yvals /= snrCalced_detected
+                plt.scatter(sources_detected, yvals,
                             #label=label[i], s=20, color=color[i], alpha=alpha) #, edgecolors='r')
                             label=None, s=30, edgecolors=color[i], facecolors='none', marker='o', alpha=1.0)
 
@@ -420,20 +434,29 @@ class DiffimTest(object):
             df['templateSNR'] = fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma']
             df['scienceSNR'] = fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma']
             if actuallyPlot:
-                plt.scatter(srces,
-                            fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma'],
+                yvals = fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma']
+                if divideByInput:
+                    yvals /= df['inputSNR']
+                plt.scatter(srces, yvals,
                             label='template', color='y', alpha=alpha)
-                plt.scatter(srces,
-                            fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma'],
+                yvals = fp2['base_PsfFlux_flux']/fp2['base_PsfFlux_fluxSigma']
+                if divideByInput:
+                    yvals /= df['inputSNR']
+                plt.scatter(srces, yvals,
                             label='science', color='orange', alpha=alpha-0.2)
 
         if actuallyPlot:
-            if xaxisIsScienceForcedPhot:
-                plt.scatter(srces, snrCalced, color='k', alpha=alpha-0.2, s=7, label='Input SNR')
+            if not divideByInput:
+                if xaxisIsScienceForcedPhot:
+                    plt.scatter(srces, snrCalced, color='k', alpha=alpha-0.2, s=7, label='Input SNR')
+                else:
+                    plt.plot(srces, snrCalced, color='k', alpha=alpha-0.2, label='Input SNR')
+                plt.ylabel('measured SNR')
             else:
-                plt.plot(srces, snrCalced, color='k', alpha=alpha-0.2, label='Input SNR')
+                plt.ylabel('measured SNR / input SNR')
+
             if len(detected) > 0:
-                plt.scatter([10000], [10], s=30, edgecolors='r', facecolors='none', marker='o', label='Detected')
+                plt.scatter([10000], [0], s=30, edgecolors='r', facecolors='none', marker='o', label='Detected')
             legend = plt.legend(loc='upper left', scatterpoints=3)
             for label in legend.get_texts():
                 label.set_fontsize('x-small')
@@ -441,6 +464,5 @@ class DiffimTest(object):
                 plt.xlabel('input flux')
             else:
                 plt.xlabel('science flux (measured)')
-            plt.ylabel('measured SNR')
 
-        return res, df
+        return df, res
