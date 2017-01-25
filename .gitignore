@@ -69,3 +69,5 @@ test_imageDifference/
 zzz*.ipynb
 Untitled*.ipynb
 *.fits
+*pkl.gz
+
