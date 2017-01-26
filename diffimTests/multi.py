@@ -41,7 +41,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     varFlux2 = flux
     if not hasattr(varFlux2, "__len__"):
         varFlux2 = np.repeat(flux, n_varSources)
-    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=flux,
+    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=varFlux2,
                          n_sources=n_sources, sourceFluxRange=(200, 20000),
                          templateNoNoise=templateNoNoise, skyLimited=skyLimited, avoidAllOverlaps=15.,
                          seed=seed)
