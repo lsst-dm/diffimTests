@@ -169,7 +169,7 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuall
     fig, axes = plt.subplots(nrows=1, ncols=2)
 
     if not asHist:
-        sns.violinplot(data=TP, cut=True, linewidth=0.3, bw=0.25, alpha=0.5, ax=axes[0])
+        sns.violinplot(data=TP, cut=True, linewidth=0.3, bw=0.25, scale='width', alpha=0.5, ax=axes[0])
         if TP.shape[0] < 500:
             sns.swarmplot(data=TP, color='black', size=3, alpha=0.3, ax=axes[0])
         sns.boxplot(data=TP, saturation=0.5, boxprops={'facecolor': 'None'},
@@ -177,10 +177,10 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuall
         plt.setp(axes[0], alpha=0.3)
         axes[0].set_ylabel('True positive' + title_suffix)
         axes[0].set_title(title)
-        sns.violinplot(data=FP, cut=True, linewidth=0.3, bw=0.5, ax=axes[1])
+        sns.violinplot(data=FP, cut=True, linewidth=0.3, bw=0.5, scale='width', ax=axes[1])
         if FP.shape[0] < 500:
             sns.swarmplot(data=FP, color='black', size=3, alpha=0.3, ax=axes[1])
-        sns.boxplot(data=FP, saturation=0.5, boxprops={'facecolor': 'None'}, 
+        sns.boxplot(data=FP, saturation=0.5, boxprops={'facecolor': 'None'},
                     whiskerprops={'linewidth': 0}, showfliers=False, ax=axes[1])
         plt.setp(axes[1], alpha=0.3)
         axes[1].set_ylabel('False positive' + title_suffix)

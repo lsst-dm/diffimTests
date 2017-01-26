@@ -74,7 +74,7 @@ def performZOGY(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=No
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.,
-                          padSize=15):
+                          padSize=7):
     sigR, sigN, P_r_hat, P_n_hat, denom, padded_psf1, padded_psf2 = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                                               sig1, sig2, F_r, F_n,
                                                                               padSize=padSize)
@@ -85,7 +85,7 @@ def performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=Non
     K_n = np.fft.ifft2(K_n_hat).real
 
     if padSize > 0:
-        ps = padSize // 2
+        ps = padSize #// 2
         K_n = K_n[ps:-ps, ps:-ps]
         K_r = K_r[ps:-ps, ps:-ps]
 

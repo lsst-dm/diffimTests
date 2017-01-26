@@ -274,7 +274,7 @@ class DiffimTest(object):
                     src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
                     src['ZOGY'] = src_ZOGY
                 elif subMethod is 'ZOGY_S':
-                    src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), doSmooth=False)
+                    src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), thresholdType='stdev', doSmooth=False)
                     src['SZOGY'] = src_SZOGY
                 elif subMethod is 'AL' and D_AL is not None:
                     src_AL = doDetection(D_AL.asAfwExposure())

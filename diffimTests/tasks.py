@@ -119,7 +119,7 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
     return measCat, sources
 
 
-def doDetection(exp, threshold=5.0, thresholdType='stdev', thresholdPolarity='both', doSmooth=True,
+def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolarity='both', doSmooth=True,
                 doMeasure=True, asDF=False):
     # Modeled from meas_algorithms/tests/testMeasure.py
     schema = afwTable.SourceTable.makeMinimalSchema()
