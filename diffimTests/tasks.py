@@ -178,6 +178,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     # wasn't specified; meas_base requires us to be explicit.
     if exp.getPsf() is not None:
         shape = exp.getPsf().computeImage().getDimensions()
+        startSize = exp.getPsf().computeShape().getDeterminantRadius() / 2.
     else:
         shape = [21, 21]
     psf = measAlg.DoubleGaussianPsf(shape[0], shape[1], startSize)
@@ -187,7 +188,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     im -= np.median(im.getArray())  # why did I do this?  seems to help sometimes.
 
     sources = doDetection(exp, threshold=detectThresh)
-    #print 'N SOURCES:', len(sources)
+    print 'N SOURCES:', len(sources)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 

@@ -4,7 +4,7 @@ import multiprocessing
 from joblib import Parallel, delayed
 
 from .diffimTests import DiffimTest
-from .tasks import measurePsf
+from .tasks import doMeasurePsf
 from .afw import afwPsfToArray, afwPsfToShape, arrayToAfwPsf
 from .psf import computeMoments
 
@@ -51,7 +51,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         try:
             actualPsf1 = testObj.im1.psf.copy()
             im1 = testObj.im1.asAfwExposure()
-            res1 = measurePsf(im1, detectThresh=5.0, measurePsfAlg='psfex')
+            res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg='psfex')
             psf1 = afwPsfToArray(res1.psf, im1)
             psf1a = psf1.copy()
             psf1anorm = psf1a[np.abs(psf1a) >= 1e-3].sum()
@@ -64,14 +64,16 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
             shape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments1 = computeMoments(psf1)
         except Exception as e:
+            print 'HERE1:', e
             psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
+            raise e
 
     psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
     if remeasurePsfs[1]:  # re-measure the PSF of the science image, save the stats on the orig. and new PSF
         try:
             actualPsf2 = testObj.im2.psf.copy()
             im2 = testObj.im2.asAfwExposure()
-            res2 = measurePsf(im2, detectThresh=5.0, measurePsfAlg='psfex')
+            res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg='psfex')
             psf2 = afwPsfToArray(res2.psf, im2)
             psf2a = psf2.copy()
             psf2anorm = psf2a[np.abs(psf2a) >= 2e-3].sum()
@@ -84,7 +86,9 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
             shape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments2 = computeMoments(psf2)
         except Exception as e:
+            print 'HERE2:', e
             psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
+            raise e
 
     # This function below is set to *not* plot but it runs `runTest` and outputs the `runTest` results
     # and a dataframe with forced photometry results. So we use this instead of `runTest` directly.
