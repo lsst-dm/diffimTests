@@ -113,7 +113,8 @@ def afwPsfToArray(psf, img=None, coord=None, centroid=None):
         if centroid is not None:
             img = Psf.recenterKernelImage(img, afwGeom.Point2D(centroid[0], centroid[1]))
         out = img.getArray()
-    except:  # Maybe it's a psf matching kernel -- use alPsfMatchingKernelToArray
+    except Exception as e:  # Maybe it's a psf matching kernel -- use alPsfMatchingKernelToArray
+        print e
         pass
     return out
 

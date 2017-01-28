@@ -30,7 +30,7 @@ def computeNormedPsfRms(psf1, psf2):
 
 
 def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False, False],
-            returnObj=False, **kwargs):
+            returnObj=False, silent=False, **kwargs):
     sky = kwargs.get('sky', 300.)
     psf1 = kwargs.get('psf1', [1.6, 1.6])
     psf2 = kwargs.get('psf2', [1.8, 2.2])
@@ -42,9 +42,8 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     if not hasattr(varFlux2, "__len__"):
         varFlux2 = np.repeat(flux, n_varSources)
     testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=varFlux2,
-                         n_sources=n_sources, sourceFluxRange=(200, 20000),
-                         templateNoNoise=templateNoNoise, skyLimited=skyLimited, avoidAllOverlaps=15.,
-                         seed=seed)
+                         n_sources=n_sources, templateNoNoise=templateNoNoise,
+                         skyLimited=skyLimited, avoidAllOverlaps=15., seed=seed, **kwargs)
 
     psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
     if remeasurePsfs[0]:  # re-measure the PSF of the template, save the stats on the orig. and new PSF
@@ -102,8 +101,9 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         del res['sources']
 
     except Exception as e:
-        print 'ERROR RUNNING SEED:', seed
-        raise e
+        if not silent:
+            print 'ERROR RUNNING SEED:', seed #, 'FLUX:', varFlux2
+        #raise e
 
     out = {'result': res, 'flux': flux, 'df': df}
     out['sky'] = sky

@@ -30,8 +30,8 @@ __all__ = ['makeFakeImages']
 
 def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1.8, 2.2],
                    theta1=0., theta2=-45., psfType='gaussian', offset=[0., 0.], randAstromVariance=0.,
-                   psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(620, 10), im2background=0.,
-                   n_sources=1500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(250, 60000),
+                   psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(620., 10), im2background=0.,
+                   n_sources=1500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(600., 120000.),
                    variablesNearCenter=False, avoidBorder=2.1, avoidAllOverlaps=0.,
                    sourceFluxDistrib='exponential', psfSize=21, seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
