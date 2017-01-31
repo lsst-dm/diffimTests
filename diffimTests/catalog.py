@@ -31,6 +31,8 @@ def computeOffsets(src1, src2, threshold=2.5, fluxWeighted=True, tmp=False):
     dy = (match1.iloc[:, 1].values - match2.iloc[:, 1].values)
     _, dylow, dyupp = scipy.stats.sigmaclip(dy, low=2, high=2)
     inds = (dx >= dxlow) & (dx <= dxupp) & (dy >= dylow) & (dy <= dyupp)
+    if np.sum(inds) <= 0:
+        inds = np.repeat(True, len(inds))
     weights = np.ones(inds.sum())
     if fluxWeighted and match1.shape[1] >= 3:
         fluxes = (match1.iloc[:, 2].values + match2.iloc[:, 2].values) / 2.
@@ -38,6 +40,8 @@ def computeOffsets(src1, src2, threshold=2.5, fluxWeighted=True, tmp=False):
     rms = dx[inds]**2. + dy[inds]**2.
     if tmp:
         return dx[inds], dy[inds]
+    if np.sum(weights) == 0.:
+        weights = np.zeros(len(rms))
     dx = np.average(np.abs(dx[inds]**2.), weights=weights)
     dy = np.average(np.abs(dy[inds]**2.), weights=weights)
     rms = np.average(rms, weights=weights)

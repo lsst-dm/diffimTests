@@ -188,7 +188,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     im -= np.median(im.getArray())  # why did I do this?  seems to help sometimes.
 
     sources = doDetection(exp, threshold=detectThresh)
-    print 'N SOURCES:', len(sources)
+    #print 'N SOURCES:', len(sources)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 

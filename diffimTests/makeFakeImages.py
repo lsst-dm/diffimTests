@@ -20,6 +20,7 @@ __all__ = ['makeFakeImages']
 
 # Note that n_sources has to be >= len(varFlux2). In fact, to get a desired number of static
 # sources, you want to have n_sources = (# desired static sources) + len(varFlux2)
+# UPDATE: this is not true anymore.
 
 # TBD: (1) make no-noise template (DONE - templateNoNoise)
 #      (2) allow enforce sky-limited (i.e., no shot noise in variance from stars) (DONE - skyLimited)
@@ -31,9 +32,9 @@ __all__ = ['makeFakeImages']
 def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1.8, 2.2],
                    theta1=0., theta2=-45., psfType='gaussian', offset=[0., 0.], randAstromVariance=0.,
                    psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(620., 10), im2background=0.,
-                   n_sources=1500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(600., 120000.),
+                   n_sources=500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(600., 120000.),
                    variablesNearCenter=False, avoidBorder=2.1, avoidAllOverlaps=0.,
-                   sourceFluxDistrib='exponential', psfSize=21, seed=66, fast=True, verbose=False):
+                   sourceFluxDistrib='powerlaw', psfSize=21, seed=66, fast=True, verbose=False):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -45,6 +46,15 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         psf2 = [psf2, psf2]
     if not hasattr(offset, "__len__"):
         offset = [offset, offset]
+
+    if not hasattr(varFlux1, "__len__"):
+        varFlux1 = [varFlux1]
+    if not hasattr(varFlux2, "__len__"):
+        varFlux2 = [varFlux2]
+    if len(varFlux1) == 1:
+        varFlux1 = np.repeat(varFlux1[0], len(varFlux2))
+
+    n_sources += len(varFlux2)  # make sure there are n_sources + len(varFlux2) sources
 
     # Input PSF is in sigmas, in units of pixels.
     # For LSST, avg. seeing is ~0.7" or ~3.5 pixels (FWHM), or for sigma is 3.5/2.35482 = 1.48.
@@ -62,11 +72,11 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     # Compute the star fluxes
     if sourceFluxDistrib == 'uniform':
         fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
-    elif sourceFluxDistrib == 'exponential':
+    elif sourceFluxDistrib == 'powerlaw':
         # More realistic (euclidean), # of stars goes as 10**(0.6mag) so decreases by about 3.98x per increasing 1 magnitude
         # Looking toward the disk/bulge, this probably decreases to ~3.
         # This means # of stars increases about ~3x per decreasing ~2.512x in flux.
-        # So we use: n = flux**(-3./2.512)
+        # So we use: n ~ flux**(-3./2.512)
         fluxes = np.exp(np.linspace(np.log(sourceFluxRange[0]), np.log(sourceFluxRange[1])))
         n_flux = (np.array(fluxes)/sourceFluxRange[1])**(-3./2.512)
         samples = np.array([])
@@ -82,6 +92,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             tries += 1
 
         fluxes = samples[0:n_sources]
+        fluxes *= sourceFluxRange[1] / fluxes.max()
 
     #fluxes = np.sort(fluxes)[::-1]
 
@@ -117,12 +128,6 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
     fluxSortedInds = np.argsort(xposns**2. + yposns**2.)[::-1]
 
-    if not hasattr(varFlux1, "__len__"):
-        varFlux1 = [varFlux1]
-    if not hasattr(varFlux2, "__len__"):
-        varFlux2 = [varFlux2]
-    if len(varFlux1) == 1:
-        varFlux1 = np.repeat(varFlux1[0], len(varFlux2))
     if variablesNearCenter:
         # Make the sources closest to the center of the image the ones that increases in flux
         inds = fluxSortedInds[:len(varFlux2)]

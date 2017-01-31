@@ -38,7 +38,7 @@ class DiffimTest(object):
                 self.astrometricOffsets = [dx, dy]
             except Exception as e:
                 print(e)
-                pass
+                #pass
 
             self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = self.ALres = None
 
@@ -332,7 +332,7 @@ class DiffimTest(object):
     # Can just return the dataframe without plotting if desired.
     def doPlotWithDetectionsHighlighted(self, runTestResult=None, transientsOnly=True, addPresub=False,
                                         xaxisIsScienceForcedPhot=False, alpha=0.5,
-                                        divideByInput=False, actuallyPlot=True, skyLimited=True):
+                                        divideByInput=False, actuallyPlot=True, skyLimited=False):
 
         import lsst.afw.table as afwTable
         import lsst.daf.base as dafBase

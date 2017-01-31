@@ -29,39 +29,43 @@ def computeNormedPsfRms(psf1, psf2):
     return rms1weighted
 
 
-def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False, False],
+def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False, False],
             returnObj=False, silent=False, **kwargs):
-    sky = kwargs.get('sky', 300.)
-    psf1 = kwargs.get('psf1', [1.6, 1.6])
-    psf2 = kwargs.get('psf2', [1.8, 2.2])
-    templateNoNoise = kwargs.get('templateNoNoise', True)
-    skyLimited = kwargs.get('skyLimited', True)
+    sky = kwargs.get('sky', 300.)                           # same default as makeFakeImages()
+    psf1 = kwargs.get('psf1', [1.6, 1.6])                   # same default as makeFakeImages()
+    psf2 = kwargs.get('psf2', [1.8, 2.2])                   # same default as makeFakeImages()
+    templateNoNoise = kwargs.get('templateNoNoise', False)  # same default as makeFakeImages()
+    skyLimited = kwargs.get('skyLimited', False)            # ditto.
     addPresub = kwargs.get('addPresub', True)  # Probably want this True, but it slows things down
 
     varFlux2 = flux
     if not hasattr(varFlux2, "__len__"):
         varFlux2 = np.repeat(flux, n_varSources)
-    testObj = DiffimTest(sky=sky, psf1=psf1, psf2=psf2, varFlux2=varFlux2,
-                         n_sources=n_sources, templateNoNoise=templateNoNoise,
-                         skyLimited=skyLimited, avoidAllOverlaps=15., seed=seed, **kwargs)
+
+    #print sky, psf1, psf2, varFlux2, n_sources, templateNoNoise, skyLimited, seed, kwargs
+    testObj = DiffimTest(#sky=sky, #psf1=psf1, psf2=psf2,
+                         varFlux2=varFlux2,
+                         n_sources=n_sources, #templateNoNoise=templateNoNoise, skyLimited=skyLimited,
+                         avoidAllOverlaps=15., seed=seed, **kwargs)
 
     psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
     if remeasurePsfs[0]:  # re-measure the PSF of the template, save the stats on the orig. and new PSF
         try:
-            actualPsf1 = testObj.im1.psf.copy()
+            inputPsf1 = testObj.im1.psf.copy()
             im1 = testObj.im1.asAfwExposure()
             res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg='psfex')
             psf1 = afwPsfToArray(res1.psf, im1)
             psf1a = psf1.copy()
             psf1anorm = psf1a[np.abs(psf1a) >= 1e-3].sum()
             psf1a /= psf1anorm
-            rms1 = np.sqrt(((psf1a - actualPsf1)**2.).mean())
-            normedRms1 = computeNormedPsfRms(psf1a, actualPsf1)
-            sh = arrayToAfwPsf(actualPsf1).computeShape()
+            rms1 = np.sqrt(((psf1a - inputPsf1)**2.).mean())
+            normedRms1 = computeNormedPsfRms(psf1a, inputPsf1)
+            sh = arrayToAfwPsf(inputPsf1).computeShape()
             inputShape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             sh = afwPsfToShape(res1.psf, im1)
             shape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments1 = computeMoments(psf1)
+            testObj.im1.psf = psf1a
         except Exception as e:
             print 'HERE1:', e
             psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
@@ -70,20 +74,21 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
     if remeasurePsfs[1]:  # re-measure the PSF of the science image, save the stats on the orig. and new PSF
         try:
-            actualPsf2 = testObj.im2.psf.copy()
+            inputPsf2 = testObj.im2.psf.copy()
             im2 = testObj.im2.asAfwExposure()
             res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg='psfex')
             psf2 = afwPsfToArray(res2.psf, im2)
             psf2a = psf2.copy()
             psf2anorm = psf2a[np.abs(psf2a) >= 2e-3].sum()
             psf2a /= psf2anorm
-            rms2 = np.sqrt(((psf2a - actualPsf2)**2.).mean())
-            normedRms2 = computeNormedPsfRms(psf2a, actualPsf2)
-            sh = arrayToAfwPsf(actualPsf2).computeShape()
+            rms2 = np.sqrt(((psf2a - inputPsf2)**2.).mean())
+            normedRms2 = computeNormedPsfRms(psf2a, inputPsf2)
+            sh = arrayToAfwPsf(inputPsf2).computeShape()
             inputShape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             sh = afwPsfToShape(res2.psf, im2)
             shape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments2 = computeMoments(psf2)
+            testObj.im2.psf = psf2a
         except Exception as e:
             print 'HERE2:', e
             psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
@@ -92,9 +97,10 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     # This function below is set to *not* plot but it runs `runTest` and outputs the `runTest` results
     # and a dataframe with forced photometry results. So we use this instead of `runTest` directly.
     # Note `addPresub=True` may not always be necessary and will slow it down a bit.
-    res = df = None
+    res = df = sources = None
     try:
         res = testObj.runTest(returnSources=True, **kwargs)
+        sources = res['sources']
         df, _ = testObj.doPlotWithDetectionsHighlighted(runTestResult=res, transientsOnly=True,
                                                         addPresub=addPresub, xaxisIsScienceForcedPhot=False,
                                                         actuallyPlot=False, skyLimited=skyLimited)
@@ -133,13 +139,18 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
 
 
 # Using flux=620 for SNR=5 (see cell #4 of notebook '30. 4a. other psf models-real PSFs')
-def runMultiDiffimTests(varSourceFlux=620., n_runs=100, num_cores=None, **kwargs):
-    inputs = [(f, seed) for f in [varSourceFlux] for seed in np.arange(66, 66+n_runs, 1)]
+def runMultiDiffimTests(varSourceFlux=620., nStaticSources=500, n_runs=100, num_cores=None, **kwargs):
+    if not hasattr(varSourceFlux, "__len__"):
+        varSourceFlux = [varSourceFlux]
+    if not hasattr(nStaticSources, "__len__"):
+        nStaticSources = [nStaticSources]
+    inputs = [(f, ns, seed) for f in varSourceFlux for ns in nStaticSources
+              for seed in np.arange(66, 66+n_runs, 1)]
     print 'RUNNING:', len(inputs)
     if num_cores is None:
         num_cores = getNumCores()
-    testResults = Parallel(n_jobs=num_cores, verbose=2)(delayed(runTest)(flux=i[0], seed=i[1], **kwargs)
-                                                        for i in inputs)
+    testResults = Parallel(n_jobs=num_cores, verbose=4)(
+        delayed(runTest)(flux=i[0], n_sources=i[1], seed=i[2], **kwargs) for i in inputs)
     return testResults
 
 
