@@ -65,25 +65,26 @@ def makePsf(psfType='gaussian', sigma=[1., 1.], theta=0., offset=[0., 0.], x0=No
     #    return psf
 
     # Kolmogorov doesn't listen to my input dimensions, so fix it here.
-    if psf.shape[0] > x0.shape[0]:
-        pos_max = np.unravel_index(np.argmax(psf), psf.shape)
-        psf = psf[(pos_max[0]-x0.shape[0]//2):(pos_max[0]+x0.shape[0]//2+1), :]
-    elif psf.shape[0] < x0.shape[0]:
-        psf = np.pad(psf, (((x0.shape[0]-psf.shape[0])//2, (x0.shape[0]-psf.shape[0])//2+1), (0, 0)),
-                     mode='constant')
-        if psf.shape[0] > x0.shape[0]:
-            psf = psf[:-1, :]
+    # if psf.shape[0] > x0.shape[0]:
+    #     pos_max = np.unravel_index(np.argmax(psf), psf.shape)
+    #     psf = psf[(pos_max[0]-x0.shape[0]//2):(pos_max[0]+x0.shape[0]//2+1), :]
+    # elif psf.shape[0] < x0.shape[0]:
+    #     psf = np.pad(psf, (((x0.shape[0]-psf.shape[0])//2, (x0.shape[0]-psf.shape[0])//2+1), (0, 0)),
+    #                  mode='constant')
+    #     if psf.shape[0] > x0.shape[0]:
+    #         psf = psf[:-1, :]
 
-    if psf.shape[1] > x0.shape[1]:
-        pos_max = np.unravel_index(np.argmax(psf), psf.shape)
-        psf = psf[:, (pos_max[1]-x0.shape[1]//2):(pos_max[1]+x0.shape[1]//2+1)]
-    elif psf.shape[1] < x0.shape[1]:
-        psf = np.pad(psf, ((0, 0), ((x0.shape[1]-psf.shape[1])//2, (x0.shape[1]-psf.shape[1])//2+1)),
-                     mode='constant')
-        if psf.shape[1] > x0.shape[1]:
-            psf = psf[:, :-1]
+    # if psf.shape[1] > x0.shape[1]:
+    #     pos_max = np.unravel_index(np.argmax(psf), psf.shape)
+    #     psf = psf[:, (pos_max[1]-x0.shape[1]//2):(pos_max[1]+x0.shape[1]//2+1)]
+    # elif psf.shape[1] < x0.shape[1]:
+    #     psf = np.pad(psf, ((0, 0), ((x0.shape[1]-psf.shape[1])//2, (x0.shape[1]-psf.shape[1])//2+1)),
+    #                  mode='constant')
+    #     if psf.shape[1] > x0.shape[1]:
+    #         psf = psf[:, :-1]
 
-    psf = recenterPsf(psf, offset)
+    # psf = recenterPsf(psf, offset)
+    psf = resizePsf(psf, x0.shape, offset)
 
     psfmin = psf.min()
     if not np.isclose(psfmin, 0.0):
@@ -184,8 +185,39 @@ def computeMoments(psf, p=1.):
 
 def recenterPsf(psf, offset=[0., 0.]):
     xmoment, ymoment = computeMoments(psf)
+    if np.abs(xmoment) > 2. or np.abs(ymoment) > 2.:
+        return psf
     if not np.isclose(xmoment, offset[0]) or not np.isclose(ymoment, offset[1]):
         psf = scipy.ndimage.interpolation.shift(psf, (offset[0]-xmoment, offset[1]-ymoment))
+    return psf
+
+
+def resizePsf(psf, shape, offset=[0., 0.]):
+    changed = False
+    if psf.shape[0] > shape[0]:
+        changed = True
+        pos_max = np.unravel_index(np.argmax(psf), psf.shape)
+        psf = psf[(pos_max[0]-shape[0]//2):(pos_max[0]+shape[0]//2+1), :]
+    elif psf.shape[0] < shape[0]:
+        changed = True
+        psf = np.pad(psf, (((shape[0]-psf.shape[0])//2, (shape[0]-psf.shape[0])//2+1), (0, 0)),
+                     mode='constant')
+        if psf.shape[0] > shape[0]:
+            psf = psf[:-1, :]
+
+    if psf.shape[1] > shape[1]:
+        changed = True
+        pos_max = np.unravel_index(np.argmax(psf), psf.shape)
+        psf = psf[:, (pos_max[1]-shape[1]//2):(pos_max[1]+shape[1]//2+1)]
+    elif psf.shape[1] < shape[1]:
+        changed = True
+        psf = np.pad(psf, ((0, 0), ((shape[1]-psf.shape[1])//2, (shape[1]-psf.shape[1])//2+1)),
+                     mode='constant')
+        if psf.shape[1] > shape[1]:
+            psf = psf[:, :-1]
+
+    if changed:
+        psf = recenterPsf(psf, offset)
     return psf
 
 

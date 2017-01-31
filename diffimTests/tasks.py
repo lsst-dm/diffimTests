@@ -188,7 +188,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     im -= np.median(im.getArray())  # why did I do this?  seems to help sometimes.
 
     sources = doDetection(exp, threshold=detectThresh)
-    #print 'N SOURCES:', len(sources)
+    print 'N SOURCES:', len(sources)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 
@@ -208,10 +208,10 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     if measurePsfAlg is 'pca':
         config.psfDeterminer['pca'].sizeCellX = 128
         config.psfDeterminer['pca'].sizeCellY = 128
-        config.psfDeterminer['pca'].spatialOrder = 1
+        config.psfDeterminer['pca'].spatialOrder = spatialOrder
         config.psfDeterminer['pca'].nEigenComponents = 3
         #config.psfDeterminer['pca'].tolerance = 1e-1
-        #config.starSelector['objectSize'].fluxMin = 500.
+        config.starSelector['objectSize'].fluxMin = 500.
         #config.psfDeterminer['pca'].constantWeight = False
         #config.psfDeterminer['pca'].doMaskBlends = False
         config.psfDeterminer.name = "pca"
@@ -221,4 +221,5 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     task = measurePsf.MeasurePsfTask(schema=schema, config=config)
     #task.log.setLevel(log_level)
     result = task.run(exp, sources)
+
     return result

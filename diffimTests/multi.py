@@ -6,7 +6,7 @@ from joblib import Parallel, delayed
 from .diffimTests import DiffimTest
 from .tasks import doMeasurePsf
 from .afw import afwPsfToArray, afwPsfToShape, arrayToAfwPsf
-from .psf import computeMoments
+from .psf import computeMoments, resizePsf
 
 
 def getNumCores():
@@ -18,6 +18,7 @@ def getNumCores():
     elif num_cores == 4:
         num_cores = 2
     print 'CORES:', num_cores
+    return num_cores
 
 
 def computeNormedPsfRms(psf1, psf2):
@@ -42,22 +43,29 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
     if not hasattr(varFlux2, "__len__"):
         varFlux2 = np.repeat(flux, n_varSources)
 
+    if type(remeasurePsfs[0]) is bool and remeasurePsfs[0]:
+        remeasurePsfs[0] = 'psfex'
+    if type(remeasurePsfs[1]) is bool and remeasurePsfs[1]:
+        remeasurePsfs[1] = 'psfex'
+
     #print sky, psf1, psf2, varFlux2, n_sources, templateNoNoise, skyLimited, seed, kwargs
-    testObj = DiffimTest(#sky=sky, #psf1=psf1, psf2=psf2,
-                         varFlux2=varFlux2,
+    testObj = DiffimTest(varFlux2=varFlux2, #sky=sky, #psf1=psf1, psf2=psf2,
                          n_sources=n_sources, #templateNoNoise=templateNoNoise, skyLimited=skyLimited,
-                         avoidAllOverlaps=15., seed=seed, **kwargs)
+                         seed=seed, **kwargs)
 
     psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
-    if remeasurePsfs[0]:  # re-measure the PSF of the template, save the stats on the orig. and new PSF
+    if type(remeasurePsfs[0]) is not bool or remeasurePsfs[0] != False:
+        # re-measure the PSF of the template, save the stats on the orig. and new PSF
         try:
             inputPsf1 = testObj.im1.psf.copy()
             im1 = testObj.im1.asAfwExposure()
-            res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg='psfex')
+            res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg=remeasurePsfs[0])
             psf1 = afwPsfToArray(res1.psf, im1)
+            psf1 = resizePsf(psf1, inputPsf1.shape)
             psf1a = psf1.copy()
             psf1anorm = psf1a[np.abs(psf1a) >= 1e-3].sum()
             psf1a /= psf1anorm
+
             rms1 = np.sqrt(((psf1a - inputPsf1)**2.).mean())
             normedRms1 = computeNormedPsfRms(psf1a, inputPsf1)
             sh = arrayToAfwPsf(inputPsf1).computeShape()
@@ -65,22 +73,30 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             sh = afwPsfToShape(res1.psf, im1)
             shape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments1 = computeMoments(psf1)
-            testObj.im1.psf = psf1a
+
+            psf1b = psf1.copy()
+            psf1b[psf1b < 0] = 0
+            psf1b[0:10,0:10] = psf1b[31:41,31:41] = 0
+            psf1b /= psf1b.sum()
+            testObj.im1.psf = psf1b
         except Exception as e:
             print 'HERE1:', e
             psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
-            raise e
+            #raise e
 
     psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
-    if remeasurePsfs[1]:  # re-measure the PSF of the science image, save the stats on the orig. and new PSF
+    if type(remeasurePsfs[1]) is not bool or remeasurePsfs[1] != False:
+        # re-measure the PSF of the science image, save the stats on the orig. and new PSF
         try:
             inputPsf2 = testObj.im2.psf.copy()
             im2 = testObj.im2.asAfwExposure()
-            res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg='psfex')
+            res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg=remeasurePsfs[1])
             psf2 = afwPsfToArray(res2.psf, im2)
+            psf2 = resizePsf(psf2, inputPsf2.shape)
             psf2a = psf2.copy()
             psf2anorm = psf2a[np.abs(psf2a) >= 2e-3].sum()
             psf2a /= psf2anorm
+
             rms2 = np.sqrt(((psf2a - inputPsf2)**2.).mean())
             normedRms2 = computeNormedPsfRms(psf2a, inputPsf2)
             sh = arrayToAfwPsf(inputPsf2).computeShape()
@@ -88,11 +104,16 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             sh = afwPsfToShape(res2.psf, im2)
             shape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments2 = computeMoments(psf2)
-            testObj.im2.psf = psf2a
+
+            psf2b = psf2.copy()
+            psf2b[psf2b < 0] = 0
+            psf2b[0:10,0:10] = psf2b[31:41,31:41] = 0
+            psf2b /= psf2b.sum()
+            testObj.im2.psf = psf2b
         except Exception as e:
             print 'HERE2:', e
             psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
-            raise e
+            #raise e
 
     # This function below is set to *not* plot but it runs `runTest` and outputs the `runTest` results
     # and a dataframe with forced photometry results. So we use this instead of `runTest` directly.
@@ -104,7 +125,8 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
         df, _ = testObj.doPlotWithDetectionsHighlighted(runTestResult=res, transientsOnly=True,
                                                         addPresub=addPresub, xaxisIsScienceForcedPhot=False,
                                                         actuallyPlot=False, skyLimited=skyLimited)
-        del res['sources']
+        if not returnObj:  # delete for space savings
+            del res['sources']
 
     except Exception as e:
         if not silent:
