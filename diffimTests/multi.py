@@ -14,7 +14,7 @@ def getNumCores():
     if num_cores == 32:
         num_cores = 16
     elif num_cores == 8:
-        num_cores = 3
+        num_cores = 4
     elif num_cores == 4:
         num_cores = 2
     print 'CORES:', num_cores
@@ -59,7 +59,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
         try:
             inputPsf1 = testObj.im1.psf.copy()
             im1 = testObj.im1.asAfwExposure()
-            res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg=remeasurePsfs[0])
+            res1 = doMeasurePsf(im1, measurePsfAlg=remeasurePsfs[0])
             psf1 = afwPsfToArray(res1.psf, im1)
             psf1 = resizePsf(psf1, inputPsf1.shape)
             psf1a = psf1.copy()
@@ -77,6 +77,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             psf1b = psf1.copy()
             psf1b[psf1b < 0] = 0
             psf1b[0:10,0:10] = psf1b[31:41,31:41] = 0
+            #psf1b = recenterPsf(psf1b)
             psf1b /= psf1b.sum()
             testObj.im1.psf = psf1b
         except Exception as e:
@@ -90,7 +91,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
         try:
             inputPsf2 = testObj.im2.psf.copy()
             im2 = testObj.im2.asAfwExposure()
-            res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg=remeasurePsfs[1])
+            res2 = doMeasurePsf(im2, measurePsfAlg=remeasurePsfs[1])
             psf2 = afwPsfToArray(res2.psf, im2)
             psf2 = resizePsf(psf2, inputPsf2.shape)
             psf2a = psf2.copy()
@@ -108,6 +109,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             psf2b = psf2.copy()
             psf2b[psf2b < 0] = 0
             psf2b[0:10,0:10] = psf2b[31:41,31:41] = 0
+            #psf2b = recenterPsf(psf2b)
             psf2b /= psf2b.sum()
             testObj.im2.psf = psf2b
         except Exception as e:

@@ -56,34 +56,8 @@ def makePsf(psfType='gaussian', sigma=[1., 1.], theta=0., offset=[0., 0.], x0=No
             if theta != 0.:
                 psf = scipy.ndimage.interpolation.rotate(psf, theta)
 
-    # Apply the shift
-    #if isinstance(psfType, Psf) or isinstance(psfType, np.ndarray) or psfFromFile:
-    #    if np.abs(np.array(offset)).sum() > 0:
-    #        psf = scipy.ndimage.interpolation.shift(psf, [offset[0], offset[1]])  # spline interpolation for shift
-
-    #if psf.shape[0] == x0.shape[0] and psf.shape[1] == x0.shape[1]:
-    #    return psf
-
     # Kolmogorov doesn't listen to my input dimensions, so fix it here.
-    # if psf.shape[0] > x0.shape[0]:
-    #     pos_max = np.unravel_index(np.argmax(psf), psf.shape)
-    #     psf = psf[(pos_max[0]-x0.shape[0]//2):(pos_max[0]+x0.shape[0]//2+1), :]
-    # elif psf.shape[0] < x0.shape[0]:
-    #     psf = np.pad(psf, (((x0.shape[0]-psf.shape[0])//2, (x0.shape[0]-psf.shape[0])//2+1), (0, 0)),
-    #                  mode='constant')
-    #     if psf.shape[0] > x0.shape[0]:
-    #         psf = psf[:-1, :]
-
-    # if psf.shape[1] > x0.shape[1]:
-    #     pos_max = np.unravel_index(np.argmax(psf), psf.shape)
-    #     psf = psf[:, (pos_max[1]-x0.shape[1]//2):(pos_max[1]+x0.shape[1]//2+1)]
-    # elif psf.shape[1] < x0.shape[1]:
-    #     psf = np.pad(psf, ((0, 0), ((x0.shape[1]-psf.shape[1])//2, (x0.shape[1]-psf.shape[1])//2+1)),
-    #                  mode='constant')
-    #     if psf.shape[1] > x0.shape[1]:
-    #         psf = psf[:, :-1]
-
-    # psf = recenterPsf(psf, offset)
+    # Also offsets the psf if offset is non-zero
     psf = resizePsf(psf, x0.shape, offset)
 
     psfmin = psf.min()

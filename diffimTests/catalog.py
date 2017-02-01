@@ -16,7 +16,7 @@ except:
 
 # TBD: use afwTable.matchXy(src1, src2, matchDist)
 # https://github.com/lsst/meas_astrom/blob/master/include/lsst/meas/astrom/makeMatchStatistics.h
-def computeOffsets(src1, src2, threshold=2.5, fluxWeighted=True, tmp=False):
+def computeOffsets(src1, src2, threshold=2.5, fluxWeighted=True, returnOffsetsOnly=False):
     dist = np.sqrt(np.add.outer(src1.iloc[:, 0], -src2.iloc[:, 0])**2. +
                    np.add.outer(src1.iloc[:, 1], -src2.iloc[:, 1])**2.)  # in pixels
     matches = np.where(dist <= threshold)
@@ -38,7 +38,7 @@ def computeOffsets(src1, src2, threshold=2.5, fluxWeighted=True, tmp=False):
         fluxes = (match1.iloc[:, 2].values + match2.iloc[:, 2].values) / 2.
         weights = fluxes[inds]**2.
     rms = dx[inds]**2. + dy[inds]**2.
-    if tmp:
+    if returnOffsetsOnly:
         return dx[inds], dy[inds]
     if np.sum(weights) == 0.:
         weights = np.zeros(len(rms))

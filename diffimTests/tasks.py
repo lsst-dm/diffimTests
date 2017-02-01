@@ -173,7 +173,7 @@ def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolari
     return sources
 
 
-def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, spatialOrder=1):
+def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, spatialOrder=1):
     # The old (meas_algorithms) SdssCentroid assumed this by default if it
     # wasn't specified; meas_base requires us to be explicit.
     if exp.getPsf() is not None:
@@ -188,7 +188,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=5.0, startSize=0.01, s
     im -= np.median(im.getArray())  # why did I do this?  seems to help sometimes.
 
     sources = doDetection(exp, threshold=detectThresh)
-    print 'N SOURCES:', len(sources)
+    #print 'N SOURCES:', len(sources)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
 
