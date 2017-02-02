@@ -40,7 +40,7 @@ class DiffimTest(object):
                 print(e)
                 #pass
 
-            self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = self.ALres = None
+            self.D_AL = self.kappa = self.D_ZOGY = self.S_ZOGY = self.ALres = None  # self.S_corr_ZOGY =
 
     # Ideally call runTest() first so the images are filled in.
     def doPlot(self, centroidCoord=None, include_Szogy=False, addedImgs=None, **kwargs):
@@ -86,9 +86,11 @@ class DiffimTest(object):
             zIm = self.ALres.subtractedExposure.getMaskedImage().getImage().getArray()
             print 'A&L(dec) - A&L:', computeClippedImageStats(alIm - zIm)
             imagesToPlot.append(alIm - zIm)
-        if include_Szogy and self.S_corr_ZOGY is not None:
-            titles.append('S_corr(ZOGY)')
-            imagesToPlot.append(self.S_corr_ZOGY.im)
+        if include_Szogy and self.S_ZOGY is not None:
+            titles.append('S(ZOGY)')
+            imagesToPlot.append(self.S_ZOGY.im)
+            titles.append('S(ZOGY) var')
+            imagesToPlot.append(self.S_ZOGY.var)
         if addedImgs is not None:
             for i, img in enumerate(addedImgs):
                 titles.append('Added ' + str(i))
@@ -101,15 +103,15 @@ class DiffimTest(object):
                     continue
                 imagesToPlot[ind] = im[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
 
-        plotImageGrid(imagesToPlot, titles=titles, **kwargs)
-        return imagesToPlot, titles
+        grid = plotImageGrid(imagesToPlot, titles=titles, extent=((cx-sz), (cx+sz), (cy-sz), (cy+sz)), **kwargs)
+        return imagesToPlot, titles, grid
 
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
     # on im2-im1.
     def reverseImages(self):
         self.im1, self.im2 = self.im2, self.im1
         self.psf1_orig, self.psf2_orig = self.psf2_orig, self.psf1_orig
-        self.D_AL = self.kappa = self.D_ZOGY = self.S_corr_ZOGY = self.S_ZOGY = self.ALres = None
+        self.D_AL = self.kappa = self.D_ZOGY = self.S_ZOGY = self.ALres = None  # self.S_corr_ZOGY = 
 
     def clone(self):
         out = DiffimTest(imSize=self.im1.im.shape, sky=self.im1.metaData['sky'],
@@ -119,9 +121,8 @@ class DiffimTest(object):
         out.centroids, out.changedCentroidInd = self.centroids, self.changedCentroidInd
         out.astrometricOffsets = self.astrometricOffsets
         out.ALres = self.ALres
-        out.D_AL, out.kappa, out.D_ZOGY, \
-            out.S_corr_ZOGY, out.S_ZOGY = self.D_AL, self.kappa, self.D_ZOGY, \
-                                          self.S_corr_ZOGY, self.S_ZOGY
+        out.D_AL, out.kappa, out.D_ZOGY, out.S_ZOGY = self.D_AL, self.kappa, self.D_ZOGY, self.S_ZOGY
+        # out.S_corr_ZOGY = self.S_corr_ZOGY
         return out
 
     def doAL(self, spatialKernelOrder=0, spatialBackgroundOrder=1, kernelSize=None, doDecorr=True,
@@ -199,7 +200,7 @@ class DiffimTest(object):
         self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, varZOGY)
 
         if computeScorr:
-            S_corr_ZOGY, S_ZOGY, _, P_D_ZOGY, F_D, var1c, \
+            S, S_var, _, P_D, F_D, var1c, \
                 var2c = performZOGY_Scorr(self.im1.im, self.im2.im,
                                           self.im1.var, self.im2.var,
                                           im1_psf=self.im1.psf, im2_psf=self.im2.psf,
@@ -208,8 +209,8 @@ class DiffimTest(object):
                                           xVarAst=self.astrometricOffsets[0], # these are already variances.
                                           yVarAst=self.astrometricOffsets[1],
                                           padSize=padSize)
-            self.S_ZOGY = Exposure(S_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c))
-            self.S_corr_ZOGY = Exposure(S_corr_ZOGY, P_D_ZOGY, np.sqrt(var1c + var2c)/np.sqrt(var1c + var2c))
+            self.S_ZOGY = Exposure(S, P_D, S_var) #np.sqrt(var1c + var2c))
+            #self.S_corr_ZOGY = Exposure(S_corr, P_D, S_corr_var)
 
         return self.D_ZOGY
 
@@ -234,7 +235,7 @@ class DiffimTest(object):
             self.im2.doMeasurePsf(self.im2.asAfwExposure())
 
     def reset(self):
-        self.ALres = self.S_corr_ZOGY = self.D_ZOGY = self.D_AL = None
+        self.ALres = self.D_ZOGY = self.D_AL = None  # self.S_corr_ZOGY = 
 
     # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
@@ -247,9 +248,9 @@ class DiffimTest(object):
                 if self.ALres is None:
                     res = self.ALres = self.doAlInStack(doPreConv=False, doDecorr=True)
             if subMethod is 'ZOGY_S':
-                if self.S_corr_ZOGY is None:
+                if self.S_ZOGY is None:
                     self.doZOGY(computeScorr=True, inImageSpace=zogyImageSpace)
-                S_ZOGY = self.S_corr_ZOGY
+                S_ZOGY = self.S_ZOGY
             if subMethod is 'ZOGY':
                 if self.D_ZOGY is None:
                     self.doZOGY(computeScorr=True, inImageSpace=zogyImageSpace)
@@ -274,7 +275,8 @@ class DiffimTest(object):
                     src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
                     src['ZOGY'] = src_ZOGY
                 elif subMethod is 'ZOGY_S':
-                    src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), thresholdType='stdev', doSmooth=False)
+                    src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), thresholdType='stdev',
+                                            doSmooth=False)
                     src['SZOGY'] = src_SZOGY
                 elif subMethod is 'AL' and D_AL is not None:
                     src_AL = doDetection(D_AL.asAfwExposure())

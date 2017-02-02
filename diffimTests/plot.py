@@ -80,8 +80,8 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
                 extentWasNone = True
                 extent = (bbox.getBeginX(), bbox.getEndX(), bbox.getBeginY(), bbox.getEndY())
             ii = ii.getArray()
-        if extent is not None and not extentWasNone:
-            ii = ii[extent[0]:extent[1], extent[2]:extent[3]]
+        #if extent is not None and not extentWasNone:
+        #    ii = ii[extent[0]:extent[1], extent[2]:extent[3]]
 
         imagesToPlot.append(ii)
 

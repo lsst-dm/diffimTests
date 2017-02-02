@@ -165,5 +165,8 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
 
     PD_bar = np.fliplr(np.flipud(P_D))
     S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant', cval=np.nan) * F_D
-    S_corr = S / np.sqrt(var1c + var2c + fGradR + fGradN)
-    return S_corr, S, D, P_D, F_D, var1c, var2c
+    S_var = np.sqrt(var1c + var2c + fGradR + fGradN)
+    #S_corr = S #/ S_corr_var
+    #return S_corr, S, S_corr_var, D, P_D, F_D, var1c, var2c
+    S_var *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L (this was already done for S and D)
+    return S, S_var, D, P_D, F_D, var1c, var2c

@@ -119,6 +119,7 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
     return measCat, sources
 
 
+# thresholdType options: 'variance', 'stdev', 'value', 'pixel_stdev'
 def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolarity='both', doSmooth=True,
                 doMeasure=True, asDF=False):
     # Modeled from meas_algorithms/tests/testMeasure.py
