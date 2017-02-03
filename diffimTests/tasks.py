@@ -177,7 +177,7 @@ def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolari
 def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, spatialOrder=1):
     # The old (meas_algorithms) SdssCentroid assumed this by default if it
     # wasn't specified; meas_base requires us to be explicit.
-    if exp.getPsf() is not None:
+    if exp.getPsf() is not None:  # if possible, use given PSF FWHM/2 to start.
         shape = exp.getPsf().computeImage().getDimensions()
         startSize = exp.getPsf().computeShape().getDeterminantRadius() / 2.
     else:
@@ -188,7 +188,8 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, 
     im = exp.getMaskedImage().getImage()
     im -= np.median(im.getArray())  # why did I do this?  seems to help sometimes.
 
-    sources = doDetection(exp, threshold=detectThresh)
+    # Using 'stdev' seems to work better than 'pixel_stdev' which is the default:
+    sources = doDetection(exp, threshold=detectThresh, thresholdType='stdev', thresholdPolarity='positive')
     #print 'N SOURCES:', len(sources)
     config = measurePsf.MeasurePsfConfig()
     schema = afwTable.SourceTable.makeMinimalSchema()
@@ -212,15 +213,13 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, 
         config.psfDeterminer['pca'].spatialOrder = spatialOrder
         config.psfDeterminer['pca'].nEigenComponents = 3
         #config.psfDeterminer['pca'].tolerance = 1e-1
-        config.starSelector['objectSize'].fluxMin = 500.
+        #config.starSelector['objectSize'].fluxMin = 500.
         #config.psfDeterminer['pca'].constantWeight = False
         #config.psfDeterminer['pca'].doMaskBlends = False
         config.psfDeterminer.name = "pca"
 
     psfDeterminer = config.psfDeterminer.apply()
-    #print type(psfDeterminer)
     task = measurePsf.MeasurePsfTask(schema=schema, config=config)
-    #task.log.setLevel(log_level)
     result = task.run(exp, sources)
 
     return result

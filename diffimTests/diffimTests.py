@@ -235,7 +235,7 @@ class DiffimTest(object):
             self.im2.doMeasurePsf(self.im2.asAfwExposure())
 
     def reset(self):
-        self.ALres = self.D_ZOGY = self.D_AL = None  # self.S_corr_ZOGY = 
+        self.ALres = self.D_ZOGY = self.D_AL = self.S_ZOGY = None  # self.S_corr_ZOGY = 
 
     # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
