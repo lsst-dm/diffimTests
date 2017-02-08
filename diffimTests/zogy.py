@@ -139,8 +139,8 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
-    k_r_hat = F_r * F_n**2 * np.conj(P_r_hat) * np.abs(P_n_hat)**2 / denom**2.
-    k_n_hat = F_n * F_r**2 * np.conj(P_n_hat) * np.abs(P_r_hat)**2 / denom**2.
+    k_r_hat = F_r * F_n**2. * np.conj(P_r_hat) * np.abs(P_n_hat)**2. / denom**2.
+    k_n_hat = F_n * F_r**2. * np.conj(P_n_hat) * np.abs(P_r_hat)**2. / denom**2.
 
     k_r = np.fft.ifft2(k_r_hat)
     k_r = k_r.real  # np.abs(k_r).real #np.fft.ifftshift(k_r).real

@@ -12,7 +12,8 @@ class Exposure(object):
         self.var = var
         self.metaData = {} if metaData is None else metaData
         if var is not None:
-            self.sig, _, _, _ = np.sqrt(computeClippedImageStats(var))
+            self.sig, _, _, _ = computeClippedImageStats(var)
+            self.sig = np.sqrt(self.sig)
         else:
             _, self.sig, _, _ = computeClippedImageStats(im)
 

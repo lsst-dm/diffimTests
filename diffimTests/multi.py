@@ -31,7 +31,7 @@ def computeNormedPsfRms(psf1, psf2):
 
 
 def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False, False],
-            returnObj=False, silent=False, **kwargs):
+            returnObj=False, silent=False, printErrs=False, **kwargs):
     sky = kwargs.get('sky', 300.)                           # same default as makeFakeImages()
     psf1 = kwargs.get('psf1', [1.6, 1.6])                   # same default as makeFakeImages()
     psf2 = kwargs.get('psf2', [1.8, 2.2])                   # same default as makeFakeImages()
@@ -48,10 +48,31 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
     if type(remeasurePsfs[1]) is bool and remeasurePsfs[1]:
         remeasurePsfs[1] = 'psfex'
 
-    #print sky, psf1, psf2, varFlux2, n_sources, templateNoNoise, skyLimited, seed, kwargs
-    testObj = DiffimTest(varFlux2=varFlux2, #sky=sky, #psf1=psf1, psf2=psf2,
-                         n_sources=n_sources, #templateNoNoise=templateNoNoise, skyLimited=skyLimited,
+    # Make the "varying density" images to fit PSFs on
+    testObj = DiffimTest(varFlux2=varFlux2,  # sky=sky, #psf1=psf1, psf2=psf2,
+                         n_sources=n_sources,  # templateNoNoise=templateNoNoise, skyLimited=skyLimited,
                          seed=seed, **kwargs)
+
+    # Make the constant density images to actually run the test on
+    testObj2 = testObj
+    if type(remeasurePsfs[0]) is not bool or remeasurePsfs[0] != False or \
+       type(remeasurePsfs[1]) is not bool or remeasurePsfs[1] != False:
+        testObj2 = DiffimTest(varFlux2=varFlux2,  # sky=sky, #psf1=psf1, psf2=psf2,
+                              n_sources=1000,  # templateNoNoise=templateNoNoise, skyLimited=skyLimited,
+                              seed=seed, **kwargs)
+
+    scintillation = kwargs.get('scintillation', 0.0)
+    if scintillation == 0.:
+        testObj.astrometricOffsets[0] = testObj.astrometricOffsets[1] = 0.
+        testObj2.astrometricOffsets[0] = testObj2.astrometricOffsets[1] = 0.
+
+    testRes1 = None
+    try:
+        testRes1 = testObj2.runTest(**kwargs)
+    except Exception as e:
+        if printErrs:
+            print 'HERE1:', e
+        testRes1 = None
 
     psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
     if type(remeasurePsfs[0]) is not bool or remeasurePsfs[0] != False:
@@ -73,15 +94,9 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             sh = afwPsfToShape(res1.psf, im1)
             shape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments1 = computeMoments(psf1)
-
-            psf1b = psf1.copy()
-            psf1b[psf1b < 0] = 0
-            psf1b[0:10,0:10] = psf1b[31:41,31:41] = 0
-            #psf1b = recenterPsf(psf1b)
-            psf1b /= psf1b.sum()
-            testObj.im1.psf = psf1b
         except Exception as e:
-            print 'HERE1:', e
+            if printErrs:
+                print 'HERE1:', e
             psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = inputPsf1 = None
             #raise e
 
@@ -105,37 +120,53 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             sh = afwPsfToShape(res2.psf, im2)
             shape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments2 = computeMoments(psf2)
-
-            psf2b = psf2.copy()
-            psf2b[psf2b < 0] = 0
-            psf2b[0:10,0:10] = psf2b[31:41,31:41] = 0
-            #psf2b = recenterPsf(psf2b)
-            psf2b /= psf2b.sum()
-            testObj.im2.psf = psf2b
         except Exception as e:
-            print 'HERE2:', e
+            if printErrs:
+                print 'HERE2:', e
             psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = inputPsf2 = None
             #raise e
 
     # This function below is set to *not* plot but it runs `runTest` and outputs the `runTest` results
     # and a dataframe with forced photometry results. So we use this instead of `runTest` directly.
     # Note `addPresub=True` may not always be necessary and will slow it down a bit.
-    res = df = sources = None
+    df = sources = testRes2 = None
     try:
-        res = testObj.runTest(returnSources=True, **kwargs)
-        sources = res['sources']
-        df, _ = testObj.doPlotWithDetectionsHighlighted(runTestResult=res, transientsOnly=True,
-                                                        addPresub=addPresub, xaxisIsScienceForcedPhot=False,
-                                                        actuallyPlot=False, skyLimited=skyLimited)
-        if not returnObj:  # delete for space savings
-            del res['sources']
+        if psf1 is not None:
+            psf1b = psf1.copy()
+            psf1b[psf1b < 0] = 0
+            psf1b[0:10,0:10] = psf1b[31:41,31:41] = 0
+            #psf1b = recenterPsf(psf1b)
+            psf1b /= psf1b.sum()
+            testObj2.im1.psf = psf1b
+
+        if psf2 is not None:
+            psf2b = psf2.copy()
+            psf2b[psf2b < 0] = 0
+            psf2b[0:10,0:10] = psf2b[31:41,31:41] = 0
+            #psf2b = recenterPsf(psf2b)
+            psf2b /= psf2b.sum()
+            testObj2.im2.psf = psf2b
+
+        if psf1 is not None or psf2 is not None:
+            testObj2.reset()
+            testRes2 = testObj2.runTest(returnSources=True, **kwargs)
+            sources = testRes2['sources']
+            df, _ = testObj2.doPlotWithDetectionsHighlighted(runTestResult=testRes2, transientsOnly=True,
+                                                             addPresub=addPresub, xaxisIsScienceForcedPhot=False,
+                                                             actuallyPlot=False, skyLimited=skyLimited)
+            if not returnObj:  # delete for space savings
+                del testRes2['sources']
 
     except Exception as e:
         if not silent:
-            print 'ERROR RUNNING SEED:', seed #, 'FLUX:', varFlux2
-        #raise e
+            print 'ERROR RUNNING SEED:', seed  # , 'FLUX:', varFlux2
+        if printErrs:
+            print 'HERE4:', e
+        raise e
 
-    out = {'result': res, 'flux': flux, 'df': df}
+    out = {'flux': flux, 'df': df}
+    out['resultInputPsf'] = testRes1
+    out['resultMeasuredPsf'] = testRes2
     out['sky'] = sky
     out['n_varSources'] = n_varSources
     out['n_sources'] = n_sources
@@ -158,7 +189,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
         out['psfInfo'] = psfout
 
     if returnObj:
-        out['obj'] = testObj
+        out['obj'] = testObj2
     return out
 
 
@@ -178,7 +209,8 @@ def runMultiDiffimTests(varSourceFlux=620., nStaticSources=500, n_runs=100, num_
     return testResults
 
 
-def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuallyPlot=True):
+# resultKey can be 'resultInputPsf' or 'resultMeasuredPsf'
+def plotResults(tr, resultKey='resultInputPsf', doRates=False, title='', asHist=False, doPrint=True, actuallyPlot=True):
     import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.style.use('ggplot')
@@ -187,9 +219,9 @@ def plotResults(tr, doRates=False, title='', asHist=False, doPrint=True, actuall
     sns.set(style="whitegrid", palette="pastel", color_codes=True)
 
     methods = ['ALstack', 'ZOGY', 'SZOGY', 'ALstack_decorr']
-    FN = pd.DataFrame({key: np.array([t['result'][key]['FN'] for t in tr]) for key in methods})
-    FP = pd.DataFrame({key: np.array([t['result'][key]['FP'] for t in tr]) for key in methods})
-    TP = pd.DataFrame({key: np.array([t['result'][key]['TP'] for t in tr]) for key in methods})
+    FN = pd.DataFrame({key: np.array([t[resultKey][key]['FN'] for t in tr]) for key in methods})
+    FP = pd.DataFrame({key: np.array([t[resultKey][key]['FP'] for t in tr]) for key in methods})
+    TP = pd.DataFrame({key: np.array([t[resultKey][key]['TP'] for t in tr]) for key in methods})
     title_suffix = 's'
     if doRates:
         FN /= (FN + TP)

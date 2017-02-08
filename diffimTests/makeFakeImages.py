@@ -34,7 +34,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(620., 10), im2background=0.,
                    n_sources=500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(600., 120000.),
                    variablesNearCenter=False, avoidBorder=2.1, avoidAllOverlaps=0.,
-                   sourceFluxDistrib='powerlaw', psfSize=21, seed=66, fast=True, verbose=False):
+                   sourceFluxDistrib='powerlaw', psfSize=21, seed=66, fast=True, verbose=False,
+                   **kwargs):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -70,9 +71,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     x0im, y0im = np.meshgrid(xim, yim)
 
     # Compute the star fluxes
-    if sourceFluxDistrib == 'uniform':
-        fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
-    elif sourceFluxDistrib == 'powerlaw':
+    fluxes = np.random.uniform(sourceFluxRange[0], sourceFluxRange[1], n_sources)
+    if sourceFluxDistrib == 'powerlaw':
         # More realistic (euclidean), # of stars goes as 10**(0.6mag) so decreases by about 3.98x per increasing 1 magnitude
         # Looking toward the disk/bulge, this probably decreases to ~3.
         # This means # of stars increases about ~3x per decreasing ~2.512x in flux.
@@ -92,7 +92,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             tries += 1
 
         fluxes = samples[0:n_sources]
-        fluxes *= sourceFluxRange[1] / fluxes.max()
+        #fluxes *= sourceFluxRange[1] / fluxes.max()
 
     #fluxes = np.sort(fluxes)[::-1]
 

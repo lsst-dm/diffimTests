@@ -23,11 +23,15 @@ class DiffimTest(object):
 
             self.kwargs = kwargs
 
+            sky = kwargs.get('sky', [300., 300])
+            if not hasattr(sky, "__len__"):
+                sky = [sky, sky]
+
             self.im1 = Exposure(im1, P_r, im1_var)
-            self.im1.setMetaData('sky', kwargs.get('sky', 300.))
+            self.im1.setMetaData('sky', sky[0])
 
             self.im2 = Exposure(im2, P_n, im2_var)
-            self.im2.setMetaData('sky', kwargs.get('sky', 300.))
+            self.im2.setMetaData('sky', sky[1])
 
             self.psf1_orig = self.im1.psf
             self.psf2_orig = self.im2.psf
@@ -97,13 +101,15 @@ class DiffimTest(object):
                 print 'Added ' + str(i) + ':', computeClippedImageStats(img)
                 imagesToPlot.append(img)
 
+        extent = None
         if centroidCoord is not None:
             for ind, im in enumerate(imagesToPlot):
                 if (titles[ind] == 'A&L(dec) - ZOGY'): # or (titles[ind] == 'A&L(dec) - A&L'):
                     continue
                 imagesToPlot[ind] = im[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
+            extent = ((cx-sz), (cx+sz), (cy-sz), (cy+sz))
 
-        grid = plotImageGrid(imagesToPlot, titles=titles, extent=((cx-sz), (cx+sz), (cy-sz), (cy+sz)), **kwargs)
+        grid = plotImageGrid(imagesToPlot, titles=titles, extent=extent, **kwargs)
         return imagesToPlot, titles, grid
 
     # Idea is to call test2 = test.clone(), then test2.reverseImages() to then run diffim
@@ -152,8 +158,8 @@ class DiffimTest(object):
         var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL**2., mode='constant',
                                                             cval=np.nan)
         self.D_AL = Exposure(D_AL, D_psf, var)
-        self.D_AL.im /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
-        self.D_AL.var /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
+        #self.D_AL.im /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
+        #self.D_AL.var /= np.sqrt(self.im1.metaData['sky'] + self.im2.metaData['sky'])  #np.sqrt(var)
         # TBD: make the returned D an Exposure.
         return self.D_AL, self.kappa_AL
 
@@ -195,8 +201,9 @@ class DiffimTest(object):
                                              self.im1.psf, self.im2.psf,
                                              sig1=self.im1.sig, sig2=self.im2.sig, F_r=1., F_n=1.)
         #varZOGY = (self.im1.var + self.im2.var) # / (self.im1.sig**2. + self.im2.sig**2.)  # Same here!
-        D_ZOGY[D_ZOGY == 0.] = np.nan
-        varZOGY[np.isnan(D_ZOGY)] = np.nan
+
+        D_ZOGY[(D_ZOGY == 0.) | np.isinf(D_ZOGY)] = np.nan
+        varZOGY[(varZOGY == 0.) | np.isnan(D_ZOGY) | np.isinf(varZOGY)] = np.nan
         self.D_ZOGY = Exposure(D_ZOGY, P_D_ZOGY, varZOGY)
 
         if computeScorr:
@@ -239,14 +246,14 @@ class DiffimTest(object):
 
     # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
-                zogyImageSpace=False, matchDist=np.sqrt(1.5), returnSources=False, **kwargs):
+                zogyImageSpace=True, matchDist=np.sqrt(1.5), returnSources=False, **kwargs):
         D_ZOGY = S_ZOGY = res = D_AL = None
         src = {}
         # Run diffim first
         for subMethod in subtractMethods:
             if subMethod is 'ALstack' or subMethod is 'ALstack_decorr':
                 if self.ALres is None:
-                    res = self.ALres = self.doAlInStack(doPreConv=False, doDecorr=True)
+                    self.ALres = self.doAlInStack(doPreConv=False, doDecorr=True)
             if subMethod is 'ZOGY_S':
                 if self.S_ZOGY is None:
                     self.doZOGY(computeScorr=True, inImageSpace=zogyImageSpace)
