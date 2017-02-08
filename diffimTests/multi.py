@@ -162,7 +162,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             print 'ERROR RUNNING SEED:', seed  # , 'FLUX:', varFlux2
         if printErrs:
             print 'HERE4:', e
-        raise e
+        #raise e
 
     out = {'flux': flux, 'df': df}
     out['resultInputPsf'] = testRes1
@@ -209,7 +209,8 @@ def runMultiDiffimTests(varSourceFlux=620., nStaticSources=500, n_runs=100, num_
     return testResults
 
 
-# resultKey can be 'resultInputPsf' or 'resultMeasuredPsf'
+# resultKey can be 'resultInputPsf' or 'resultMeasuredPsf'. But if the tests were run with
+# `remeasurePsfs=True` then you probably want the `plotMeasuredPsfsResults()` method below.
 def plotResults(tr, resultKey='resultInputPsf', doRates=False, title='', asHist=False, doPrint=True, actuallyPlot=True):
     import matplotlib.pyplot as plt
     import matplotlib
@@ -219,6 +220,7 @@ def plotResults(tr, resultKey='resultInputPsf', doRates=False, title='', asHist=
     sns.set(style="whitegrid", palette="pastel", color_codes=True)
 
     methods = ['ALstack', 'ZOGY', 'SZOGY', 'ALstack_decorr']
+    tr = [t for t in tr if t is not None and t[resultKey]]
     FN = pd.DataFrame({key: np.array([t[resultKey][key]['FN'] for t in tr]) for key in methods})
     FP = pd.DataFrame({key: np.array([t[resultKey][key]['FP'] for t in tr]) for key in methods})
     TP = pd.DataFrame({key: np.array([t[resultKey][key]['TP'] for t in tr]) for key in methods})
@@ -344,3 +346,90 @@ def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
     plt.ylabel('Fraction detected')
 
     return df
+
+
+# resultKey can be either 'resultInputPsf' or 'resultMeasuredPsf'
+# Can also be 'resultPsfRms'.
+def plotMeasuredPsfsResults(tr, methods=['ALstack', 'ZOGY'], resultKey='resultMeasuredPsf'):
+    if resultKey != 'resultPsfRms':
+        tr = [t for t in tr if t is not None]
+        tr = [t for t in tr if t is not None and t[resultKey]]
+        TP = pd.DataFrame({key: np.array([t[resultKey][key]['TP'] for t in tr]) for key in methods})
+        FN = pd.DataFrame({key: np.array([t[resultKey][key]['FN'] for t in tr]) for key in methods})
+        FP = pd.DataFrame({key: np.array([t[resultKey][key]['FP'] for t in tr]) for key in methods})
+
+        TP['nSources'] = np.array([t['n_sources'] for t in tr])
+        FP['nSources'] = np.array([t['n_sources'] for t in tr])
+        FN['nSources'] = np.array([t['n_sources'] for t in tr])
+
+        matplotlib.rcParams['figure.figsize'] = (24.0, 6.0)
+        fig, axes = plt.subplots(nrows=1, ncols=2)
+
+        tmp1 = TP[['nSources', methods[0]]]
+        tmp2 = TP[['nSources', methods[1]]]
+        tmp1['method'] = np.repeat(methods[0], tmp1.shape[0])
+        tmp2['method'] = np.repeat(methods[1], tmp2.shape[0])
+        tmp1.columns.values[1] = tmp2.columns.values[1] = 'TP'
+        tmp = pd.concat((tmp1, tmp2))
+
+        g = sns.violinplot(x='nSources', y='TP', data=tmp, split=True, hue='method', inner="box", cut=0, 
+                       linewidth=0.3, bw=0.5, ax=axes[0], scale='width')
+        g.set_title('True Positives')
+        g.set_ylim((0, 52))
+        g.set_xlabel('N sources')
+        g.set_xticklabels(g.get_xticklabels(), rotation=30);
+
+        tmp1 = FP[['nSources', methods[0]]]
+        tmp2 = FP[['nSources', methods[1]]]
+        tmp1['method'] = np.repeat(methods[0], tmp1.shape[0])
+        tmp2['method'] = np.repeat(methods[1], tmp2.shape[0])
+        tmp1.columns.values[1] = tmp2.columns.values[1] = 'FP'
+        tmp = pd.concat((tmp1, tmp2))
+
+        g = sns.violinplot(x='nSources', y='FP', data=tmp, split=True, hue='method', inner="box", cut=0, 
+                       linewidth=0.3, bw=0.5, ax=axes[1], width=0.8, scale='width')
+        g.set_title('False Positives')
+        g.set_ylim((0, 30))
+        g.set_xlabel('N sources')
+        g.set_xticklabels(g.get_xticklabels(), rotation=30);
+
+    else:  # 'resultPsfRms'
+        oldlen = tr
+        tr = [t for t in testResults if t is not None and t['psfInfo']['inputPsf1'] is not None and t['psfInfo']['psf1'] is not None]
+        tr = [t for t in tr if t is not None and t['psfInfo']['inputPsf2'] is not None and t['psfInfo']['psf2'] is not None]
+        ns = np.array([t['n_sources'] for t in tr])
+        #tr = [t for t in tr if t is not None and t['psf1'] is not None]
+        #tr = [t for t in tr if t['rms1'] is not None]
+        #tr = [t for t in tr if t['rms2'] is not None]
+        print oldlen, len(tr)
+        ns = np.array([t['n_sources'] for t in tr if t is not None])
+        rms1s = [computeNormedPsfRms(t['psfInfo']['psf1'], t['psfInfo']['inputPsf1']) for t in tr if t is not None]
+        rms2s = [computeNormedPsfRms(t['psfInfo']['psf2'], t['psfInfo']['inputPsf2']) for t in tr if t is not None]
+
+        tr = {'nSources': ns,
+              #'rms1': np.array([t['rms1'] for t in tr])*100.,
+              #'rms2': np.array([t['rms2'] for t in tr])*100.,
+              #'rad1diff': np.array([t['shape1'][0] - t['inputShape1'][0] for t in tr]),
+              #'rad2diff': np.array([t['shape2'][0] - t['inputShape2'][0] for t in tr])
+             }
+        tr = pd.DataFrame(tr)
+
+        tr['rms1'] = np.array(rms1s)
+        tr['rms2'] = np.array(rms2s)
+
+        matplotlib.rcParams['figure.figsize'] = (20.0, 6.0)
+        fig, axes = plt.subplots(nrows=1, ncols=2)
+
+        g = sns.violinplot(x='nSources', y='rms1', data=tr, inner="box", cut=0, linewidth=0.3, bw=0.5, scale='width', ax=axes[0])
+        g.set_title('RMS (template PSF)')
+        g.set_ylabel('PSF measurement error (RMS)')
+        g.set_xlabel('N sources')
+        g.set_xticklabels(g.get_xticklabels(), rotation=60)
+        g.set_ylim(0, 0.05)
+
+        g = sns.violinplot(x='nSources', y='rms2', data=tr, inner="box", cut=0, linewidth=0.3, bw=0.5, scale='width', ax=axes[1])
+        g.set_title('RMS (science PSF)')
+        g.set_ylabel('PSF measurement error (RMS)')
+        g.set_xlabel('N sources')
+        g.set_xticklabels(g.get_xticklabels(), rotation=60)
+        g.set_ylim(0, 0.15)
