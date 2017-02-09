@@ -46,7 +46,7 @@ def ZOGYUtils(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1., 
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGY(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.):
-    print 'HERE: ZOGY NEW (F space)'
+    #print 'HERE: ZOGY NEW (F space)'
     sigR, sigN, P_r_hat, P_n_hat, denom, _, _ = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                           sig1, sig2, F_r, F_n, padSize=0)
 
@@ -76,7 +76,7 @@ def performZOGY(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=No
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.,
                           padSize=7):
-    print 'HERE: ZOGY NEW (I space)'
+    #print 'HERE: ZOGY NEW (I space)'
     sigR, sigN, P_r_hat, P_n_hat, denom, padded_psf1, padded_psf2 = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                                               sig1, sig2, F_r, F_n,
                                                                               padSize=padSize)

@@ -31,7 +31,7 @@ def computeNormedPsfRms(psf1, psf2):
 
 
 def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False, False],
-            returnObj=False, silent=False, printErrs=False, **kwargs):
+            returnObjs=False, silent=False, printErrs=False, **kwargs):
     sky = kwargs.get('sky', 300.)                           # same default as makeFakeImages()
     psf1 = kwargs.get('psf1', [1.6, 1.6])                   # same default as makeFakeImages()
     psf2 = kwargs.get('psf2', [1.8, 2.2])                   # same default as makeFakeImages()
@@ -110,7 +110,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             psf2 = afwPsfToArray(res2.psf, im2)
             psf2 = resizePsf(psf2, inputPsf2.shape)
             psf2a = psf2.copy()
-            psf2anorm = psf2a[np.abs(psf2a) >= 2e-3].sum()
+            psf2anorm = psf2a[np.abs(psf2a) >= 1e-3].sum()
             psf2a /= psf2anorm
 
             rms2 = np.sqrt(((psf2a - inputPsf2)**2.).mean())
@@ -149,13 +149,11 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
 
         if psf1 is not None or psf2 is not None:
             testObj2.reset()
-            testRes2 = testObj2.runTest(returnSources=True, **kwargs)
-            sources = testRes2['sources']
-            df, _ = testObj2.doPlotWithDetectionsHighlighted(runTestResult=testRes2, transientsOnly=True,
-                                                             addPresub=addPresub, xaxisIsScienceForcedPhot=False,
-                                                             actuallyPlot=False, skyLimited=skyLimited)
-            if not returnObj:  # delete for space savings
-                del testRes2['sources']
+            testRes2 = testObj2.runTest(returnSources=returnObjs, **kwargs)
+            if returnObjs:
+                df, _ = testObj2.doPlotWithDetectionsHighlighted(runTestResult=testRes2, transientsOnly=True,
+                                                                 addPresub=addPresub, xaxisIsScienceForcedPhot=False,
+                                                                 actuallyPlot=False, skyLimited=skyLimited)
 
     except Exception as e:
         if not silent:
@@ -176,6 +174,8 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
 
     out['templateSNR'] = testObj.im1.calcSNR(flux, skyLimited=skyLimited)
     out['scienceSNR'] = testObj.im2.calcSNR(flux, skyLimited=skyLimited)
+    out['templateSNR_measuredPsf'] = testObj2.im1.calcSNR(flux, skyLimited=skyLimited)
+    out['scienceSNR_measuredPsf'] = testObj2.im2.calcSNR(flux, skyLimited=skyLimited)
 
     if remeasurePsfs[0] or remeasurePsfs[1]:
         psfout = {'psf1': psf1, 'psf2': psf2,
@@ -187,8 +187,8 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
                   'normedRms1': normedRms1, 'normedRms2': normedRms2}
         out['psfInfo'] = psfout
 
-    if returnObj:
-        out['obj'] = testObj2
+    if returnObjs:
+        out['objs'] = (testObj, testObj2)
     return out
 
 
@@ -563,7 +563,7 @@ def runTestORIG(n_sources=500, seed=66, n_varSources=50, flux=1500., sky=300.,
                'inputShape1': inputShape1, 'inputShape2': inputShape2,
                'moments1': moments1, 'moments2': moments2,
                'n_sources': n_sources, 'seed': seed,
-               'diffimResInputPsf': testRes1, 'diffimResMeasuredPsf': testRes2,
+               'resultInputPsf': testRes1, 'resultMeasuredPsf': testRes2,
                'normedRms1': normedRms1, 'normedRms2': normedRms2}
 
         psfout = {'psf1': psf1, 'psf2': psf2,

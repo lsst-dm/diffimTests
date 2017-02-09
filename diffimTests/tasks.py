@@ -122,7 +122,7 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
 # thresholdType options: 'variance', 'stdev', 'value', 'pixel_stdev'
 def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolarity='both', doSmooth=True,
                 doMeasure=True, asDF=False):
-    print 'HERE: NEW DETECTION'
+    #print 'HERE: NEW DETECTION'
     # Modeled from meas_algorithms/tests/testMeasure.py
     schema = afwTable.SourceTable.makeMinimalSchema()
     config = measAlg.SourceDetectionTask.ConfigClass()
@@ -178,7 +178,7 @@ def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolari
 def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, spatialOrder=1):
     # The old (meas_algorithms) SdssCentroid assumed this by default if it
     # wasn't specified; meas_base requires us to be explicit.
-    print 'HERE: NEW PSF MEASURE'
+    #print 'HERE: NEW PSF MEASURE'
 
     if exp.getPsf() is not None:  # if possible, use given PSF FWHM/2 to start.
         shape = exp.getPsf().computeImage().getDimensions()
