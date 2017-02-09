@@ -80,7 +80,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
         try:
             inputPsf1 = testObj.im1.psf.copy()
             im1 = testObj.im1.asAfwExposure()
-            res1 = doMeasurePsf(im1, measurePsfAlg=remeasurePsfs[0])
+            res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg=remeasurePsfs[0])
             psf1 = afwPsfToArray(res1.psf, im1)
             psf1 = resizePsf(psf1, inputPsf1.shape)
             psf1a = psf1.copy()
@@ -106,7 +106,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
         try:
             inputPsf2 = testObj.im2.psf.copy()
             im2 = testObj.im2.asAfwExposure()
-            res2 = doMeasurePsf(im2, measurePsfAlg=remeasurePsfs[1])
+            res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg=remeasurePsfs[1])
             psf2 = afwPsfToArray(res2.psf, im2)
             psf2 = resizePsf(psf2, inputPsf2.shape)
             psf2a = psf2.copy()
