@@ -551,9 +551,18 @@ def runTestORIG(n_sources=500, seed=66, n_varSources=50, flux=1500., sky=300.,
                'shape1': shape1, 'shape2': shape2,
                'inputShape1': inputShape1, 'inputShape2': inputShape2,
                'moments1': moments1, 'moments2': moments2,
-               'nSources': n_sources, 'seed': seed,
+               'n_sources': n_sources, 'seed': seed,
                'diffimResInputPsf': testRes1, 'diffimResMeasuredPsf': testRes2,
                'normedRms1': normedRms1, 'normedRms2': normedRms2}
+
+        psfout = {'psf1': psf1, 'psf2': psf2,
+                  'inputPsf1': actualPsf1, 'inputPsf2': actualPsf2,
+                  'rms1': rms1, 'rms2': rms2,
+                  'shape1': shape1, 'shape2': shape2,
+                  'inputShape1': inputShape1, 'inputShape2': inputShape2,
+                  'moments1': moments1, 'moments2': moments2,
+                  'normedRms1': normedRms1, 'normedRms2': normedRms2}
+        out['psfInfo'] = psfout
 
         if returnObjs:
             out['objs'] = (testObj, testObj2)

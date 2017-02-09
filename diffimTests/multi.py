@@ -184,7 +184,6 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
                   'shape1': shape1, 'shape2': shape2,
                   'inputShape1': inputShape1, 'inputShape2': inputShape2,
                   'moments1': moments1, 'moments2': moments2,
-                  'nSources': n_sources, 'seed': seed,
                   'normedRms1': normedRms1, 'normedRms2': normedRms2}
         out['psfInfo'] = psfout
 
@@ -280,7 +279,7 @@ def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
     import matplotlib
     matplotlib.style.use('ggplot')
     import seaborn as sns
-    sns.set(style="whitegrid", palette="pastel", color_codes=True)
+    #sns.set(style="whitegrid", palette="pastel", color_codes=True)
 
     if 'df' not in tr[0]:
         return None
@@ -351,6 +350,14 @@ def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
 # resultKey can be either 'resultInputPsf' or 'resultMeasuredPsf'
 # Can also be 'resultPsfRms'.
 def plotMeasuredPsfsResults(tr, methods=['ALstack', 'ZOGY'], resultKey='resultMeasuredPsf'):
+    import pandas as pd
+    import numpy as np
+
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.style.use('ggplot')
+    import seaborn as sns
+
     if resultKey != 'resultPsfRms':
         tr = [t for t in tr if t is not None]
         tr = [t for t in tr if t is not None and t[resultKey]]
@@ -394,8 +401,8 @@ def plotMeasuredPsfsResults(tr, methods=['ALstack', 'ZOGY'], resultKey='resultMe
         g.set_xticklabels(g.get_xticklabels(), rotation=30);
 
     else:  # 'resultPsfRms'
-        oldlen = tr
-        tr = [t for t in testResults if t is not None and t['psfInfo']['inputPsf1'] is not None and t['psfInfo']['psf1'] is not None]
+        oldlen = len(tr)
+        tr = [t for t in tr if t is not None and t['psfInfo']['inputPsf1'] is not None and t['psfInfo']['psf1'] is not None]
         tr = [t for t in tr if t is not None and t['psfInfo']['inputPsf2'] is not None and t['psfInfo']['psf2'] is not None]
         ns = np.array([t['n_sources'] for t in tr])
         #tr = [t for t in tr if t is not None and t['psf1'] is not None]
@@ -433,3 +440,145 @@ def plotMeasuredPsfsResults(tr, methods=['ALstack', 'ZOGY'], resultKey='resultMe
         g.set_xlabel('N sources')
         g.set_xticklabels(g.get_xticklabels(), rotation=60)
         g.set_ylim(0, 0.15)
+
+
+
+
+
+
+####### HERE IS RESCUED CODE WHERE THE DIFFIM TESTS SEEM TO WORK!!!
+
+
+# Using flux=620 for SNR=5 (see cell #4 of notebook '30. 4a. other psf models-real PSFs')
+def runMultiDiffimTestsORIG(varSourceFlux=620., nStaticSources=500, n_runs=100, num_cores=None, **kwargs):
+    if not hasattr(varSourceFlux, "__len__"):
+        varSourceFlux = [varSourceFlux]
+    if not hasattr(nStaticSources, "__len__"):
+        nStaticSources = [nStaticSources]
+    inputs = [(f, ns, seed) for f in varSourceFlux for ns in nStaticSources
+              for seed in np.arange(66, 66+n_runs, 1)]
+    print 'RUNNING:', len(inputs)
+    if num_cores is None:
+        num_cores = getNumCores()
+    testResults = Parallel(n_jobs=num_cores, verbose=4)(
+        delayed(runTestORIG)(flux=i[0], n_sources=i[1], seed=i[2], **kwargs) for i in inputs)
+    return testResults
+
+
+def runTestORIG(n_sources=500, seed=66, n_varSources=50, flux=1500., sky=300.,
+                scintillation=0., returnObjs=False, printErrs=False):
+    out = None
+    try:
+        # Make the "varying density" object to fit PSFs on
+        testObj = DiffimTest(imSize=(512,512), sky=sky, psf1=[1.6,1.6], psf2=[1.8,2.2],
+                             offset=[0,0], psf_yvary_factor=0.,
+                             #varSourceChange=[1500., 1600., 1800., 2000., 2200., 2400., 2600., 2800.],
+                             varFlux2=np.repeat(flux, n_varSources), variablesNearCenter=False,
+                             theta1=0., theta2=-45., im2background=0., n_sources=n_sources,
+                             sourceFluxRange=(500,30000), scintillation=scintillation,
+                             seed=seed, psfSize=21, avoidBorder=False)
+
+        # Make the "constant density" object to actually run the tests on
+        testObj2 = DiffimTest(imSize=(512,512), sky=sky, psf1=[1.6,1.6], psf2=[1.8,2.2],
+                              offset=[0,0], psf_yvary_factor=0.,
+                              #varSourceChange=[1500., 1600., 1800., 2000., 2200., 2400., 2600., 2800.],
+                              varFlux2=np.repeat(flux, n_varSources), variablesNearCenter=False,
+                              theta1=0., theta2=-45., im2background=0., n_sources=1000,
+                              sourceFluxRange=(500,30000), scintillation=scintillation,
+                              seed=seed, psfSize=21, avoidBorder=False)
+
+        if scintillation == 0:
+            testObj.astrometricOffsets[0] = testObj.astrometricOffsets[1] = 0.
+            testObj2.astrometricOffsets[0] = testObj2.astrometricOffsets[1] = 0.
+
+        try:
+            testRes1 = testObj2.runTest(zogyImageSpace=False)
+        except Exception as e:
+            if printErrs:
+                print 'HERE1', e
+            testRes1 = None
+
+        try:
+            actualPsf1 = testObj.im1.psf.copy() #dit.makePsf(21, [1.6, 1.6], offset=[0., 0.], theta=0.)
+            im1 = testObj.im1.asAfwExposure()
+            res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg='psfex')
+            psf1 = afwPsfToArray(res1.psf, im1) #.computeImage()
+            psf1a = psf1.copy() #/ np.abs(psf2.getArray()).sum()
+            psf1anorm = psf1a[np.abs(psf1a)>=1e-3].sum()
+            psf1a /= psf1anorm
+            rms1 = np.sqrt(((psf1a - actualPsf1)**2.).mean()) #* 100.
+            normedRms1 = computeNormedPsfRms(psf1a, actualPsf1)
+            sh = arrayToAfwPsf(actualPsf1).computeShape()
+            inputShape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
+            sh = afwPsfToShape(res1.psf, im1)
+            shape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
+            moments1 = computeMoments(psf1)
+        except Exception as e:
+            if printErrs:
+                print 'HERE2', e
+            psf1 = rms1 = shape1 = moments1 = inputShape1 = normedRms1 = None
+
+        try:
+            actualPsf2 = testObj.im2.psf.copy() #dit.makePsf(21, [1.8, 2.2], offset=[0., 0.], theta=-45.)
+            im2 = testObj.im2.asAfwExposure()
+            res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg='psfex')
+            psf2 = afwPsfToArray(res2.psf, im2) #.computeImage()
+            psf2a = psf2.copy() #/ np.abs(psf2.getArray()).sum()
+            psf2anorm = psf2a[np.abs(psf2a)>=1e-3].sum()
+            psf2a /= psf2anorm
+            rms2 = np.sqrt(((psf2a - actualPsf2)**2.).mean()) #* 100.
+            normedRms2 = computeNormedPsfRms(psf2a, actualPsf2)
+            sh = arrayToAfwPsf(actualPsf2).computeShape()
+            inputShape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
+            sh = afwPsfToShape(res2.psf, im2)
+            shape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
+            moments2 = computeMoments(psf2)
+        except Exception as e:
+            if printErrs:
+                print 'HERE3', e
+            psf2 = rms2 = shape2 = moments2 = inputShape2 = normedRms2 = None
+
+        try:
+            testObj2.reset()
+            psf1b = psf1a.copy()
+            psf1b[psf1b < 0] = 0
+            psf1b[0:10,0:10] = psf1b[31:41,31:41] = 0
+            psf1b /= psf1b.sum()
+            psf2b = psf2a.copy()
+            psf2b[psf2b < 0] = 0
+            psf2b[0:10,0:10] = psf2b[31:41,31:41] = 0
+            psf2b /= psf2b.sum()
+            testObj2.im1.psf = psf1b
+            testObj2.im2.psf = psf2b
+            testRes2 = testObj2.runTest(zogyImageSpace=False)
+        except Exception as e:
+            if printErrs:
+                print 'HERE4', e
+            testRes2 = None
+
+        out = {'psf1': psf1, 'psf2': psf2,
+               'inputPsf1': actualPsf1, 'inputPsf2': actualPsf2,
+               'rms1': rms1, 'rms2': rms2,
+               'shape1': shape1, 'shape2': shape2,
+               'inputShape1': inputShape1, 'inputShape2': inputShape2,
+               'moments1': moments1, 'moments2': moments2,
+               'n_sources': n_sources, 'seed': seed,
+               'diffimResInputPsf': testRes1, 'diffimResMeasuredPsf': testRes2,
+               'normedRms1': normedRms1, 'normedRms2': normedRms2}
+
+        psfout = {'psf1': psf1, 'psf2': psf2,
+                  'inputPsf1': actualPsf1, 'inputPsf2': actualPsf2,
+                  'rms1': rms1, 'rms2': rms2,
+                  'shape1': shape1, 'shape2': shape2,
+                  'inputShape1': inputShape1, 'inputShape2': inputShape2,
+                  'moments1': moments1, 'moments2': moments2,
+                  'normedRms1': normedRms1, 'normedRms2': normedRms2}
+        out['psfInfo'] = psfout
+
+        if returnObjs:
+            out['objs'] = (testObj, testObj2)
+    except Exception as e:
+        if printErrs:
+            print 'HERE5', e
+        pass
+    return out
