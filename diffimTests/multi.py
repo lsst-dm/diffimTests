@@ -94,6 +94,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             sh = afwPsfToShape(res1.psf, im1)
             shape1 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments1 = computeMoments(psf1)
+            #print 'REMEASURE PSF1'
         except Exception as e:
             if printErrs:
                 print 'HERE1:', e
@@ -120,6 +121,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             sh = afwPsfToShape(res2.psf, im2)
             shape2 = [sh.getDeterminantRadius(), sh.getIxx(), sh.getIyy(), sh.getIxy()]
             moments2 = computeMoments(psf2)
+            #print 'REMEASURE PSF2'
         except Exception as e:
             if printErrs:
                 print 'HERE2:', e
@@ -138,6 +140,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             #psf1b = recenterPsf(psf1b)
             psf1b /= psf1b.sum()
             testObj2.im1.psf = psf1b
+            #print 'SET PSF1'
 
         if psf2 is not None:
             psf2b = psf2.copy()
@@ -146,6 +149,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             #psf2b = recenterPsf(psf2b)
             psf2b /= psf2b.sum()
             testObj2.im2.psf = psf2b
+            #print 'SET PSF2'
 
         if psf1 is not None or psf2 is not None:
             testObj2.reset()
@@ -153,7 +157,7 @@ def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False,
             if returnObjs:
                 df, _ = testObj2.doPlotWithDetectionsHighlighted(runTestResult=testRes2, transientsOnly=True,
                                                                  addPresub=addPresub, xaxisIsScienceForcedPhot=False,
-                                                                 actuallyPlot=False, skyLimited=skyLimited)
+                                                                 actuallyPlot=False, **kwargs)
 
     except Exception as e:
         if not silent:
@@ -205,6 +209,17 @@ def runMultiDiffimTests(varSourceFlux=620., nStaticSources=500, n_runs=100, num_
         num_cores = getNumCores()
     testResults = Parallel(n_jobs=num_cores, verbose=4)(
         delayed(runTest)(flux=i[0], n_sources=i[1], seed=i[2], **kwargs) for i in inputs)
+    return testResults
+
+
+# This runs multiple diffim tests as function of transient flux to generate efficiency curves as
+# in '31. f. new tests-precision recall curves.ipynb'
+# Then plotted using 'plotEfficiencyCurves()'.
+def runMultiDiffimTestsVsTransientFlux(varSourceFluxes=np.linspace(400., 2000., 40),
+                                       n_runs=10, *kwargs):
+    testResults = {}
+    for i, flux in enumerate(varSourceFluxes):
+        testResults[i] = runMultiDiffimTests(varSourceFlux=flux, n_runs=n_runs, **kwargs)
     return testResults
 
 
@@ -279,7 +294,7 @@ def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
     import matplotlib
     matplotlib.style.use('ggplot')
     import seaborn as sns
-    #sns.set(style="whitegrid", palette="pastel", color_codes=True)
+    sns.set(style="whitegrid", palette="pastel", color_codes=True)
 
     if 'df' not in tr[0]:
         return None
@@ -357,6 +372,7 @@ def plotMeasuredPsfsResults(tr, methods=['ALstack', 'ZOGY'], resultKey='resultMe
     import matplotlib
     matplotlib.style.use('ggplot')
     import seaborn as sns
+    sns.set(style="whitegrid", palette="pastel", color_codes=True)
 
     if resultKey != 'resultPsfRms':
         tr = [t for t in tr if t is not None]
@@ -442,8 +458,39 @@ def plotMeasuredPsfsResults(tr, methods=['ALstack', 'ZOGY'], resultKey='resultMe
         g.set_ylim(0, 0.15)
 
 
+# This takes a result dict produced by runMultiDiffimTestsVsTransientFlux()
+# see '31. f. new tests-precision recall curves.ipynb'
+def plotEfficiencyCurves(testResults):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.style.use('ggplot')
 
+    methods = ['ALstack', 'ZOGY', 'SZOGY', 'ALstack_decorr']
+    TP1 = []; FP1 = []; FN1 = []
+    for i, tr in enumerate(testResults):
+        tr = testResults[i]
+        FN1.append(pd.DataFrame({key: np.array([t['result'][key]['FN'] for t in tr]) for key in methods}).mean())
+        FN1[i]['scienceSNR'] = tr[0]['scienceSNR']
+        FP1.append(pd.DataFrame({key: np.array([t['result'][key]['FP'] for t in tr]) for key in methods}).mean())
+        FP1[i]['scienceSNR'] = tr[0]['scienceSNR']
+        TP1.append(pd.DataFrame({key: np.array([t['result'][key]['TP'] for t in tr]) for key in methods}).mean())
+        TP1[i]['scienceSNR'] = tr[0]['scienceSNR']
 
+    #print len(TP1)
+    TP1 = pd.concat(TP1, axis=1).transpose()
+    FP1 = pd.concat(FP1, axis=1).transpose()
+    FN1 = pd.concat(FN1, axis=1).transpose()
+    #print TP1.shape
+
+    plt.subplots(1, 2, figsize=(8, 16))
+    ax = plt.subplot(121)
+    TP1.plot(x='scienceSNR', alpha=0.5, lw=5, ax=ax)
+    ax.set_ylabel('True positives (out of 50)')
+    ax = plt.subplot(122)
+    FP1.plot(x='scienceSNR', alpha=0.5, lw=5, ax=ax)
+    ax.set_ylabel('False positives')
+    return TP1, FP1, FN1
 
 
 ####### HERE IS RESCUED CODE WHERE THE DIFFIM TESTS SEEM TO WORK!!!
@@ -476,7 +523,7 @@ def runTestORIG(n_sources=500, seed=66, n_varSources=50, flux=1500., sky=300.,
                              varFlux2=np.repeat(flux, n_varSources), variablesNearCenter=False,
                              theta1=0., theta2=-45., im2background=0., n_sources=n_sources,
                              sourceFluxRange=(500,30000), scintillation=scintillation,
-                             seed=seed, psfSize=21, avoidBorder=False)
+                             seed=seed, psfSize=21) #, avoidBorder=False)
 
         # Make the "constant density" object to actually run the tests on
         testObj2 = DiffimTest(imSize=(512,512), sky=sky, psf1=[1.6,1.6], psf2=[1.8,2.2],
@@ -485,7 +532,7 @@ def runTestORIG(n_sources=500, seed=66, n_varSources=50, flux=1500., sky=300.,
                               varFlux2=np.repeat(flux, n_varSources), variablesNearCenter=False,
                               theta1=0., theta2=-45., im2background=0., n_sources=1000,
                               sourceFluxRange=(500,30000), scintillation=scintillation,
-                              seed=seed, psfSize=21, avoidBorder=False)
+                              seed=seed, psfSize=21) #, avoidBorder=False)
 
         if scintillation == 0:
             testObj.astrometricOffsets[0] = testObj.astrometricOffsets[1] = 0.

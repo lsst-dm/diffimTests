@@ -33,7 +33,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    theta1=0., theta2=-45., psfType='gaussian', offset=[0., 0.], randAstromVariance=0.,
                    psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(620., 10), im2background=0.,
                    n_sources=500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(500., 30000.),
-                   variablesNearCenter=False, avoidBorder=2.1, avoidAllOverlaps=0.,
+                   variablesNearCenter=False, variablesAvoidBorder=2.1, avoidAllOverlaps=0.,
                    sourceFluxDistrib='powerlaw', psfSize=21, seed=66, fast=True, verbose=False,
                    **kwargs):
     #print 'HERE IN NEW MAKEFAKEIMAGES'
@@ -99,8 +99,6 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
     # Place the stars
     border = 2  #5
-    if avoidBorder * psfSize > border: # number of pixels to avoid putting sources near image boundary
-        border = int(avoidBorder * psfSize)
     if avoidAllOverlaps == 0.:  # Don't care where stars go, just add them randomly.
         xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
         yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
@@ -132,9 +130,16 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     if variablesNearCenter:
         # Make the sources closest to the center of the image the ones that increases in flux
         inds = fluxSortedInds[:len(varFlux2)]
+    # but avoid putting variables near border so we can avoid boundary issues with detection.
+    elif variablesAvoidBorder * psfSize > border: # number of pixels to avoid putting sources near image boundary
+        border = int(variablesAvoidBorder * psfSize)
+        isgood = ((xposns > xim.min()+border) & (xposns < xim.max()-border) &
+                  (yposns > yim.min()+border) & (yposns < yim.max()-border))
+        inds = np.arange(len(isgood))[isgood][:len(varFlux2)]
     else:  # Just choose random ones
         inds = np.arange(len(varFlux2))
         np.random.shuffle(inds)
+
     #print inds, xposns[inds], yposns[inds]
 
     ## Need to add poisson noise of stars as well...

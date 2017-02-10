@@ -176,7 +176,7 @@ class DiffimTest(object):
         dx, dy, _ = computeOffsets(src1, src2, threshold=threshold)
         return dx, dy
 
-    def doZOGY(self, computeScorr=True, inImageSpace=True, padSize=0):
+    def doZOGY(self, computeScorr=True, inImageSpace=False, padSize=15):
         D_ZOGY = varZOGY = None
         if inImageSpace:
             D_ZOGY, varZOGY = performZOGYImageSpace(self.im1.im, self.im2.im,
@@ -246,7 +246,7 @@ class DiffimTest(object):
 
     # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
     def runTest(self, subtractMethods=['ALstack', 'ZOGY', 'ZOGY_S', 'ALstack_decorr'],
-                zogyImageSpace=True, matchDist=np.sqrt(1.5), returnSources=False, **kwargs):
+                zogyImageSpace=False, matchDist=np.sqrt(1.5), returnSources=False, **kwargs):
         D_ZOGY = S_ZOGY = res = D_AL = None
         src = {}
         # Run diffim first
@@ -341,7 +341,8 @@ class DiffimTest(object):
     # Can just return the dataframe without plotting if desired.
     def doPlotWithDetectionsHighlighted(self, runTestResult=None, transientsOnly=True, addPresub=False,
                                         xaxisIsScienceForcedPhot=False, alpha=0.5,
-                                        divideByInput=False, actuallyPlot=True, skyLimited=False):
+                                        divideByInput=False, actuallyPlot=True, skyLimited=False,
+                                        matchDist=np.sqrt(1.5), **kwargs):
 
         import lsst.afw.table as afwTable
         import lsst.daf.base as dafBase
@@ -356,7 +357,7 @@ class DiffimTest(object):
 
         res = runTestResult
         if runTestResult is None or (runTestResult is not None and 'sources' not in runTestResult):
-            res = self.runTest(returnSources=True, matchDist=np.sqrt(1.5))
+            res = self.runTest(returnSources=True, matchDist=matchDist)
 
         src = res['sources']
         #del res['sources']
@@ -403,7 +404,6 @@ class DiffimTest(object):
                 #            fp_d['base_PsfFlux_flux']/fp_d['base_PsfFlux_fluxSigma'],
                 #            color='k', marker='x', alpha=alpha, label=None)
 
-            matchDist = np.sqrt(1.5)
             if not xaxisIsScienceForcedPhot:
                 matches = afwTable.matchXy(sources, src[label[i]], matchDist)
                 metadata = dafBase.PropertyList()

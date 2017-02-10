@@ -49,6 +49,7 @@ def performZOGY(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=No
     #print 'HERE: ZOGY NEW (F space)'
     sigR, sigN, P_r_hat, P_n_hat, denom, _, _ = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                           sig1, sig2, F_r, F_n, padSize=0)
+    #print 'SIGR, SIGN:', sigR, sigN
 
     # First do the image
     R_hat = np.fft.fft2(im1)
@@ -76,7 +77,7 @@ def performZOGY(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=No
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1., F_n=1.,
                           padSize=7):
-    #print 'HERE: ZOGY NEW (I space)'
+    #print 'HERE: ZOGY NEW (I space)', padSize
     sigR, sigN, P_r_hat, P_n_hat, denom, padded_psf1, padded_psf2 = ZOGYUtils(im1, im2, im1_psf, im2_psf,
                                                                               sig1, sig2, F_r, F_n,
                                                                               padSize=padSize)
@@ -86,10 +87,10 @@ def performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=Non
     K_r = np.fft.ifft2(K_r_hat).real
     K_n = np.fft.ifft2(K_n_hat).real
 
-    if padSize > 0:
-        ps = padSize #// 2
-        K_n = K_n[ps:-ps, ps:-ps]
-        K_r = K_r[ps:-ps, ps:-ps]
+    #if padSize > 0:
+    #    ps = padSize #// 2
+    #    K_n = K_n[ps:-ps, ps:-ps]
+    #    K_r = K_r[ps:-ps, ps:-ps]
 
     # Note these are reverse-labelled, this is CORRECT!
     im1c = scipy.ndimage.filters.convolve(im1, K_n, mode='constant', cval=np.nan)
@@ -128,10 +129,23 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 # Currently only implemented is V(S_N) and V(S_R)
 # Want to implement astrometric variance Vast(S_N) and Vast(S_R)
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
-                      sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None, padSize=15):
+                      sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None,
+                      inImageSpace=False, padSize=7):
     if D is None:
-        D, _ = performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n,
-                                     padSize=padSize)
+        if inImageSpace:
+            D, _ = performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n,
+                                         padSize=padSize)
+        else:
+            padSize = 0
+            padSize0 = im1.shape[0]//2 - im1_psf.shape[0]//2
+            padSize1 = im1.shape[1]//2 - im1_psf.shape[1]//2
+            # Hastily assume the image is even-sized and the psf is odd...
+            psf1 = np.pad(im1_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
+                          constant_values=0)
+            psf2 = np.pad(im2_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
+                          constant_values=0)
+            D, D_var = performZOGY(im1, im2, var_im1, var_im2, psf1, psf2, sig1=sig1, sig2=sig2)
+
     P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     # P_r_hat = np.fft.fftshift(P_r_hat)  # Not sure why I need to do this but it seems that I do.
     # P_n_hat = np.fft.fftshift(P_n_hat)
