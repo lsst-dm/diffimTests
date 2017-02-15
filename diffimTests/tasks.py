@@ -35,7 +35,8 @@ def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
     subconfig = config.kernel.active
     config.kernel.active.spatialKernelOrder = spatialBackgroundOrder  # 1  # make 0 since that is set in the default simulation setup.
     config.kernel.active.spatialBgOrder = spatialKernelOrder
-    #config.kernel.active.alardMinSig = 0.55  # Default is 0.7 but this is better for my simulations ???
+    config.kernel.active.alardMinSig = 0.55  # Default is 0.7 but 0.55 is better for my simulations ???
+    #config.kernel.active.alardGaussBeta = 2.0  # Default is 2.0
     subconfig.afwBackgroundConfig.useApprox = False
     subconfig.constantVarianceWeighting = False
     subconfig.singleKernelClipping = False
@@ -66,7 +67,7 @@ def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
         sig1squared = computeVarianceMean(im1)
         sig2squared = computeVarianceMean(im2)
         pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
-                                         preConvKernel=preConvKernel, delta=1.)
+                                         preConvKernel=preConvKernel, delta=0.)
         #return kimg, preConvKernel, pck
         diffim, _ = doConvolve(result.subtractedExposure, pck, use_scipy=False)
         #diffim.getMaskedImage().getImage().getArray()[:, ] \
@@ -120,7 +121,8 @@ def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
 
 
 # thresholdType options: 'variance', 'stdev', 'value', 'pixel_stdev'
-def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolarity='both', doSmooth=True,
+# thresholdPolarity: 'both', 'positive', 'negative'
+def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolarity='positive', doSmooth=True,
                 doMeasure=True, asDF=False):
     #print 'HERE: NEW DETECTION'
     # Modeled from meas_algorithms/tests/testMeasure.py

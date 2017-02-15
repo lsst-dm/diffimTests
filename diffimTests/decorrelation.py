@@ -25,7 +25,7 @@ def computeDecorrelationKernel(kappa, tvar=0.04, svar=0.04, preConvKernel=None, 
         pc = fixOddKernel(preConvKernel)
         pcft = numpy.fft.fft2(pc)
 
-    kft = np.sqrt((svar + tvar + delta) / (svar * np.abs(pcft)**2 + tvar * np.abs(kft)**2 + delta))
+    kft = np.sqrt((svar + tvar + delta) / (svar * np.abs(pcft)**2. + tvar * np.abs(kft)**2. + delta))
     #if preConvKernel is not None:
     #    kft = numpy.fft.fftshift(kft)  # I can't figure out why we need to fftshift sometimes but not others.
     pck = numpy.fft.ifft2(kft)
@@ -71,7 +71,7 @@ def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
         psf_ft = numpy.fft.fft2(psf)
         kernel = fixOddKernel(kernel)
         kft = numpy.fft.fft2(kernel)
-        out = psf_ft * np.sqrt((svar + tvar) / (svar + tvar * np.abs(kft)**2))
+        out = psf_ft * np.sqrt((svar + tvar) / (svar + tvar * np.abs(kft)**2.))
         return out
 
     def post_conv_psf(psf, kernel, svar, tvar):

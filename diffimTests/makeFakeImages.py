@@ -99,6 +99,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
     # Place the stars
     border = 2  #5
+    goodPlacement = np.repeat(True, n_sources)
     if avoidAllOverlaps == 0.:  # Don't care where stars go, just add them randomly.
         xposns = np.random.uniform(xim.min()+border, xim.max()-border, n_sources)
         yposns = np.random.uniform(yim.min()+border, yim.max()-border, n_sources)
@@ -118,9 +119,10 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                 notTooManyTries += 1
             xposns = np.append(xposns, [xpos])
             yposns = np.append(yposns, [ypos])
-            if notTooManyTries > 99:
+            if notTooManyTries > 99 or maxTries == 1:
                 nTriedAndFailed += 1
-            if nTriedAndFailed > 20:  # for very crowded fields, don't try too hard.
+                goodPlacement[i] = False  # keep track of sources that were placed incorrectly (so they arent set to transients)
+            if nTriedAndFailed > 20:  # for very crowded fields, lets stop trying.
                 maxTries = 1
         xposns = np.array(xposns)
         yposns = np.array(yposns)
@@ -134,7 +136,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     elif variablesAvoidBorder * psfSize > border: # number of pixels to avoid putting sources near image boundary
         border = int(variablesAvoidBorder * psfSize)
         isgood = ((xposns > xim.min()+border) & (xposns < xim.max()-border) &
-                  (yposns > yim.min()+border) & (yposns < yim.max()-border))
+                  (yposns > yim.min()+border) & (yposns < yim.max()-border) &
+                  goodPlacement)
         inds = np.arange(len(isgood))[isgood][:len(varFlux2)]
     else:  # Just choose random ones
         inds = np.arange(len(varFlux2))

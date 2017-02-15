@@ -273,7 +273,7 @@ class DiffimTest(object):
             # Run detection next
             try:
                 if subMethod is 'ALstack':  # Note we DONT set it to 5.5 -- best for noise-free template.
-                    src_AL = doDetection(self.ALres.subtractedExposure, threshold=5.0)
+                    src_AL = doDetection(self.ALres.subtractedExposure)
                     src['ALstack'] = src_AL
                 elif subMethod is 'ALstack_decorr':
                     src_AL2 = doDetection(self.ALres.decorrelatedDiffim)
@@ -282,8 +282,7 @@ class DiffimTest(object):
                     src_ZOGY = doDetection(D_ZOGY.asAfwExposure())
                     src['ZOGY'] = src_ZOGY
                 elif subMethod is 'ZOGY_S':
-                    src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), thresholdType='stdev',
-                                            doSmooth=False)
+                    src_SZOGY = doDetection(S_ZOGY.asAfwExposure(), thresholdType='stdev', doSmooth=False)
                     src['SZOGY'] = src_SZOGY
                 elif subMethod is 'AL' and D_AL is not None:
                     src_AL = doDetection(D_AL.asAfwExposure())
@@ -437,7 +436,7 @@ class DiffimTest(object):
                     yvals /= snrCalced_detected
                 plt.scatter(sources_detected, yvals,
                             #label=label[i], s=20, color=color[i], alpha=alpha) #, edgecolors='r')
-                            label=None, s=30, edgecolors=color[i], facecolors='none', marker='o', alpha=1.0)
+                            label=None, s=30, edgecolors='r', facecolors='none', marker='o', alpha=1.0) # edgecolors=color[i],
 
         if addPresub:  # Add measurements in original science and template images
             df['templateSNR'] = fp1['base_PsfFlux_flux']/fp1['base_PsfFlux_fluxSigma']

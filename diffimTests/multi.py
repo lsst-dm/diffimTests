@@ -30,7 +30,7 @@ def computeNormedPsfRms(psf1, psf2):
     return rms1weighted
 
 
-def runTest(flux, seed=66, n_varSources=10, n_sources=500, remeasurePsfs=[False, False],
+def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False, False],
             returnObjs=False, silent=False, printErrs=False, **kwargs):
     sky = kwargs.get('sky', 300.)                           # same default as makeFakeImages()
     psf1 = kwargs.get('psf1', [1.6, 1.6])                   # same default as makeFakeImages()
@@ -216,7 +216,7 @@ def runMultiDiffimTests(varSourceFlux=620., nStaticSources=500, n_runs=100, num_
 # in '31. f. new tests-precision recall curves.ipynb'
 # Then plotted using 'plotEfficiencyCurves()'.
 def runMultiDiffimTestsVsTransientFlux(varSourceFluxes=np.linspace(400., 2000., 40),
-                                       n_runs=10, *kwargs):
+                                       n_runs=10, **kwargs):
     testResults = {}
     for i, flux in enumerate(varSourceFluxes):
         testResults[i] = runMultiDiffimTests(varSourceFlux=flux, n_runs=n_runs, **kwargs)
@@ -245,9 +245,9 @@ def plotResults(tr, resultKey='resultInputPsf', doRates=False, title='', asHist=
         TP /= (FN + TP)
         title_suffix = ' rate'
     if doPrint:
-        print 'FN:', '\n', FN.mean()
-        print 'FP:', '\n', FP.mean()
-        print 'TP:', '\n', TP.mean()
+        print 'TP:\n', pd.DataFrame({'mean': TP.mean(), 'std': TP.std()})
+        print 'FP:\n', pd.DataFrame({'mean': FP.mean(), 'std': FP.std()})
+        print 'FN:\n', pd.DataFrame({'mean': FN.mean(), 'std': FN.std()})
 
     if not actuallyPlot:
         return TP, FP, FN
@@ -296,7 +296,7 @@ def plotSnrResults(tr, title='', doPrint=True, snrMax=20):
     import seaborn as sns
     sns.set(style="whitegrid", palette="pastel", color_codes=True)
 
-    if 'df' not in tr[0]:
+    if 'df' not in tr[0] or tr[0]['df'] is None:
         return None
     df = pd.concat([t['df'] for t in tr])
     #df.plot.scatter('scienceSNR', 'ZOGY_SNR')
@@ -470,11 +470,11 @@ def plotEfficiencyCurves(testResults):
     TP1 = []; FP1 = []; FN1 = []
     for i, tr in enumerate(testResults):
         tr = testResults[i]
-        FN1.append(pd.DataFrame({key: np.array([t['result'][key]['FN'] for t in tr]) for key in methods}).mean())
+        FN1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['FN'] for t in tr]) for key in methods}).mean())
         FN1[i]['scienceSNR'] = tr[0]['scienceSNR']
-        FP1.append(pd.DataFrame({key: np.array([t['result'][key]['FP'] for t in tr]) for key in methods}).mean())
+        FP1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['FP'] for t in tr]) for key in methods}).mean())
         FP1[i]['scienceSNR'] = tr[0]['scienceSNR']
-        TP1.append(pd.DataFrame({key: np.array([t['result'][key]['TP'] for t in tr]) for key in methods}).mean())
+        TP1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['TP'] for t in tr]) for key in methods}).mean())
         TP1[i]['scienceSNR'] = tr[0]['scienceSNR']
 
     #print len(TP1)
@@ -483,7 +483,7 @@ def plotEfficiencyCurves(testResults):
     FN1 = pd.concat(FN1, axis=1).transpose()
     #print TP1.shape
 
-    plt.subplots(1, 2, figsize=(8, 16))
+    plt.subplots(1, 2, figsize=(12, 6))
     ax = plt.subplot(121)
     TP1.plot(x='scienceSNR', alpha=0.5, lw=5, ax=ax)
     ax.set_ylabel('True positives (out of 50)')
