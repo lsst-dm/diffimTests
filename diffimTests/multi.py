@@ -38,6 +38,8 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
     templateNoNoise = kwargs.get('templateNoNoise', False)  # same default as makeFakeImages()
     skyLimited = kwargs.get('skyLimited', False)            # ditto.
     addPresub = kwargs.get('addPresub', True)  # Probably want this True, but it slows things down
+    avoidAllOverlaps = kwargs.get('avoidAllOverlaps', 0.0)
+    del kwargs['avoidAllOverlaps']
 
     varFlux2 = flux
     if not hasattr(varFlux2, "__len__"):
@@ -49,9 +51,10 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         remeasurePsfs[1] = 'psfex'
 
     # Make the "varying density" images to fit PSFs on
+    # Don't use avoidAllOverlaps here, since we want to have realistic star distribution for fitting psfs.
     testObj = DiffimTest(varFlux2=varFlux2,  # sky=sky, #psf1=psf1, psf2=psf2,
                          n_sources=n_sources,  # templateNoNoise=templateNoNoise, skyLimited=skyLimited,
-                         seed=seed, **kwargs)
+                         seed=seed, avoidAllOverlaps=0.0, **kwargs)
 
     # Make the constant density images to actually run the test on
     testObj2 = testObj
@@ -59,7 +62,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
        type(remeasurePsfs[1]) is not bool or remeasurePsfs[1] != False:
         testObj2 = DiffimTest(varFlux2=varFlux2,  # sky=sky, #psf1=psf1, psf2=psf2,
                               n_sources=1000,  # templateNoNoise=templateNoNoise, skyLimited=skyLimited,
-                              seed=seed, **kwargs)
+                              seed=seed, avoidAllOverlaps=avoidAllOverlaps, **kwargs)
 
     scintillation = kwargs.get('scintillation', 0.0)
     if scintillation == 0.:

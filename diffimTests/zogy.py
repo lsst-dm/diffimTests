@@ -130,7 +130,7 @@ def computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, F_r=1
 # Want to implement astrometric variance Vast(S_N) and Vast(S_R)
 def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
                       sig1=None, sig2=None, F_r=1., F_n=1., xVarAst=0., yVarAst=0., D=None,
-                      inImageSpace=False, padSize=15):
+                      inImageSpace=False, padSize=7):
     if D is None:
         if inImageSpace:
             D, _ = performZOGYImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n,
@@ -144,7 +144,7 @@ def performZOGY_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
                           constant_values=0)
             psf2 = np.pad(im2_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
                           constant_values=0)
-            D, D_var = performZOGY(im1, im2, var_im1, var_im2, psf1, psf2, sig1=sig1, sig2=sig2)
+            D, _ = performZOGY(im1, im2, var_im1, var_im2, psf1, psf2, sig1=sig1, sig2=sig2)
 
     P_D, F_D = computeZOGYDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, F_r, F_n)
     # P_r_hat = np.fft.fftshift(P_r_hat)  # Not sure why I need to do this but it seems that I do.

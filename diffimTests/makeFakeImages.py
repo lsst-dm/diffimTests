@@ -36,7 +36,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    variablesNearCenter=False, variablesAvoidBorder=2.1, avoidAllOverlaps=0.,
                    sourceFluxDistrib='powerlaw', psfSize=21, seed=66, fast=True, verbose=False,
                    **kwargs):
-    #print 'HERE IN NEW MAKEFAKEIMAGES'
+    #print 'HERE IN NEW MAKEFAKEIMAGES', avoidAllOverlaps
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
