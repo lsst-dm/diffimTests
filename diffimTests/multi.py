@@ -470,11 +470,11 @@ def plotEfficiencyCurves(testResults):
     TP1 = []; FP1 = []; FN1 = []
     for i, tr in enumerate(testResults):
         tr = testResults[i]
-        FN1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['FN'] for t in tr]) for key in methods}).mean())
+        FN1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['FN'] for t in tr if t['resultInputPsf'] is not None]) for key in methods}).mean())
         FN1[i]['scienceSNR'] = tr[0]['scienceSNR']
-        FP1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['FP'] for t in tr]) for key in methods}).mean())
+        FP1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['FP'] for t in tr if t['resultInputPsf'] is not None]) for key in methods}).mean())
         FP1[i]['scienceSNR'] = tr[0]['scienceSNR']
-        TP1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['TP'] for t in tr]) for key in methods}).mean())
+        TP1.append(pd.DataFrame({key: np.array([t['resultInputPsf'][key]['TP'] for t in tr if t['resultInputPsf'] is not None]) for key in methods}).mean())
         TP1[i]['scienceSNR'] = tr[0]['scienceSNR']
 
     #print len(TP1)
@@ -483,12 +483,15 @@ def plotEfficiencyCurves(testResults):
     FN1 = pd.concat(FN1, axis=1).transpose()
     #print TP1.shape
 
-    plt.subplots(1, 2, figsize=(12, 6))
+    plt.subplots(1, 2, figsize=(12, 4))
     ax = plt.subplot(121)
     TP1.plot(x='scienceSNR', alpha=0.5, lw=5, ax=ax)
+    plt.xlim(TP1.scienceSNR.min()-0.2, TP1.scienceSNR.max() + 0.2)
+    plt.ylim(-2, TP1.max().max() + 2)
     ax.set_ylabel('True positives (out of 50)')
     ax = plt.subplot(122)
     FP1.plot(x='scienceSNR', alpha=0.5, lw=5, ax=ax)
+    plt.ylim(-2, FP1.max().max() + 2)
     ax.set_ylabel('False positives')
     return TP1, FP1, FN1
 
