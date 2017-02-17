@@ -35,7 +35,7 @@ class Exposure(object):
             nPix = np.pi * reffsquared * 2.  # again, why the two? This is equal to the above for Gaussian PSFs
             #print nPix
 
-        if True:  # Try #3 -- same
+        if False:  # Try #3 -- same
             moments = computeMoments(psf, p=2.)
             nPix = np.pi * moments[0] * moments[1] * 4.
             #print nPix
