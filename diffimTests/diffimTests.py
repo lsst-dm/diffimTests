@@ -253,7 +253,7 @@ class DiffimTest(object):
         for subMethod in subtractMethods:
             if subMethod is 'ALstack' or subMethod is 'ALstack_decorr':
                 if self.ALres is None:
-                    self.ALres = self.doAlInStack(doPreConv=False, doDecorr=True)
+                    self.ALres = self.doAlInStack(doPreConv=False, doDecorr=True, **kwargs)
             if subMethod is 'ZOGY_S':
                 if self.S_ZOGY is None:
                     self.doZOGY(computeScorr=True, inImageSpace=zogyImageSpace)

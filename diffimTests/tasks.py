@@ -33,8 +33,8 @@ def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
     config.kernel.name = "AL"
     config.selectDetection.thresholdValue = 5.0  # default is 10.0 but this is necessary for very dense fields
     subconfig = config.kernel.active
-    config.kernel.active.spatialKernelOrder = spatialBackgroundOrder  # 1  # make 0 since that is set in the default simulation setup.
-    config.kernel.active.spatialBgOrder = spatialKernelOrder
+    config.kernel.active.spatialKernelOrder = spatialKernelOrder  # 1
+    config.kernel.active.spatialBgOrder = spatialBackgroundOrder
     config.kernel.active.alardMinSig = 0.55  # Default is 0.7 but 0.55 is better for my simulations ???
     #config.kernel.active.alardGaussBeta = 2.0  # Default is 2.0
     subconfig.afwBackgroundConfig.useApprox = False
@@ -187,6 +187,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, 
         startSize = exp.getPsf().computeShape().getDeterminantRadius() / 2.
     else:
         shape = [21, 21]
+    origPsf = exp.getPsf()
     psf = measAlg.DoubleGaussianPsf(shape[0], shape[1], startSize)
     exp.setPsf(psf)
 
@@ -226,5 +227,7 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, 
     psfDeterminer = config.psfDeterminer.apply()
     task = measurePsf.MeasurePsfTask(schema=schema, config=config)
     result = task.run(exp, sources)
+
+    exp.setPsf(origPsf)
 
     return result
