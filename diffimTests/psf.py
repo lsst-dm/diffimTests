@@ -254,3 +254,27 @@ def loadPsf(filename, asArray=True, forceReMeasure=False):
         psf = afwPsfToArray(psf, im)
 
     return psf, source
+
+
+class VariablePsf(object):
+    # Class for storing a list of PSFs (in form of np.arrays) associated with
+    # centroids (locations on an image). Then a getImage method (with an input coord)
+    # retrieves the stored PSF with the corresponding centroid closest to the input coord.
+    # TBD: 1. use boxes rather than centroids
+    #      2. getImage return an interpolated image between nearest centroids/overlapping boxes
+    def __init__(self):
+        self.psfList = []
+        self.centroidsX = np.array([])
+        self.centroidsY = np.array([])
+
+    def addPsf(self, psf, x, y):
+        self.psfList.append(psf)
+        self.centroidsX = np.append(self.centroidsX, [x])
+        self.centroidsY = np.append(self.centroidsY, [y])
+
+    def getImage(self, x, y):
+        xx = self.centroidsX
+        yy = self.centroidsY
+        dists = np.sqrt((x - xx)**2. + (y - yy)**2.)
+        ind = np.argmin(dists)
+        return self.psfList[ind]

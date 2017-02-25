@@ -18,8 +18,13 @@ class DiffimTest(object):
 
         if doInit:
             # Generate images and PSF's with the same dimension as the image (used for A&L)
-            im1, im2, P_r, P_n, im1_var, im2_var, self.centroids, \
-                self.changedCentroidInd = makeFakeImages(**kwargs)
+            #im1, im2, P_r, P_n, im1_var, im2_var, self.centroids, \
+            #    self.changedCentroidInd = makeFakeImages(**kwargs)
+            result = makeFakeImages(**kwargs)
+            im1, im2, P_r, P_n = result['im1'], result['im2'], result['im1_psf'], result['im2_psf']
+            im1_var, im2_var, self.centroids = result['im1_var'], result['im2_var'], result['centroids']
+            self.changedCentroidInd = result['changedCentroidInd']
+            self.variablePsf = result['variablePsf']
 
             self.kwargs = kwargs
 

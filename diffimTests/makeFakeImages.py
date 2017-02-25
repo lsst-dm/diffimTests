@@ -1,7 +1,6 @@
 import numpy as np
 
-from .psf import makePsf
-
+from .psf import makePsf, VariablePsf
 
 __all__ = ['makeFakeImages']
 
@@ -36,7 +35,6 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    variablesNearCenter=False, variablesAvoidBorder=2.1, avoidAllOverlaps=0.,
                    sourceFluxDistrib='powerlaw', psfSize=21, seed=66, fast=True, verbose=False,
                    **kwargs):
-    #print 'HERE IN NEW MAKEFAKEIMAGES', avoidAllOverlaps
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -163,6 +161,9 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     if verbose:
         print 'PSF y spatial-variation:', psf2_yvary.min(), psf2_yvary.max()
     # psf2_yvary[:] = 1.1  # turn it off for now, just add a constant 1.1 pixel horizontal width
+    variablePsf = None
+    if psf_yvary_factor != 0.0:
+        variablePsf = VariablePsf()
 
     astromNoiseX = astromNoiseY = np.zeros(len(fluxes))
     if randAstromVariance > 0.:
@@ -193,8 +194,9 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             nDidFast += 1
             offset1 = [yposns[i]-np.floor(yposns[i]),
                        xposns[i]-np.floor(xposns[i])]
-            tmp = flux * makePsf(psfType=psfType[0], sigma=psf1, theta=theta1, offset=offset1,
-                                 x0=x0star, y0=y0star, psfSize=starSize)
+            star = makePsf(psfType=psfType[0], sigma=psf1, theta=theta1, offset=offset1,
+                           x0=x0star, y0=y0star, psfSize=starSize)
+            tmp = flux * star
             offset2 = [int(xposns[i]+imSize[0]//2), int(yposns[i]+imSize[1]//2)]
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             if not templateNoNoise:
@@ -205,8 +207,9 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                 var_im1[(offset2[1]-starSize+1):(offset2[1]+starSize),
                         (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
         else:
-            tmp = flux * makePsf(psfType=psfType[0], sigma=psf1, theta=theta1,
-                                 offset=[xposns[i], yposns[i]], x0=x0im, y0=y0im, psfSize=0)
+            star = makePsf(psfType=psfType[0], sigma=psf1, theta=theta1,
+                           offset=[xposns[i], yposns[i]], x0=x0im, y0=y0im, psfSize=0)
+            tmp = flux * star
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             if not templateNoNoise:
                 tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
@@ -232,8 +235,9 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
            xposn < imSize[0]//2 - starSize and yposn < imSize[1]//2 - starSize:
             nDidFast += 1
             offset1 = [yposn-np.floor(yposn), xposn-np.floor(xposn)]
-            tmp = flux * makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2,
-                                 offset=offset1, x0=x0star, y0=y0star, psfSize=starSize)
+            star = makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2,
+                           offset=offset1, x0=x0star, y0=y0star, psfSize=starSize)
+            tmp = flux * star
             offset2 = [int(xposn+imSize[0]//2), int(yposn+imSize[1]//2)]
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
@@ -242,9 +246,14 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             if not skyLimited:
                 var_im2[(offset2[1]-starSize+1):(offset2[1]+starSize),
                         (offset2[0]-starSize+1):(offset2[0]+starSize)] += tmp
+            if psf_yvary_factor != 0.0:  # Store the variable psfs
+                varPsf = makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2, psfSize=psfSize)
+                variablePsf.addPsf(varPsf, xposn+imSize[0]//2, yposn+imSize[1]//2)
+
         else:
-            tmp = flux * makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2,
-                                 offset=[xposn, yposn], x0=x0im, y0=y0im, psfSize=0)
+            star = makePsf(psfType=psfType[1], sigma=psftmp, theta=theta2,
+                           offset=[xposn, yposn], x0=x0im, y0=y0im, psfSize=0)
+            tmp = flux * star
             tmp[tmp < 0.] = 0.  # poisson cant handle <0.
             tmp = np.random.poisson(tmp, size=tmp.shape).astype(float)
             im2 += tmp
@@ -267,5 +276,16 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     # Don't include any astrometric "error" in the PSF, see how well the diffim algo. handles it.
     im2_psf = makePsf(psfType=psfType[1], sigma=psf2, theta=theta2, psfSize=psfSize)
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
-    return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
+
+    out = {'im1': im1,
+           'im2': im2,
+           'im1_psf': im1_psf,
+           'im2_psf': im2_psf,
+           'im1_var': var_im1,
+           'im2_var': var_im2,
+           'centroids': centroids,
+           'changedCentroidInd': inds,
+           'variablePsf': variablePsf}
+    #return im1, im2, im1_psf, im2_psf, var_im1, var_im2, centroids, inds
+    return out
 
