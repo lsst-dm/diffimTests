@@ -168,7 +168,7 @@ def doDetection(exp, threshold=5.0, thresholdType='pixel_stdev', thresholdPolari
     table = afwTable.SourceTable.make(schema)
     sources = detectionTask.run(table, exp, doSmooth=doSmooth).sources
 
-    measureTask.measure(exp, sources)
+    measureTask.measure(sources, exposure=exp)
 
     if asDF:
         sources = catalogToDF(sources) #pd.DataFrame({col: sources.columns[col] for col in sources.schema.getNames()})
