@@ -33,9 +33,9 @@ def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
     config.kernel.name = "AL"
     config.selectDetection.thresholdValue = 5.0  # default is 10.0 but this is necessary for very dense fields
     subconfig = config.kernel.active
-    subconfig.spatialKernelOrder = spatialKernelOrder  # 1
-    subconfig.spatialBgOrder = spatialBackgroundOrder
-    subconfig.alardMinSig = 0.55  # Default is 0.7 but 0.55 is better for my simulations ???
+    config.kernel.active.spatialKernelOrder = spatialKernelOrder  # 1
+    config.kernel.active.spatialBgOrder = spatialBackgroundOrder
+    config.kernel.active.alardMinSig = 0.55  # Default is 0.7 but 0.55 is better for my simulations ???
     #config.kernel.active.alardGaussBeta = 2.0  # Default is 2.0
     subconfig.afwBackgroundConfig.useApprox = False
     subconfig.constantVarianceWeighting = False
