@@ -227,8 +227,8 @@ class SpatialModelPsfTestCase(object):
         psfDeterminerClass = measAlg.psfDeterminerRegistry["psfex"]
         psfDeterminerConfig = psfDeterminerClass.ConfigClass()
         width, height = exposure.getMaskedImage().getDimensions()
-        psfDeterminerConfig.sizeCellX = width
-        psfDeterminerConfig.sizeCellY = height//3
+        psfDeterminerConfig.sizeCellX = width//8
+        psfDeterminerConfig.sizeCellY = height//8
         psfDeterminerConfig.spatialOrder = 1
 
         psfDeterminer = psfDeterminerClass(psfDeterminerConfig)

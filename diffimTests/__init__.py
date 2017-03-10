@@ -50,4 +50,5 @@ from . import multi
 #from .makeFakeImages import *
 #from . import alardLuptonCustom
 #from . import decorrelation
+from .imageMapReduce import *
 
