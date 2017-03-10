@@ -17,6 +17,10 @@ class Exposure(object):
         else:
             _, self.sig, _, _ = computeClippedImageStats(im)
 
+    def clone(self):
+        out = Exposure(self.im.copy(), self.psf.copy(), self.var.copy(), self.metaData)
+        return out
+
     def setMetaData(self, key, value):
         self.metaData[key] = value
 

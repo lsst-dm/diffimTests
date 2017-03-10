@@ -289,9 +289,14 @@ class DiffimTest(object):
                 elif subMethod is 'Zogy':
                     src_Zogy = doDetection(D_Zogy.asAfwExposure())
                     src['Zogy'] = src_Zogy
-                elif subMethod is 'Zogy_S':
-                    src_SZogy = doDetection(S_Zogy.asAfwExposure(),
-                                            thresholdType='pixel_stdev', doSmooth=False)
+                elif subMethod is 'Zogy_S':  # 'pixel_stdev' doesn't work, so just divide the image by
+                    tmp_S = S_Zogy.clone()   # the variance and use a 'value' threshold.
+                    tmp_S.im /= tmp_S.var
+                    tmp_S.var /= tmp_S.var
+                    #src_SZogy = doDetection(S_ZOGY.asAfwExposure(),
+                    #                        thresholdType='pixel_stdev', doSmooth=False)
+                    src_SZogy = doDetection(tmp_S.asAfwExposure(),
+                                            thresholdType='value', doSmooth=False)
                     src['SZogy'] = src_SZogy
                 elif subMethod is 'AL' and D_AL is not None:
                     src_AL = doDetection(D_AL.asAfwExposure())
