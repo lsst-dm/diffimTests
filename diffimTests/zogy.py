@@ -40,16 +40,16 @@ def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., 
     Pr_hat = np.fft.fft2(Pr)
     Pn_hat = np.fft.fft2(Pn)
     denom = np.sqrt((sigN**2 * Fr**2 * np.abs(Pr_hat**2)) + (sigR**2 * Fn**2 * np.abs(Pn_hat**2)))
+    Fd = Fr*Fn / np.sqrt(sigN**2 * Fr**2 + sigR**2 * Fn**2)
 
-    return sigR, sigN, Pr_hat, Pn_hat, denom, Pr, Pn
+    return sigR, sigN, Pr_hat, Pn_hat, denom, Pr, Pn, Fd
 
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 def performZogy(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., Fn=1.):
     sigR, sigN, Pr_hat, Pn_hat, denom, \
-        _, _ = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
-                                  sig1, sig2, Fr, Fn, padSize=0)
-    Fd = Fr*Fn / np.sqrt(sigN**2 * Fr**2 + sigR**2 * Fn**2)
+        _, _, Fd = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
+                                      sig1, sig2, Fr, Fn, padSize=0)
 
     # First do the image
     R_hat = np.fft.fft2(im1)
@@ -78,9 +78,8 @@ def performZogy(im1, im2, var_im1, var_im2, im1_psf, im2_psf, sig1=None, sig2=No
 def performZogyImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
                           sig1=None, sig2=None, Fr=1., Fn=1., padSize=7):
     sigR, sigN, Pr_hat, Pn_hat, denom, \
-        padded_psf1, padded_psf2 = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
-                                                      sig1, sig2, Fr, Fn, padSize=padSize)
-    Fd = Fr*Fn / np.sqrt(sigN**2 * Fr**2 + sigR**2 * Fn**2)
+        padded_psf1, padded_psf2, Fd = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
+                                                          sig1, sig2, Fr, Fn, padSize=padSize)
 
     delta = 0. #.1
     Kr_hat = (Pr_hat + delta) / (denom + delta)
@@ -111,20 +110,16 @@ def performZogyImageSpace(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
 ## Also compute the diffim's PSF (eq. 14)
 def computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., Fn=1., padSize=0):
     sigR, sigN, Pr_hat, Pn_hat, denom, \
-        _, _ = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
-                                  sig1, sig2, Fr, Fn, padSize=padSize)
-
-    FD_numerator = Fr * Fn
-    FD_denom = np.sqrt(sigN**2 * Fr**2 + sigR**2 * Fn**2)
-    FD = FD_numerator / FD_denom
+        _, _, Fd = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
+                                      sig1, sig2, Fr, Fn, padSize=padSize)
 
     Pd_hat_numerator = (Fr * Fn * Pr_hat * Pn_hat)
-    Pd_hat = Pd_hat_numerator / (FD * denom)
+    Pd_hat = Pd_hat_numerator / (Fd * denom)
 
     Pd = np.fft.ifft2(Pd_hat)
-    PD = np.fft.ifftshift(Pd).real
+    Pd = np.fft.ifftshift(Pd).real
 
-    return PD, FD
+    return Pd
 
 
 # Compute the corrected ZOGY "S_corr" (eq. 25)
@@ -149,22 +144,22 @@ def performZogy_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
             D, _ = performZogy(im1, im2, var_im1, var_im2, psf1, psf2, sig1=sig1, sig2=sig2,
                                Fr=Fr, Fn=Fn)
 
-    PD, FD = computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, Fr, Fn)
-
     sigR, sigN, Pr_hat, Pn_hat, denom, \
-        _, _ = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
-                                  sig1, sig2, Fr, Fn, padSize=padSize)
+        _, _, Fd = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
+                                      sig1, sig2, Fr, Fn, padSize=padSize)
+
+    Pd = computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, Fr, Fn)
+    Pd_bar = np.fliplr(np.flipud(Pd))
+    S = scipy.ndimage.filters.convolve(D, Pd_bar, mode='constant', cval=np.nan) * Fd
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
     kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
     kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
 
-    kr = np.fft.ifft2(kr_hat)
-    kr = kr.real
+    kr = np.fft.ifft2(kr_hat).real
     kr = np.roll(np.roll(kr, -1, 0), -1, 1)
-    kn = np.fft.ifft2(kn_hat)
-    kn = kn.real
+    kn = np.fft.ifft2(kn_hat).real
     kn = np.roll(np.roll(kn, -1, 0), -1, 1)
     if padSize > 0:
         kn = kn[padSize:-padSize, padSize:-padSize]
@@ -181,10 +176,8 @@ def performZogy_Scorr(im1, im2, var_im1, var_im2, im1_psf, im2_psf,
         gradNx, gradNy = np.gradient(S_N)
         fGradN = xVarAst * gradNx**2. + yVarAst * gradNy**2.
 
-    PD_bar = np.fliplr(np.flipud(PD))
-    S = scipy.ndimage.filters.convolve(D, PD_bar, mode='constant', cval=np.nan) * FD
     S_var = np.sqrt(var1c + var2c + fGradR + fGradN)
     #S_corr = S #/ S_corr_var
     #return S_corr, S, S_corr_var, D, P_D, F_D, var1c, var2c
     S_var *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L (this was already done for S and D)
-    return S, S_var, D, PD, FD, var1c, var2c
+    return S, S_var, D, Pd, Fd, var1c, var2c

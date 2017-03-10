@@ -100,6 +100,8 @@ class DiffimTest(object):
             imagesToPlot.append(self.S_Zogy.im)
             titles.append('S(Zogy) var')
             imagesToPlot.append(self.S_Zogy.var)
+            titles.append('S(Zogy)/S_var > 5')
+            imagesToPlot.append((self.S_Zogy.im / self.S_Zogy.var > 5.) * 10.0)
         if addedImgs is not None:
             for i, img in enumerate(addedImgs):
                 titles.append('Added ' + str(i))
@@ -202,10 +204,10 @@ class DiffimTest(object):
                                           psf1, psf2,
                                           sig1=self.im1.sig, sig2=self.im2.sig)
 
-        P_D_Zogy, F_D = computeZogyDiffimPsf(self.im1.im, self.im2.im,
-                                             self.im1.psf, self.im2.psf,
-                                             sig1=self.im1.sig, sig2=self.im2.sig,
-                                             Fr=1., Fn=1.)
+        P_D_Zogy = computeZogyDiffimPsf(self.im1.im, self.im2.im,
+                                        self.im1.psf, self.im2.psf,
+                                        sig1=self.im1.sig, sig2=self.im2.sig,
+                                        Fr=1., Fn=1.)
         #varZogy = (self.im1.var + self.im2.var) # / (self.im1.sig**2. + self.im2.sig**2.)  # Same here!
 
         D_Zogy[(D_Zogy == 0.) | np.isinf(D_Zogy)] = np.nan
