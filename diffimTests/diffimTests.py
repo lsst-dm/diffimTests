@@ -3,7 +3,7 @@ import pandas as pd
 
 from .makeFakeImages import makeFakeImages
 from .exposure import Exposure
-from .zogy import performZogy, performZogyImageSpace, computeZogyDiffimPsf, performZogy_Scorr
+from .zogy import performZogy, performZogyImageSpace, computeZogyDiffimPsf, computeZogy_Scorr
 from .tasks import doDetection, doForcedPhotometry
 from .catalog import centroidsToCatalog, catalogToDF, computeOffsets
 from .utils import computeClippedImageStats
@@ -153,14 +153,12 @@ class DiffimTest(object):
             if betaGauss == 1.:  # update default, resize the kernel appropriately
                 betaGauss = 1./np.sqrt(2.)
         D_AL, D_psf, self.kappa_AL = performAlardLupton(self.im1.im, self.im2.im,
-                                                        spatialKernelOrder=spatialKernelOrder,
-                                                        spatialBackgroundOrder=spatialBackgroundOrder,
-                                                        sig1=self.im1.sig, sig2=self.im2.sig,
-                                                        kernelSize=kernelSize,
-                                                        betaGauss=betaGauss,
-                                                        doALZCcorrection=doDecorr,
-                                                        im2Psf=self.im2.psf,
-                                                        preConvKernel=preConvKernel)
+            spatialKernelOrder=spatialKernelOrder,
+            spatialBackgroundOrder=spatialBackgroundOrder,
+            sig1=self.im1.sig, sig2=self.im2.sig,
+            kernelSize=kernelSize, betaGauss=betaGauss,
+            doALZCcorrection=doDecorr, im2Psf=self.im2.psf,
+            preConvKernel=preConvKernel)
         # This is not entirely correct, we also need to convolve var with the decorrelation kernel (squared):
         var = self.im1.var + scipy.ndimage.filters.convolve(self.im2.var, self.kappa_AL**2., mode='constant',
                                                             cval=np.nan)
@@ -187,45 +185,30 @@ class DiffimTest(object):
         D_Zogy = varZogy = None
         if inImageSpace:
             D_Zogy, varZogy = performZogyImageSpace(self.im1.im, self.im2.im,
-                                                    self.im1.var, self.im2.var,
-                                                    self.im1.psf, self.im2.psf,
-                                                    sig1=self.im1.sig, sig2=self.im2.sig, padSize=padSize)
-        else:  # Do all in fourier space (needs image-sized PSFs)
-            padSize = 0
-            padSize0 = self.im1.im.shape[0]//2 - self.im1.psf.shape[0]//2
-            padSize1 = self.im1.im.shape[1]//2 - self.im1.psf.shape[1]//2
-            # Hastily assume the image is even-sized and the psf is odd...
-            psf1 = np.pad(self.im1.psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                          constant_values=0)
-            psf2 = np.pad(self.im2.psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                          constant_values=0)
+                self.im1.var, self.im2.var, self.im1.psf, self.im2.psf,
+                sig1=self.im1.sig, sig2=self.im2.sig, padSize=padSize)
+        else:  # Do all in fourier space
             D_Zogy, varZogy = performZogy(self.im1.im, self.im2.im,
-                                          self.im1.var, self.im2.var,
-                                          psf1, psf2,
-                                          sig1=self.im1.sig, sig2=self.im2.sig)
+                self.im1.var, self.im2.var, self.im1.psf, self.im2.psf,
+                sig1=self.im1.sig, sig2=self.im2.sig)
 
         P_D_Zogy = computeZogyDiffimPsf(self.im1.im, self.im2.im,
-                                        self.im1.psf, self.im2.psf,
-                                        sig1=self.im1.sig, sig2=self.im2.sig,
-                                        Fr=1., Fn=1.)
-        #varZogy = (self.im1.var + self.im2.var) # / (self.im1.sig**2. + self.im2.sig**2.)  # Same here!
+            self.im1.psf, self.im2.psf, sig1=self.im1.sig, sig2=self.im2.sig,
+            Fr=1., Fn=1.)
 
         D_Zogy[(D_Zogy == 0.) | np.isinf(D_Zogy)] = np.nan
         varZogy[(varZogy == 0.) | np.isnan(D_Zogy) | np.isinf(varZogy)] = np.nan
         self.D_Zogy = Exposure(D_Zogy, P_D_Zogy, varZogy)
 
         if computeScorr:
-            S, S_var, _, P_D, F_D, var1c, \
-                var2c = performZogy_Scorr(self.im1.im, self.im2.im,
-                                          self.im1.var, self.im2.var,
-                                          im1_psf=self.im1.psf, im2_psf=self.im2.psf,
-                                          sig1=self.im1.sig, sig2=self.im2.sig,
-                                          D=D_Zogy, #xVarAst=dx, yVarAst=dy)
-                                          xVarAst=self.astrometricOffsets[0], # these are already variances.
-                                          yVarAst=self.astrometricOffsets[1],
-                                          padSize=padSize)
-            self.S_Zogy = Exposure(S, P_D, S_var) #np.sqrt(var1c + var2c))
-            #self.S_corr_Zogy = Exposure(S_corr, P_D, S_corr_var)
+            S, S_var, P_D, F_D = computeZogy_Scorr(D_Zogy, self.im1.im, self.im2.im,
+                self.im1.var, self.im2.var,
+                im1_psf=self.im1.psf, im2_psf=self.im2.psf,
+                sig1=self.im1.sig, sig2=self.im2.sig,
+                xVarAst=self.astrometricOffsets[0],  # these are already variances.
+                yVarAst=self.astrometricOffsets[1],
+                padSize=padSize, inImageSpace=inImageSpace)
+            self.S_Zogy = Exposure(S, P_D, S_var)
 
         return self.D_Zogy
 
@@ -236,8 +219,8 @@ class DiffimTest(object):
         im2 = self.im2.asAfwExposure()
 
         result = doAlInStack(im1, im2, doWarping=doWarping, doDecorr=doDecorr, doPreConv=doPreConv,
-                             spatialBackgroundOrder=spatialBackgroundOrder,
-                             spatialKernelOrder=spatialKernelOrder)
+            spatialBackgroundOrder=spatialBackgroundOrder,
+            spatialKernelOrder=spatialKernelOrder)
 
         return result
 
@@ -250,10 +233,10 @@ class DiffimTest(object):
             self.im2.doMeasurePsf(self.im2.asAfwExposure())
 
     def reset(self):
-        self.ALres = self.D_Zogy = self.D_AL = self.S_Zogy = None  # self.S_corr_Zogy = 
+        self.ALres = self.D_Zogy = self.D_AL = self.S_Zogy = None
 
     # Note I use a dist of sqrt(1.5) because I used to have dist**2 < 1.5.
-    def runTest(self, subtractMethods=['ALstack', 'Zogy', 'Zogy_S', 'ALstack_decorr'],
+    def runTest(self, subtractMethods=['ALstack', 'Zogy_S', 'Zogy', 'ALstack_decorr'],
                 zogyImageSpace=False, matchDist=np.sqrt(1.5), returnSources=False, **kwargs):
         D_Zogy = S_Zogy = res = D_AL = None
         src = {}
@@ -266,11 +249,12 @@ class DiffimTest(object):
                 if self.S_Zogy is None:
                     self.doZogy(computeScorr=True, inImageSpace=zogyImageSpace)
                 S_Zogy = self.S_Zogy
+                D_Zogy = self.D_Zogy
             if subMethod is 'Zogy':
                 if self.D_Zogy is None:
-                    self.doZogy(computeScorr=True, inImageSpace=zogyImageSpace)
+                    self.doZogy(computeScorr=False, inImageSpace=zogyImageSpace)
                 D_Zogy = self.D_Zogy
-            if subMethod is 'AL':  # my clean-room (pure python) version of A&L
+            if subMethod is 'AL':  # my clean-room (pure python, slow) version of A&L
                 try:
                     self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
                     D_AL = self.D_AL
