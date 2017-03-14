@@ -15,9 +15,9 @@ from .utils import computeClippedImageStats, memoize
 # will set to one here), $\sigma_r^2$ and $\sigma_n^2$ are their
 # variance, and $\widehat{D}$ denotes the FT of $D$.
 
-
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
-@memoize
+
+@memoize  # Don't want this in production! Find another way to store the results of this func
 def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., Fn=1., padSize=0):
     if sig1 is None and im1 is not None:
         _, sig1, _, _ = computeClippedImageStats(im1)
@@ -59,11 +59,17 @@ def performZogy(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None, sig1=Non
     # Do all in fourier space (needs image-sized PSFs)
     padSize0 = im1.shape[0]//2 - im1_psf.shape[0]//2
     padSize1 = im1.shape[1]//2 - im1_psf.shape[1]//2
+    psf1, psf2 = im1_psf, im2_psf
     # Hastily assume the image is even-sized and the psf is odd...
-    psf1 = np.pad(im1_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                  constant_values=0)
-    psf2 = np.pad(im2_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                  constant_values=0)
+    if padSize0 > 0 or padSize1 > 0:
+        if padSize0 < 0:
+            padSize0 = 0
+        if padSize1 < 0:
+            padSize1 = 0
+        psf1 = np.pad(im1_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
+                      constant_values=0)
+        psf2 = np.pad(im2_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
+                      constant_values=0)
 
     prereqs = computeZogyPrereqs(im1, im2, psf1, psf2,
                                  sig1, sig2, Fr, Fn, padSize=0)
