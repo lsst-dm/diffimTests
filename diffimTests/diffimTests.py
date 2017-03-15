@@ -3,7 +3,7 @@ import pandas as pd
 
 from .makeFakeImages import makeFakeImages
 from .exposure import Exposure
-from .zogy import performZogy, performZogyImageSpace, computeZogyDiffimPsf, computeZogy_Scorr
+from .zogy import computeZogy, computeZogyDiffimPsf, computeZogyScorr
 from .tasks import doDetection, doForcedPhotometry
 from .catalog import centroidsToCatalog, catalogToDF, computeOffsets
 from .utils import computeClippedImageStats
@@ -98,8 +98,10 @@ class DiffimTest(object):
         if include_Szogy and self.S_Zogy is not None:
             titles.append('S(Zogy)')
             imagesToPlot.append(self.S_Zogy.im)
+            print 'Scorr:', computeClippedImageStats(self.S_Zogy.im)
             titles.append('S(Zogy) var')
             imagesToPlot.append(self.S_Zogy.var)
+            print 'Scorr_var:', computeClippedImageStats(self.S_Zogy.var)
             titles.append('S(Zogy)/S_var > 5')
             imagesToPlot.append((self.S_Zogy.im / self.S_Zogy.var > 5.) * 10.0)
         if addedImgs is not None:
@@ -182,33 +184,28 @@ class DiffimTest(object):
         return dx, dy
 
     def doZogy(self, computeScorr=True, inImageSpace=False, padSize=15):
-        D_Zogy = varZogy = None
-        if inImageSpace:
-            D_Zogy, varZogy = performZogyImageSpace(self.im1.im, self.im2.im,
-                self.im1.var, self.im2.var, self.im1.psf, self.im2.psf,
-                sig1=self.im1.sig, sig2=self.im2.sig, padSize=padSize)
-        else:  # Do all in fourier space
-            D_Zogy, varZogy = performZogy(self.im1.im, self.im2.im,
-                self.im1.var, self.im2.var, self.im1.psf, self.im2.psf,
-                sig1=self.im1.sig, sig2=self.im2.sig)
+        D_Zogy, varZogy = computeZogy(self.im1.im, self.im2.im,
+                                      self.im1.var, self.im2.var, self.im1.psf, self.im2.psf,
+                                      sig1=self.im1.sig, sig2=self.im2.sig,
+                                      inImageSpace=inImageSpace, padSize=padSize)
 
-        P_D_Zogy = computeZogyDiffimPsf(self.im1.im, self.im2.im,
+        Pd_Zogy = computeZogyDiffimPsf(self.im1.im, self.im2.im,
             self.im1.psf, self.im2.psf, sig1=self.im1.sig, sig2=self.im2.sig,
             Fr=1., Fn=1.)
 
-        D_Zogy[(D_Zogy == 0.) | np.isinf(D_Zogy)] = np.nan
-        varZogy[(varZogy == 0.) | np.isnan(D_Zogy) | np.isinf(varZogy)] = np.nan
-        self.D_Zogy = Exposure(D_Zogy, P_D_Zogy, varZogy)
-
         if computeScorr:
-            S, S_var, P_D, F_D = computeZogy_Scorr(D_Zogy, self.im1.im, self.im2.im,
+            S, S_var, Pd, F_D = computeZogyScorr(self.im1.im, self.im2.im,
                 self.im1.var, self.im2.var,
                 im1_psf=self.im1.psf, im2_psf=self.im2.psf,
                 sig1=self.im1.sig, sig2=self.im2.sig,
                 xVarAst=self.astrometricOffsets[0],  # these are already variances.
                 yVarAst=self.astrometricOffsets[1],
-                padSize=padSize, inImageSpace=inImageSpace)
-            self.S_Zogy = Exposure(S, P_D, S_var)
+                D=D_Zogy, padSize=padSize, inImageSpace=inImageSpace)
+            self.S_Zogy = Exposure(S, Pd, S_var)
+
+        D_Zogy[(D_Zogy == 0.) | np.isinf(D_Zogy)] = np.nan
+        varZogy[(varZogy == 0.) | np.isnan(D_Zogy) | np.isinf(varZogy)] = np.nan
+        self.D_Zogy = Exposure(D_Zogy, Pd_Zogy, varZogy)
 
         return self.D_Zogy
 
