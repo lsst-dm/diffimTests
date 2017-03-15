@@ -120,13 +120,11 @@ def performZogyImageSpace(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None
     im1c = scipy.ndimage.filters.convolve(im1, Kn, mode='constant', cval=np.nan)
     im2c = scipy.ndimage.filters.convolve(im2, Kr, mode='constant', cval=np.nan)
     D = (im2c - im1c) / Fd
-    #D *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
     # Do the same convolutions to the variance images
     im1c = scipy.ndimage.filters.convolve(im1_var, Kn, mode='constant', cval=np.nan)
     im2c = scipy.ndimage.filters.convolve(im2_var, Kr, mode='constant', cval=np.nan)
     D_var = (im2c + im1c) / Fd
-    #D_var *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
     return D, D_var
 
@@ -159,17 +157,7 @@ def computeZogy_Scorr(D, im1, im2, im1_var, im2_var, im1_psf, im2_psf,
                                          sig1=sig1, sig2=sig2, Fr=Fr, Fn=Fn, padSize=padSize)
         padSize = 0
     else:
-        # padSize = 0
-        # padSize0 = im1.shape[0]//2 - im1_psf.shape[0]//2
-        # padSize1 = im1.shape[1]//2 - im1_psf.shape[1]//2
-        # # Hastily assume the image is even-sized and the psf is odd...
-        # psf1 = np.pad(im1_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-        #               constant_values=0)
-        # psf2 = np.pad(im2_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-        #               constant_values=0)
         if D is None:
-            # D, _ = performZogy(im1, im2, im1_var, im2_var, psf1, psf2, sig1=sig1, sig2=sig2,
-            #                    Fr=Fr, Fn=Fn)
             D, _ = performZogy(im1, im2, im1_var, im2_var, im1_psf, im2_psf, sig1=sig1, sig2=sig2,
                                Fr=Fr, Fn=Fn)
         padSize = 0
