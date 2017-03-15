@@ -230,6 +230,7 @@ class ImageReducerSubtask(pipeBase.Task):
         newMI = newExp.getMaskedImage()
 
         reduceOp = self.config.reduceOperation
+        weights = None
         if reduceOp == 'copy':
             newMI.getImage()[:, :] = np.nan
             newMI.getVariance()[:, :] = np.nan
@@ -237,7 +238,7 @@ class ImageReducerSubtask(pipeBase.Task):
             newMI.getImage()[:, :] = 0.
             newMI.getVariance()[:, :] = 0.
             if reduceOp == 'average':  # make an array to keep track of weights
-                weights = afwImage.ImageF(newMI.getBBox())  # must be a float to divide later.
+                weights = afwImage.ImageI(newMI.getBBox())
 
         for item in mapperResults:
             item = item.subExposure  # Expected named value in the pipeBase.Struct
@@ -248,37 +249,26 @@ class ImageReducerSubtask(pipeBase.Task):
             subExp = afwImage.ExposureF(newExp, item.getBBox())
             subMI = subExp.getMaskedImage()
             patchMI = item.getMaskedImage()
-            isNan = (np.isnan(patchMI.getImage().getArray()) |
-                     np.isnan(patchMI.getVariance().getArray()))
-            noNans = np.sum(isNan) <= 0
+            isNotNan = ~(np.isnan(patchMI.getImage().getArray()) |
+                         np.isnan(patchMI.getVariance().getArray()))
             if reduceOp == 'copy':
-                if noNans:
-                    subMI[:, :] = patchMI
-                else:
-                    isNotNan = ~isNan
-                    subMI.getImage().getArray()[isNotNan] = patchMI.getImage().getArray()[isNotNan]
-                    subMI.getVariance().getArray()[isNotNan] = patchMI.getVariance().getArray()[isNotNan]
+                subMI.getImage().getArray()[isNotNan] = patchMI.getImage().getArray()[isNotNan]
+                subMI.getVariance().getArray()[isNotNan] = patchMI.getVariance().getArray()[isNotNan]
 
             if reduceOp == 'sum' or reduceOp == 'average':  # much of these two options is the same
-                if noNans:
-                    subMI += patchMI
-                    if reduceOp == 'average':
-                        # wsubim is a view into the `weights` Image, so here we simply add one to
-                        # the region of `weights` confined by `item.getBBox()`.
-                        wsubim = afwImage.ImageF(weights, item.getBBox())
-                        wsubim += 1.
-                else:
-                    isNotNan = ~isNan
-                    subMI.getImage().getArray()[isNotNan] += patchMI.getImage().getArray()[isNotNan]
-                    subMI.getVariance().getArray()[isNotNan] += patchMI.getVariance().getArray()[isNotNan]
-                    if reduceOp == 'average':
-                        wsubim = afwImage.ImageF(weights, item.getBBox())
-                        wsubim.getArray()[isNotNan] += 1.
+                subMI.getImage().getArray()[isNotNan] += patchMI.getImage().getArray()[isNotNan]
+                subMI.getVariance().getArray()[isNotNan] += patchMI.getVariance().getArray()[isNotNan]
+                if reduceOp == 'average':
+                    # wsubim is a view into the `weights` Image
+                    wsubim = afwImage.ImageI(weights, item.getBBox())
+                    wsubim.getArray()[isNotNan] += 1
 
         if reduceOp == 'average':
-            newMI /= weights
+            wts = weights.getArray().astype(np.float)
+            newMI.getImage().getArray()[:, :] /= wts
+            newMI.getVariance().getArray()[:, :] /= wts
 
-        return pipeBase.Struct(exposure=newExp)
+        return pipeBase.Struct(exposure=newExp) #, weights=weights)
 
 
 class ImageMapReduceConfig(pexConfig.Config):
@@ -643,36 +633,33 @@ class ImageMapReduceTask(pipeBase.Task):
             bb1 = afwGeom.Box2I(bbox1)
             bb1.shift(afwGeom.Extent2I(xoff, yoff))
             bb1.clip(bbox)
-            print("HERE!!!!!!!!!",forceEvenSized)
             if forceEvenSized:
-                print('HERE0:',bb0.getWidth(),bb0.getHeight(),bb1.getWidth(),bb1.getHeight())
                 if bb0.getWidth() % 2 == 1:  # grow to the right
                     bb0.include(afwGeom.Point2I(bb0.getMaxX()+1, bb0.getMaxY())) # Expand by 1 pixel!
                     bb0.clip(bbox)
                     if bb0.getWidth() % 2 == 1:  # clipped at right -- so grow to the left
-                        bb0.include(afwGeom.Point2I(bb0.getMinX()-1, bb0.getMaxY())) # Expand by 1 pixel!
+                        bb0.include(afwGeom.Point2I(bb0.getMinX()-1, bb0.getMaxY()))
                         bb0.clip(bbox)
                 if bb0.getHeight() % 2 == 1: # grow upwards
                     bb0.include(afwGeom.Point2I(bb0.getMaxX(), bb0.getMaxY()+1)) # Expand by 1 pixel!
                     bb0.clip(bbox)
                     if bb0.getHeight() % 2 == 1: # clipped upwards -- so grow down
-                        bb0.include(afwGeom.Point2I(bb0.getMaxX(), bb0.getMinY()-1)) # Expand by 1 pixel!
+                        bb0.include(afwGeom.Point2I(bb0.getMaxX(), bb0.getMinY()-1))
                         bb0.clip(bbox)
 
                 if bb1.getWidth() % 2 == 1:  # grow to the right
                     bb1.include(afwGeom.Point2I(bb1.getMaxX()+1, bb1.getMaxY())) # Expand by 1 pixel!
                     bb1.clip(bbox)
                     if bb1.getWidth() % 2 == 1:  # clipped at right -- so grow to the left
-                        bb1.include(afwGeom.Point2I(bb1.getMinX()-1, bb1.getMaxY())) # Expand by 1 pixel!
+                        bb1.include(afwGeom.Point2I(bb1.getMinX()-1, bb1.getMaxY()))
                         bb1.clip(bbox)
                 if bb1.getHeight() % 2 == 1: # grow upwards
                     bb1.include(afwGeom.Point2I(bb1.getMaxX(), bb1.getMaxY()+1)) # Expand by 1 pixel!
                     bb1.clip(bbox)
                     if bb1.getHeight() % 2 == 1: # clipped upwards -- so grow down
-                        bb1.include(afwGeom.Point2I(bb1.getMaxX(), bb1.getMinY()-1)) # Expand by 1 pixel!
+                        bb1.include(afwGeom.Point2I(bb1.getMaxX(), bb1.getMinY()-1))
                         bb1.clip(bbox)
 
-                print('HERE1:',bb0.getWidth(),bb0.getHeight(),bb1.getWidth(),bb1.getHeight())
             return bb0, bb1
 
         xoff = 0
