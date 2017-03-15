@@ -84,7 +84,6 @@ def performZogy(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None, sig1=Non
 
     D = np.fft.ifft2(D_hat)
     D = np.fft.ifftshift(D.real) / Fd
-    #D *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
     # Do the exact same thing to the var images, except add them
     R_hat = np.fft.fft2(im1_var)
@@ -94,7 +93,6 @@ def performZogy(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None, sig1=Non
 
     d = np.fft.ifft2(d_hat)
     D_var = np.fft.ifftshift(d.real) / Fd
-    #D_var *= np.sqrt(sigR**2. + sigN**2.)  # Set to same scale as A&L
 
     return D, D_var
 
