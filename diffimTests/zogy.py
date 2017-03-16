@@ -17,7 +17,7 @@ from .utils import computeClippedImageStats, memoize
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 
-@memoize
+#@memoize
 def padPsfToSize(psf, size):
     padSize0 = size[0]  # im.shape[0]//2 - psf.shape[0]//2
     padSize1 = size[1]  # im.shape[1]//2 - psf.shape[1]//2
@@ -39,7 +39,7 @@ def padPsfToImageSize(im, psf):
     return padPsfToSize(psf, (im.shape[0]//2 - psf.shape[0]//2, im.shape[1]//2 - psf.shape[1]//2))
 
 
-@memoize  # Don't want this in production! Find another way to store the results of this func
+#@memoize  # Don't want this in production! Find another way to store the results of this func
 def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., Fn=1., padSize=0):
     if sig1 is None and im1 is not None:
         _, sig1, _, _ = computeClippedImageStats(im1)
@@ -57,11 +57,11 @@ def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., 
     sigR = sig1
     sigN = sig2
     Pr_hat = np.fft.fft2(Pr)
-    Pr_hat2 = np.conj(Pr_hat) * Pr_hat
+    #Pr_hat2 = np.conj(Pr_hat) * Pr_hat
     Pn_hat = np.fft.fft2(Pn)
-    Pn_hat2 = np.conj(Pn_hat) * Pn_hat
-    #denom = np.sqrt((sigN**2 * Fr**2 * np.abs(Pr_hat)**2) + (sigR**2 * Fn**2 * np.abs(Pn_hat)**2))
-    denom = np.sqrt((sigN**2 * Fr**2 * Pr_hat2) + (sigR**2 * Fn**2 * Pn_hat2))
+    #Pn_hat2 = np.conj(Pn_hat) * Pn_hat
+    denom = np.sqrt((sigN**2 * Fr**2 * np.abs(Pr_hat)**2) + (sigR**2 * Fn**2 * np.abs(Pn_hat)**2))
+    #denom = np.sqrt((sigN**2 * Fr**2 * Pr_hat2) + (sigR**2 * Fn**2 * Pn_hat2))
     Fd = Fr*Fn / np.sqrt(sigN**2 * Fr**2 + sigR**2 * Fn**2)
 
     output = {#'sigR': sigR, 'sigN': sigN,
@@ -226,10 +226,12 @@ def computeZogyScorrFourierSpace(im1, im2, im1_var, im2_var, im1_psf, im2_psf,
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
-    Pn_hat2 = np.conj(Pn_hat) * Pn_hat
-    Kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * Pn_hat2 / denom**2.
-    Pr_hat2 = np.conj(Pr_hat) * Pr_hat
-    Kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * Pr_hat2 / denom**2.
+    #Pn_hat2 = np.conj(Pn_hat) * Pn_hat
+    #Kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * Pn_hat2 / denom**2.
+    Kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
+    #Pr_hat2 = np.conj(Pr_hat) * Pr_hat
+    #Kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * Pr_hat2 / denom**2.
+    Kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
 
     Kr_hat2 = np.fft.fft2(np.fft.ifft2(Kr_hat)**2)
     Kn_hat2 = np.fft.fft2(np.fft.ifft2(Kn_hat)**2)
