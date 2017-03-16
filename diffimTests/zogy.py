@@ -17,6 +17,28 @@ from .utils import computeClippedImageStats, memoize
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 
+@memoize
+def padPsfToSize(psf, size):
+    padSize0 = size[0]  # im.shape[0]//2 - psf.shape[0]//2
+    padSize1 = size[1]  # im.shape[1]//2 - psf.shape[1]//2
+    psf1 = psf
+    # Hastily assume the image is even-sized and the psf is odd...
+    if padSize0 > 0 or padSize1 > 0:
+        if padSize0 < 0:
+            padSize0 = 0
+        if padSize1 < 0:
+            padSize1 = 0
+        psf1 = np.pad(psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
+                      constant_values=0)
+        #psf1 *= im1_psf.mean() / psf1.mean()
+    return psf1
+
+
+def padPsfToImageSize(im, psf):
+    # Do all in fourier space (needs image-sized PSFs)
+    return padPsfToSize(psf, (im.shape[0]//2 - psf.shape[0]//2, im.shape[1]//2 - psf.shape[1]//2))
+
+
 @memoize  # Don't want this in production! Find another way to store the results of this func
 def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., Fn=1., padSize=0):
     if sig1 is None and im1 is not None:
@@ -27,22 +49,19 @@ def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., 
     psf1 = im1_psf
     psf2 = im2_psf
     if padSize > 0:
-        padSize0 = padSize #im1.shape[0]//2 - im1_psf.shape[0]//2 # Need to pad the PSF to remove windowing artifacts
-        padSize1 = padSize #im1.shape[1]//2 - im1_psf.shape[1]//2 # The bigger the padSize the better, but slower.
-        psf1 = np.pad(im1_psf, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
-                      constant_values=0)
-        psf1 *= im1_psf.mean() / psf1.mean()
-        psf2 = np.pad(im2_psf, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
-                      constant_values=0)
-        psf2 *= im2_psf.mean() / psf2.mean()
+        psf1 = padPsfToSize(psf1, (padSize, padSize))
+        psf2 = padPsfToSize(psf2, (padSize, padSize))
 
-    Pr = psf1 #im1_psf
-    Pn = psf2 #im2_psf
+    Pr = psf1
+    Pn = psf2
     sigR = sig1
     sigN = sig2
     Pr_hat = np.fft.fft2(Pr)
+    Pr_hat2 = np.conj(Pr_hat) * Pr_hat
     Pn_hat = np.fft.fft2(Pn)
-    denom = np.sqrt((sigN**2 * Fr**2 * np.abs(Pr_hat)**2) + (sigR**2 * Fn**2 * np.abs(Pn_hat)**2))
+    Pn_hat2 = np.conj(Pn_hat) * Pn_hat
+    #denom = np.sqrt((sigN**2 * Fr**2 * np.abs(Pr_hat)**2) + (sigR**2 * Fn**2 * np.abs(Pn_hat)**2))
+    denom = np.sqrt((sigN**2 * Fr**2 * Pr_hat2) + (sigR**2 * Fn**2 * Pn_hat2))
     Fd = Fr*Fn / np.sqrt(sigN**2 * Fr**2 + sigR**2 * Fn**2)
 
     output = {#'sigR': sigR, 'sigN': sigN,
@@ -57,21 +76,8 @@ def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., 
 def computeZogyFourierSpace(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None,
                             sig1=None, sig2=None, Fr=1., Fn=1.):
     # Do all in fourier space (needs image-sized PSFs)
-    padSize0 = im1.shape[0]//2 - im1_psf.shape[0]//2
-    padSize1 = im1.shape[1]//2 - im1_psf.shape[1]//2
-    psf1, psf2 = im1_psf, im2_psf
-    # Hastily assume the image is even-sized and the psf is odd...
-    if padSize0 > 0 or padSize1 > 0:
-        if padSize0 < 0:
-            padSize0 = 0
-        if padSize1 < 0:
-            padSize1 = 0
-        psf1 = np.pad(im1_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                      constant_values=0)
-        psf1 *= im1_psf.mean() / psf1.mean()
-        psf2 = np.pad(im2_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                      constant_values=0)
-        psf2 *= im2_psf.mean() / psf2.mean()
+    psf1 = padPsfToImageSize(im1, im1_psf)
+    psf2 = padPsfToImageSize(im2, im2_psf)
 
     prereqs = computeZogyPrereqs(im1, im2, psf1, psf2,
                                  sig1, sig2, Fr, Fn, padSize=0)
@@ -163,7 +169,6 @@ def computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None,
 def computeZogyScorrImageSpace(D, im1, im2, im1_var, im2_var, im1_psf, im2_psf,
                                sig1=None, sig2=None, Fr=1., Fn=1., xVarAst=0., yVarAst=0.,
                                padSize=0):
-    print 'HERE: I space'
     prereqs = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
                                  sig1, sig2, Fr, Fn, padSize=0)
     Pr_hat, Pn_hat, denom, Fd = (prereqs[key] for key in ['Pr_hat', 'Pn_hat', 'denom', 'Fd'])
@@ -198,26 +203,11 @@ def computeZogyScorrImageSpace(D, im1, im2, im1_var, im2_var, im1_psf, im2_psf,
     S_var /= Fd
     return S, S_var, Pd, Fd
 
-
 def computeZogyScorrFourierSpace(im1, im2, im1_var, im2_var, im1_psf, im2_psf,
                                  sig1=None, sig2=None, Fr=1., Fn=1., xVarAst=0., yVarAst=0.):
-    print 'HERE: F space'
     # Do all in fourier space (needs image-sized PSFs)
-    padSize0 = im1.shape[0]//2 - im1_psf.shape[0]//2
-    padSize1 = im1.shape[1]//2 - im1_psf.shape[1]//2
-    psf1, psf2 = im1_psf, im2_psf
-    # Hastily assume the image is even-sized and the psf is odd...
-    if padSize0 > 0 or padSize1 > 0:
-        if padSize0 < 0:
-            padSize0 = 0
-        if padSize1 < 0:
-            padSize1 = 0
-        psf1 = np.pad(im1_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                      constant_values=0)
-        psf1 *= im1_psf.mean() / psf1.mean()
-        psf2 = np.pad(im2_psf, ((padSize0, padSize0-1), (padSize1, padSize1-1)), mode='constant',
-                      constant_values=0)
-        psf2 *= im2_psf.mean() / psf2.mean()
+    psf1 = padPsfToImageSize(im1, im1_psf)
+    psf2 = padPsfToImageSize(im2, im2_psf)
 
     prereqs = computeZogyPrereqs(im1, im2, psf1, psf2,
                                  sig1, sig2, Fr, Fn, padSize=0)

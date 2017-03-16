@@ -201,7 +201,7 @@ class ImageReducerSubtask(pipeBase.Task):
             basis for the resulting exposure (if
             self.config.mapperSubtask.reduceOperation is not 'none')
         kwargs :
-            additional keyword arguments propagaged from
+            additional keyword arguments propagated from
             `ImageMapReduceTask.run`.
 
         Returns
