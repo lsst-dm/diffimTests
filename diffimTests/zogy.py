@@ -17,7 +17,6 @@ from .utils import computeClippedImageStats, memoize
 
 # In all functions, im1 is R (reference, or template) and im2 is N (new, or science)
 
-@memoize
 def padPsfToSize(psf, size):
     padSize0 = size[0]  # im.shape[0]//2 - psf.shape[0]//2
     padSize1 = size[1]  # im.shape[1]//2 - psf.shape[1]//2
@@ -39,7 +38,6 @@ def padPsfToImageSize(im, psf):
     return padPsfToSize(psf, (im.shape[0]//2 - psf.shape[0]//2, im.shape[1]//2 - psf.shape[1]//2))
 
 
-@memoize  # Don't want this in production! Find another way to store the results of this func
 def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., Fn=1., padSize=0):
     if sig1 is None and im1 is not None:
         _, sig1, _, _ = computeClippedImageStats(im1)
