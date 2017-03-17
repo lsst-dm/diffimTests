@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.signal
 
-from .utils import computeClippedImageStats, memoize
+from .utils import computeClippedImageStats
+from .exposure import Exposure
 
 # Compute the ZOGY eqn. (13):
 # $$
@@ -94,11 +95,11 @@ def computeZogyFourierSpace(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=No
     # Do the exact same thing to the var images, except add them
     R_hat = np.fft.fft2(im1_var)
     N_hat = np.fft.fft2(im2_var)
-    d_hat = (Fr * Pr_hat * N_hat + Fn * Pn_hat * R_hat)
-    d_hat /= denom
+    D_hat = (Fr * Pr_hat * N_hat + Fn * Pn_hat * R_hat)
+    D_hat /= denom
 
-    d = np.fft.ifft2(d_hat)
-    D_var = np.fft.ifftshift(d.real) / Fd
+    D_var = np.fft.ifft2(D_hat)
+    D_var = np.fft.ifftshift(D_var.real) / Fd
 
     return D, D_var
 
@@ -164,43 +165,6 @@ def computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None,
     return Pd
 
 
-def computeZogyScorrImageSpace(D, im1, im2, im1_var, im2_var, im1_psf, im2_psf,
-                               sig1=None, sig2=None, Fr=1., Fn=1., xVarAst=0., yVarAst=0.,
-                               padSize=0):
-    prereqs = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
-                                 sig1, sig2, Fr, Fn, padSize=0)
-    Pr_hat, Pn_hat, denom, Fd = (prereqs[key] for key in ['Pr_hat', 'Pn_hat', 'denom', 'Fd'])
-
-    Pd = computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, Fr, Fn)
-    Pd_bar = np.fliplr(np.flipud(Pd))
-    S = scipy.ndimage.filters.convolve(D, Pd_bar, mode='constant', cval=np.nan)
-    S *= Fd
-
-    # Adjust the variance planes of the two images to contribute to the final detection
-    # (eq's 26-29).
-    kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
-    kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
-
-    kr = np.fft.ifft2(kr_hat).real
-    kr = np.roll(np.roll(kr, -1, 0), -1, 1)
-    kn = np.fft.ifft2(kn_hat).real
-    kn = np.roll(np.roll(kn, -1, 0), -1, 1)
-    var1c = scipy.ndimage.filters.convolve(im1_var, kr**2., mode='constant', cval=np.nan)
-    var2c = scipy.ndimage.filters.convolve(im2_var, kn**2., mode='constant', cval=np.nan)
-
-    fGradR = fGradN = 0.
-    if xVarAst + yVarAst > 0:  # Do the astrometric variance correction
-        S_R = scipy.ndimage.filters.convolve(im1, kr, mode='constant', cval=np.nan)
-        gradRx, gradRy = np.gradient(S_R)
-        fGradR = xVarAst * gradRx**2. + yVarAst * gradRy**2.
-        S_N = scipy.ndimage.filters.convolve(im2, kn, mode='constant', cval=np.nan)
-        gradNx, gradNy = np.gradient(S_N)
-        fGradN = xVarAst * gradNx**2. + yVarAst * gradNy**2.
-
-    S_var = np.sqrt(var1c + var2c + fGradR + fGradN)
-    S_var /= Fd
-    return S, S_var, Pd, Fd
-
 def computeZogyScorrFourierSpace(im1, im2, im1_var, im2_var, im1_psf, im2_psf,
                                  sig1=None, sig2=None, Fr=1., Fn=1., xVarAst=0., yVarAst=0.):
     # Do all in fourier space (needs image-sized PSFs)
@@ -253,7 +217,47 @@ def computeZogyScorrFourierSpace(im1, im2, im1_var, im2_var, im1_psf, im2_psf,
 
     Pd = computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, Fr, Fn,
                               padSize=0)
+    D_hat = (Fr * Pr_hat * N_hat - Fn * Pn_hat * R_hat)
+    D_hat /= denom
     return S.real, S_var.real, Pd, Fd
+
+
+def computeZogyScorrImageSpace(D, im1, im2, im1_var, im2_var, im1_psf, im2_psf,
+                               sig1=None, sig2=None, Fr=1., Fn=1., xVarAst=0., yVarAst=0.,
+                               padSize=0):
+    prereqs = computeZogyPrereqs(im1, im2, im1_psf, im2_psf,
+                                 sig1, sig2, Fr, Fn, padSize=0)
+    Pr_hat, Pn_hat, denom, Fd = (prereqs[key] for key in ['Pr_hat', 'Pn_hat', 'denom', 'Fd'])
+
+    Pd = computeZogyDiffimPsf(im1, im2, im1_psf, im2_psf, sig1, sig2, Fr, Fn)
+    Pd_bar = np.fliplr(np.flipud(Pd))
+    S = scipy.ndimage.filters.convolve(D, Pd_bar, mode='constant', cval=np.nan)
+    S *= Fd
+
+    # Adjust the variance planes of the two images to contribute to the final detection
+    # (eq's 26-29).
+    kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
+    kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
+
+    kr = np.fft.ifft2(kr_hat).real
+    kr = np.roll(np.roll(kr, -1, 0), -1, 1)
+    kn = np.fft.ifft2(kn_hat).real
+    kn = np.roll(np.roll(kn, -1, 0), -1, 1)
+    var1c = scipy.ndimage.filters.convolve(im1_var, kr**2., mode='constant', cval=np.nan)
+    var2c = scipy.ndimage.filters.convolve(im2_var, kn**2., mode='constant', cval=np.nan)
+
+    fGradR = fGradN = 0.
+    if xVarAst + yVarAst > 0:  # Do the astrometric variance correction
+        S_R = scipy.ndimage.filters.convolve(im1, kr, mode='constant', cval=np.nan)
+        gradRx, gradRy = np.gradient(S_R)
+        fGradR = xVarAst * gradRx**2. + yVarAst * gradRy**2.
+        S_N = scipy.ndimage.filters.convolve(im2, kn, mode='constant', cval=np.nan)
+        gradNx, gradNy = np.gradient(S_N)
+        fGradN = xVarAst * gradNx**2. + yVarAst * gradNy**2.
+
+    S_var = np.sqrt(var1c + var2c + fGradR + fGradN)
+    S_var /= Fd
+    return S, S_var, Pd, Fd
 
 
 def computeZogyScorr(im1, im2, im1_var, im2_var, im1_psf, im2_psf,
@@ -271,46 +275,58 @@ def computeZogyScorr(im1, im2, im1_var, im2_var, im1_psf, im2_psf,
                                             sig1=sig1, sig2=sig2, Fr=Fr, Fn=Fn,
                                             xVarAst=xVarAst, yVarAst=yVarAst)
 
+
 class Zogy(object):
     def __init__(self, im1, im2, im1_var, im2_var, im1_psf, im2_psf,
-                 sig1=None, sig2=None, Fr=1., Fn=1., padSize=7):
+                 sig1=None, sig2=None, Fr=1., Fn=1., inImageSpace=False, padSize=7):
         self.im1, self.im2 = im1, im2
         self.im1_var, self.im2_var = im1_var, im2_var
         self.im1_psf, self.im2_psf = im1_psf, im2_psf
         self.sig1, self.sig2 = sig1, sig2
         self.Fr, self.Fn = Fr, Fn
+        self.Fd = 1.
+        self.inImageSpace = inImageSpace
         self.padSize = padSize
+        self.D = self.D_var = self.Pd = self.S = self.S_var = None
 
         if self.sig1 is None:
             _, self.sig1, _, _ = computeClippedImageStats(im1)
         if self.sig2 is None:
             _, self.sig2, _, _ = computeClippedImageStats(im2)
 
-    def _zogy(self, inImageSpace=True):
+    def _zogy(self):
         D, D_var = computeZogy(self.im1, self.im2, self.im1_var, self.im2_var,
                                im1_psf=self.im1_psf, im2_psf=self.im2_psf,
                                sig1=self.sig1, sig2=self.sig2,
-                               Fr=self.Fr, Fn=self.Fn, inImageSpace=inImageSpace, padSize=7)
+                               Fr=self.Fr, Fn=self.Fn, inImageSpace=self.inImageSpace,
+                               padSize=self.padSize)
         Pd = computeZogyDiffimPsf(self.im1, self.im2, self.im1_psf, self.im2_psf,
                                   self.sig1, self.sig2, self.Fr, self.Fn)
         return D, D_var, Pd
 
-    def _zogyScorr(self, varAst=[0., 0.], inImageSpace=True):
-        S, S_var, Pd, Fd = computeZogyScorr(D, self.im1, self.im2, self.im1_var, self.im2_var,
+    def _zogyScorr(self, varAst=[0., 0.]):
+        S, S_var, Pd, Fd = computeZogyScorr(self.im1, self.im2, self.im1_var, self.im2_var,
             im1_psf=self.im1_psf, im2_psf=self.im2_psf, sig1=self.sig1, sig2=self.sig2,
             Fr=self.Fr, Fn=self.Fn, xVarAst=varAst[0], yVarAst=varAst[1], # these are already variances.
-            inImageSpace=inImageSpace, padSize=0)
-        return S, S_var, Pd
+            inImageSpace=self.inImageSpace, D=self.D, padSize=0)
+        return S, S_var, Pd, Fd
 
-    def doZogy(self, inImageSpace=False, computeScorr=False):
-        if inImageSpace:
-            D, D_var, Pd = self._zogyImageSpace()
-        else:
-            D, D_var, Pd = self._zogyPure()
+    # TBD -- a lot of the D calc happens twice. Figure out a way to make it happen just once.
+    def doZogy(self, computeScorr=False):
+        self.D, self.D_var, self.Pd = self._zogy()
 
         if computeScorr:
-            S, S_var, Pd = self._zogyScorr(D, varAst=[0., 0.])
-            return D, D_var, S, S_var, Pd
+            self.S, self.S_var, _, self.Fd = self._zogyScorr(varAst=[0., 0.])
 
-        return D, D_var, Pd
 
+
+class ZogyTask(Zogy):
+    def __init__(self, im1, im2, inImageSpace=False):
+        Zogy.__init__(self, im1.im, im2.im, im1.var, im2.var, im1.psf, im2.psf,
+                      inImageSpace=inImageSpace)
+
+    def doZogy(self, computeScorr=False):
+        Zogy.doZogy(self, computeScorr=computeScorr)
+        self.D = Exposure(self.D, self.Pd, self.D_var)
+        if computeScorr:
+            self.S = Exposure(self.S, self.Pd, self.S_var)
