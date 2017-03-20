@@ -12,11 +12,11 @@ except:
 from .decorrelation import fixEvenKernel
 
 
-def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure, coord=None):
+def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure=None, coord=None):
     spatialKernel = psfMatchingKernel
     kimg = afwImage.ImageD(spatialKernel.getDimensions())
-    bbox = subtractedExposure.getBBox()
     if coord is None:
+        bbox = subtractedExposure.getBBox()
         xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
         ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
     else:
