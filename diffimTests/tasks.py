@@ -49,54 +49,105 @@ def doAlInStack(im1, im2, doWarping=False, doDecorr=True, doPreConv=False,
     result.task = task  # for debugging (e.g. task.metadata.get("ALBasisNGauss")
 
     if doDecorr:
-        kimg = alPsfMatchingKernelToArray(result.psfMatchingKernel, im1)
-        #return kimg
-        if preConvKernel is not None and kimg.shape[0] < preConvKernel.shape[0]:
-            # This is likely brittle and may only work if both kernels are odd-shaped.
-            #kimg[np.abs(kimg) < 1e-4] = np.sign(kimg)[np.abs(kimg) < 1e-4] * 1e-8
-            #kimg -= kimg[0, 0]
-            padSize0 = preConvKernel.shape[0]//2 - kimg.shape[0]//2
-            padSize1 = preConvKernel.shape[1]//2 - kimg.shape[1]//2
-            kimg = np.pad(kimg, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
-                          constant_values=0)
-            #kimg /= kimg.sum()
-
-            #preConvKernel = preConvKernel[padSize0:-padSize0, padSize1:-padSize1]
-            #print kimg.shape, preConvKernel.shape
-
         sig1squared = computeVarianceMean(im1)
         sig2squared = computeVarianceMean(im2)
-        pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
-                                         preConvKernel=preConvKernel, delta=0.)
-        #return kimg, preConvKernel, pck
-        diffim, _ = doConvolve(result.subtractedExposure, pck, use_scipy=False)
-        #diffim.getMaskedImage().getImage().getArray()[:, ] \
-        #    /= np.sqrt(im1.metaData['sky'] + im1.metaData['sky'])
-        #diffim.getMaskedImage().getVariance().getArray()[:, ] \
-        #    /= np.sqrt(im1.metaData['sky'] + im1.metaData['sky'])
+        result = doALdecorrelation(result, sig1squared=sig1squared, sig2squared=sig2squared,
+                                   preConvKernel=preConvKernel)
+        # kimg = alPsfMatchingKernelToArray(result.psfMatchingKernel, im1)
+        # #return kimg
+        # if preConvKernel is not None and kimg.shape[0] < preConvKernel.shape[0]:
+        #     # This is likely brittle and may only work if both kernels are odd-shaped.
+        #     #kimg[np.abs(kimg) < 1e-4] = np.sign(kimg)[np.abs(kimg) < 1e-4] * 1e-8
+        #     #kimg -= kimg[0, 0]
+        #     padSize0 = preConvKernel.shape[0]//2 - kimg.shape[0]//2
+        #     padSize1 = preConvKernel.shape[1]//2 - kimg.shape[1]//2
+        #     kimg = np.pad(kimg, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
+        #                   constant_values=0)
+        #     #kimg /= kimg.sum()
 
-        # For some reason, border areas of img and variance planes can become infinite. Fix it.
-        img = diffim.getMaskedImage().getImage().getArray()
-        img[~np.isfinite(img)] = np.nan
-        img = diffim.getMaskedImage().getVariance().getArray()
-        img[~np.isfinite(img)] = np.nan
-        # TBD: also need to update the mask as it is not (apparently) set correctly.
+        #     #preConvKernel = preConvKernel[padSize0:-padSize0, padSize1:-padSize1]
+        #     #print kimg.shape, preConvKernel.shape
 
-        psf = afwPsfToArray(result.subtractedExposure.getPsf(), result.subtractedExposure)  # .computeImage().getArray()
-        # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
-        psfc = computeCorrectedDiffimPsf(kimg, psf, tvar=sig1squared, svar=sig2squared)
-        psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
-        psfcI.getArray()[:, :] = psfc
-        psfcK = afwMath.FixedKernel(psfcI)
-        psfNew = measAlg.KernelPsf(psfcK)
-        diffim.setPsf(psfNew)
+        # sig1squared = computeVarianceMean(im1)
+        # sig2squared = computeVarianceMean(im2)
+        # pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
+        #                                  preConvKernel=preConvKernel, delta=0.)
+        # #return kimg, preConvKernel, pck
+        # diffim, _ = doConvolve(result.subtractedExposure, pck, use_scipy=False)
+        # #diffim.getMaskedImage().getImage().getArray()[:, ] \
+        # #    /= np.sqrt(im1.metaData['sky'] + im1.metaData['sky'])
+        # #diffim.getMaskedImage().getVariance().getArray()[:, ] \
+        # #    /= np.sqrt(im1.metaData['sky'] + im1.metaData['sky'])
 
-        result.decorrelatedDiffim = diffim
-        result.preConvKernel = preConvKernel
-        result.decorrelationKernel = pck
-        result.kappaImg = kimg
+        # # For some reason, border areas of img and variance planes can become infinite. Fix it.
+        # img = diffim.getMaskedImage().getImage().getArray()
+        # img[~np.isfinite(img)] = np.nan
+        # img = diffim.getMaskedImage().getVariance().getArray()
+        # img[~np.isfinite(img)] = np.nan
+        # # TBD: also need to update the mask as it is not (apparently) set correctly.
+
+        # psf = afwPsfToArray(result.subtractedExposure.getPsf(), result.subtractedExposure)  # .computeImage().getArray()
+        # # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
+        # psfc = computeCorrectedDiffimPsf(kimg, psf, tvar=sig1squared, svar=sig2squared)
+        # psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
+        # psfcI.getArray()[:, :] = psfc
+        # psfcK = afwMath.FixedKernel(psfcI)
+        # psfNew = measAlg.KernelPsf(psfcK)
+        # diffim.setPsf(psfNew)
+
+        # result.decorrelatedDiffim = diffim
+        # result.preConvKernel = preConvKernel
+        # result.decorrelationKernel = pck
+        # result.kappaImg = kimg
 
     return result
+
+
+def doALdecorrelation(alTaskResult, sig1squared=None, sig2squared=None, preConvKernel=None):
+    kimg = alPsfMatchingKernelToArray(alTaskResult.psfMatchingKernel, alTaskResult.subtractedExposure)
+
+    if preConvKernel is not None and kimg.shape[0] < preConvKernel.shape[0]:
+        # This is likely brittle and may only work if both kernels are odd-shaped.
+        #kimg[np.abs(kimg) < 1e-4] = np.sign(kimg)[np.abs(kimg) < 1e-4] * 1e-8
+        #kimg -= kimg[0, 0]
+        padSize0 = preConvKernel.shape[0]//2 - kimg.shape[0]//2
+        padSize1 = preConvKernel.shape[1]//2 - kimg.shape[1]//2
+        kimg = np.pad(kimg, ((padSize0, padSize0), (padSize1, padSize1)), mode='constant',
+                      constant_values=0)
+        #kimg /= kimg.sum()
+        #preConvKernel = preConvKernel[padSize0:-padSize0, padSize1:-padSize1]
+
+    if sig1squared is None:
+        sig1squared = computeVarianceMean(im1)
+    if sig2squared is None:
+        sig2squared = computeVarianceMean(im2)
+    pck = computeDecorrelationKernel(kimg, sig1squared, sig2squared,
+                                     preConvKernel=preConvKernel, delta=0.)
+    #return kimg, preConvKernel, pck
+    diffim, _ = doConvolve(alTaskResult.subtractedExposure, pck, use_scipy=False)
+
+    # For some reason, border areas of img and variance planes can become infinite. Fix it.
+    img = diffim.getMaskedImage().getImage().getArray()
+    img[~np.isfinite(img)] = np.nan
+    img = diffim.getMaskedImage().getVariance().getArray()
+    img[~np.isfinite(img)] = np.nan
+    # TBD: also need to update the mask as it is not (apparently) set correctly.
+
+    psf = afwPsfToArray(alTaskResult.subtractedExposure.getPsf(),
+                        alTaskResult.subtractedExposure)
+    # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
+    psfc = computeCorrectedDiffimPsf(kimg, psf, tvar=sig1squared, svar=sig2squared)
+    psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
+    psfcI.getArray()[:, :] = psfc
+    psfcK = afwMath.FixedKernel(psfcI)
+    psfNew = measAlg.KernelPsf(psfcK)
+    diffim.setPsf(psfNew)
+
+    alTaskResult.decorrelatedDiffim = diffim
+    alTaskResult.preConvKernel = preConvKernel
+    alTaskResult.decorrelationKernel = pck
+    alTaskResult.kappaImg = kimg
+    return alTaskResult
 
 
 def doForcedPhotometry(centroids, exposure, transientsOnly=False, asDF=False):
