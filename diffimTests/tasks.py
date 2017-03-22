@@ -134,7 +134,7 @@ def doALdecorrelation(alTaskResult, sig1squared=None, sig2squared=None, preConvK
     # TBD: also need to update the mask as it is not (apparently) set correctly.
 
     psf = afwPsfToArray(alTaskResult.subtractedExposure.getPsf(),
-                        alTaskResult.subtractedExposure)
+                        img=alTaskResult.subtractedExposure)
     # NOTE! Need to compute the updated PSF including preConvKernel !!! This doesn't do it:
     psfc = computeCorrectedDiffimPsf(kimg, psf, tvar=sig1squared, svar=sig2squared)
     psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])

@@ -30,6 +30,8 @@ from future.utils import with_metaclass
 import lsst.afw.image as afwImage
 import lsst.afw.math as afwMath
 import lsst.afw.geom as afwGeom
+import lsst.afw.table as afwTable
+import lsst.meas.algorithms as measAlg
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 
@@ -212,12 +214,11 @@ class ImageReducerSubtask(pipeBase.Task):
         Notes
         -----
         And currently known issues:
-        1. This currently should correctly handle overlapping sub-exposures.
+        1. This currently correctly handles overlapping sub-exposures.
            For overlapping sub-exposures, use `config.reduceOperation='average'`.
-        2. This currently does not correctly handle varying PSFs (in fact,
-           it just copies over the PSF from the original exposure). To be
-           investigated in DM-9629.
-        3. To be done: correct handling of masks as well.
+        2. This correctly handles varying PSFs, constructing the resulting
+           exposure's PSF via CoaddPsf (DM-9629).
+        3. To be done: correct handling of masks
         4. This logic currently makes *two* copies of the original exposure
            (one here and one in `mapperSubtask.run()`). Possibly of concern
            for large images on memory-constrained systems.
@@ -268,7 +269,34 @@ class ImageReducerSubtask(pipeBase.Task):
             newMI.getImage().getArray()[:, :] /= wts
             newMI.getVariance().getArray()[:, :] /= wts
 
-        return pipeBase.Struct(exposure=newExp) #, weights=weights)
+        # Not sure how to construct a PSF when reduceOp=='copy'...
+        if reduceOp == 'sum' or reduceOp == 'average':
+            psf = self._constructPsf(mapperResults, exposure)
+            newExp.setPsf(psf)
+
+        return pipeBase.Struct(exposure=newExp)
+
+    def _constructPsf(self, mapperResults, exposure):
+        """Construct a spatially-varying PSF based on PSFs from individual subExposures
+        """
+        schema = afwTable.ExposureTable.makeMinimalSchema()
+        schema.addField("weight", type="D", doc="Coadd weight")
+        mycatalog = afwTable.ExposureCatalog(schema)
+
+        wcsref = exposure.getWcs()
+        for i, res in enumerate(mapperResults):
+            subExp = res.subExposure
+            record = mycatalog.getTable().makeRecord()
+            record.setPsf(subExp.getPsf())
+            record.setWcs(subExp.getWcs())
+            record.setBBox(subExp.getBBox())
+            record['weight'] = 1.0
+            record['id'] = i
+            mycatalog.append(record)
+
+        # create the coaddpsf
+        psf = measAlg.CoaddPsf(mycatalog, wcsref, 'weight')
+        return psf
 
 
 class ImageMapReduceConfig(pexConfig.Config):
@@ -647,13 +675,13 @@ class ImageMapReduceTask(pipeBase.Task):
                         bb0.include(afwGeom.Point2I(bb0.getMaxX(), bb0.getMinY()-1))
                         bb0.clip(bbox)
 
-                if bb1.getWidth() % 2 == 1:  # grow to the right
+                if bb1.getWidth() % 2 == 1:  # grow to the left
                     bb1.include(afwGeom.Point2I(bb1.getMaxX()+1, bb1.getMaxY())) # Expand by 1 pixel!
                     bb1.clip(bbox)
                     if bb1.getWidth() % 2 == 1:  # clipped at right -- so grow to the left
                         bb1.include(afwGeom.Point2I(bb1.getMinX()-1, bb1.getMaxY()))
                         bb1.clip(bbox)
-                if bb1.getHeight() % 2 == 1: # grow upwards
+                if bb1.getHeight() % 2 == 1: # grow downwards
                     bb1.include(afwGeom.Point2I(bb1.getMaxX(), bb1.getMaxY()+1)) # Expand by 1 pixel!
                     bb1.clip(bbox)
                     if bb1.getHeight() % 2 == 1: # clipped upwards -- so grow down

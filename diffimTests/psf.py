@@ -278,3 +278,46 @@ class VariablePsf(object):
         dists = np.sqrt((x - xx)**2. + (y - yy)**2.)
         ind = np.argmin(dists)
         return self.psfList[ind]
+
+    def getCoaddPsf(self, exposure):
+        import lsst.afw.table as afwTable
+        import lsst.afw.image as afwImage
+        import lsst.afw.math as afwMath
+        import lsst.afw.geom as afwGeom
+        import lsst.meas.algorithms as measAlg
+
+        schema = afwTable.ExposureTable.makeMinimalSchema()
+        schema.addField("weight", type="D", doc="Coadd weight")
+        mycatalog = afwTable.ExposureCatalog(schema)
+
+        wcsref = exposure.getWcs()
+        extentX = int(exposure.getWidth()*0.05)
+        extentY = int(exposure.getHeight()*0.05)
+        ind = 0
+        for x in np.linspace(extentX, exposure.getWidth()-extentX, 10):
+            for y in np.linspace(extentY, exposure.getHeight()-extentY, 10):
+                x = int(x)
+                y = int(y)
+                image = self.getImage(x, y)
+
+                psf = afwImage.ImageD(image.shape[0], image.shape[1])
+                psf.getArray()[:, :] = image
+                psfK = afwMath.FixedKernel(psf)
+                psf = measAlg.KernelPsf(psfK)
+
+                record = mycatalog.getTable().makeRecord()
+                record.setPsf(psf)
+                record.setWcs(wcsref)
+
+                bbox = afwGeom.Box2I(afwGeom.Point2I(int(np.floor(x-extentX))-5, int(np.floor(y-extentY))-5),
+                                     afwGeom.Point2I(int(np.floor(x+extentX))+5, int(np.floor(y+extentY))+5))
+                record.setBBox(bbox)
+                record['weight'] = 1.0
+                record['id'] = ind
+                ind += 1
+                mycatalog.append(record)
+
+        # create the coaddpsf
+        psf = measAlg.CoaddPsf(mycatalog, wcsref, 'weight')
+        return psf
+

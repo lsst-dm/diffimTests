@@ -12,19 +12,6 @@ except:
 from .decorrelation import fixEvenKernel
 
 
-def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure=None, coord=None):
-    spatialKernel = psfMatchingKernel
-    kimg = afwImage.ImageD(spatialKernel.getDimensions())
-    if coord is None:
-        bbox = subtractedExposure.getBBox()
-        xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
-        ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
-    else:
-        xcen, ycen = coord[0], coord[1]
-    spatialKernel.computeImage(kimg, True, xcen, ycen)
-    return kimg.getArray()
-
-
 def computeClippedAfwStats(im, numSigmaClip=3., numIter=3, maskIm=None):
     """! Utility function for sigma-clipped array statistics on an image or exposure.
     @param im An afw.Exposure, masked image, or image.
@@ -94,6 +81,19 @@ def arrayToAfwPsf(array):
     psfcK = arrayToAfwKernel(array)
     psfNew = measAlg.KernelPsf(psfcK)
     return psfNew
+
+
+def alPsfMatchingKernelToArray(psfMatchingKernel, subtractedExposure=None, coord=None):
+    spatialKernel = psfMatchingKernel
+    kimg = afwImage.ImageD(spatialKernel.getDimensions())
+    if coord is None:
+        bbox = subtractedExposure.getBBox()
+        xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+        ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+    else:
+        xcen, ycen = coord[0], coord[1]
+    spatialKernel.computeImage(kimg, True, xcen, ycen)
+    return kimg.getArray()
 
 
 # coord gives pixel coord of image at which to compute the PSF image (i.e., if it's spatially varying)

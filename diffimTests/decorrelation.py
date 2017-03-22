@@ -54,10 +54,9 @@ def computeCorrectedDiffimPsf(kappa, psf, svar=0.04, tvar=0.04):
     @param kappa  A matching kernel array derived from Alard & Lupton PSF matching
     @param psf    The uncorrected psf array of the science image (and also of the diffim)
     @param svar   Average variance of science image used for PSF matching
-    @param tvar   Average variance of template image used for PSF matching
     @return a 2-d numpy.array containing the new PSF
     """
-    def post_conv_psf_ft2(psf, kernel, svar, tvar):
+    def post_conv_psf_ft2(psf, kernel, tvar, svar):
         # Pad psf or kernel symmetrically to make them the same size!
         # Note this assumes they are both square (width == height)
         if psf.shape[0] < kernel.shape[0]:
