@@ -8,6 +8,14 @@ try:
     import lsst.ip.diffim as ipDiffim
     import lsst.meas.base as measBase
     import lsst.pipe.tasks.measurePsf as measurePsf
+
+    import lsst.afw.detection as afwDetection
+    import lsst.afw.geom as afwGeom
+    import lsst.daf.base as dafBase
+    from lsst.meas.base import SingleFrameMeasurementTask
+    # register the PSF determiner
+    import lsst.meas.extensions.psfex.psfexPsfDeterminer
+
     import lsst.log
     log_level = lsst.log.ERROR  # INFO
 except Exception as e:
@@ -284,3 +292,122 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, 
     exp.setPsf(origPsf)
 
     return result
+
+# The following code is adopted nearly directly from meas_extensions_psfex/testPsfexPsf.py...
+
+
+class PsfMeasurement(object):
+    """A test case for SpatialModelPsf"""
+
+    def __init__(self, exposure):
+        self.setExposure(exposure)
+
+    def measure(self, footprintSet, exposure):
+        """Measure a set of Footprints, returning a SourceCatalog"""
+        catalog = afwTable.SourceCatalog(self.schema)
+
+        footprintSet.makeSources(catalog)
+        print(len(catalog))
+        catalog = catalog.copy(deep=True)
+
+        self.measureSources.run(catalog, exposure)
+        return catalog
+
+    def setExposure(self, exposure):
+        self.exposure = exposure
+        self.mi = exposure.getMaskedImage()
+        self.width, self.height = self.mi.getDimensions()
+        self.setUp()
+
+    def setUp(self):
+        config = SingleFrameMeasurementTask.ConfigClass()
+        config.slots.apFlux = 'base_CircularApertureFlux_12_0'
+        self.schema = afwTable.SourceTable.makeMinimalSchema()
+
+        self.measureSources = SingleFrameMeasurementTask(self.schema, config=config)
+
+        bbox = afwGeom.BoxI(afwGeom.PointI(0, 0), afwGeom.ExtentI(self.width, self.height))
+        self.cellSet = afwMath.SpatialCellSet(bbox, 100)
+
+        self.footprintSet = afwDetection.FootprintSet(self.mi, afwDetection.Threshold(100), "DETECTED")
+
+        self.catalog = self.measure(self.footprintSet, self.exposure)
+
+        for source in self.catalog:
+            try:
+                cand = measAlg.makePsfCandidate(source, self.exposure)
+                self.cellSet.insertCandidate(cand)
+
+            except Exception as e:
+                print(e)
+                continue
+
+    # def tearDown(self):
+    #     del self.cellSet
+    #     del self.exposure
+    #     del self.mi
+    #     del self.footprintSet
+    #     del self.catalog
+    #     del self.schema
+    #     del self.measureSources
+
+    def setupDeterminer(self, exposure):
+        """Setup the starSelector and psfDeterminer"""
+        starSelectorClass = measAlg.starSelectorRegistry["objectSize"]
+        starSelectorConfig = starSelectorClass.ConfigClass()
+        starSelectorConfig.sourceFluxField = "base_GaussianFlux_flux"
+        starSelectorConfig.badFlags = ["base_PixelFlags_flag_edge",
+                                       "base_PixelFlags_flag_interpolatedCenter",
+                                       "base_PixelFlags_flag_saturatedCenter",
+                                       "base_PixelFlags_flag_crCenter",
+                                       ]
+        starSelectorConfig.widthStdAllowed = 0.5  # Set to match when the tolerance of the test was set
+
+        starSelector = starSelectorClass(schema=self.schema, config=starSelectorConfig)
+
+        psfDeterminerClass = measAlg.psfDeterminerRegistry["psfex"]
+        psfDeterminerConfig = psfDeterminerClass.ConfigClass()
+        width, height = exposure.getMaskedImage().getDimensions()
+        psfDeterminerConfig.sizeCellX = width//8
+        psfDeterminerConfig.sizeCellY = height//8
+        psfDeterminerConfig.spatialOrder = 1
+
+        psfDeterminer = psfDeterminerClass(psfDeterminerConfig)
+
+        return starSelector, psfDeterminer
+
+    def subtractStars(self, exposure, catalog, chi_lim=-1):
+        """Subtract the exposure's PSF from all the sources in catalog"""
+        mi, psf = exposure.getMaskedImage(), exposure.getPsf()
+
+        subtracted = mi.Factory(mi, True)
+        for s in catalog:
+            xc, yc = s.getX(), s.getY()
+            bbox = subtracted.getBBox(afwImage.PARENT)
+            if bbox.contains(afwGeom.PointI(int(xc), int(yc))):
+                try:
+                    measAlg.subtractPsf(psf, subtracted, xc, yc)
+                except:
+                    pass
+        self.subtracted = subtracted
+        chi = subtracted.Factory(subtracted, True)
+        var = subtracted.getVariance()
+        np.sqrt(var.getArray(), var.getArray())  # inplace sqrt
+        chi /= var
+
+        chi_min, chi_max = np.min(chi.getImage().getArray()), np.max(chi.getImage().getArray())
+        if False:
+            print(chi_min, chi_max)
+
+    def run(self):
+        """Test the (Psfex) psfDeterminer on subImages"""
+
+        starSelector, psfDeterminer = self.setupDeterminer(self.exposure)
+        metadata = dafBase.PropertyList()
+
+        psfCandidateList = starSelector.run(self.exposure, self.catalog).psfCandidates
+        psf, cellSet = psfDeterminer.determinePsf(self.exposure, psfCandidateList, metadata)
+        self.exposure.setPsf(psf)
+
+        # Test how well we can subtract the PSF model
+        self.subtractStars(self.exposure, self.catalog, chi_lim=4.6)

@@ -22,59 +22,64 @@
 # see <https://www.lsstcorp.org/LegalNotices/>.
 #
 from __future__ import print_function
-from builtins import zip
-from builtins import range
-import math
+#from builtins import zip
+#from builtins import range
+#import math
 import numpy as np
-import unittest
+#import unittest
 
-import lsst.utils.tests
+#import lsst.utils.tests
 import lsst.afw.image as afwImage
-import lsst.afw.coord as afwCoord
+#import lsst.afw.coord as afwCoord
 import lsst.afw.detection as afwDetection
 import lsst.afw.geom as afwGeom
 import lsst.afw.math as afwMath
 import lsst.afw.table as afwTable
-import lsst.afw.display.ds9 as ds9
+#import lsst.afw.display.ds9 as ds9
 import lsst.daf.base as dafBase
 import lsst.meas.algorithms as measAlg
+from lsst.meas.base import SingleFrameMeasurementTask
 # register the PSF determiner
 import lsst.meas.extensions.psfex.psfexPsfDeterminer
 assert lsst.meas.extensions.psfex.psfexPsfDeterminer  # make pyflakes happy
-from lsst.meas.base import SingleFrameMeasurementTask
 
 try:
     type(verbose)
 except NameError:
     verbose = 0
-    display = False
+    #display = False
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 
-def psfVal(ix, iy, x, y, sigma1, sigma2, b):
-    """Return the value at (ix, iy) of a double Gaussian
-       (N(0, sigma1^2) + b*N(0, sigma2^2))/(1 + b)
-       centered at (x, y)
-    """
-    dx, dy = x - ix, y - iy
-    theta = np.radians(30)
-    ab = 1.0/0.75                       # axis ratio
-    c, s = np.cos(theta), np.sin(theta)
-    u, v = c*dx - s*dy, s*dx + c*dy
+# def psfVal(ix, iy, x, y, sigma1, sigma2, b):
+#     """Return the value at (ix, iy) of a double Gaussian
+#        (N(0, sigma1^2) + b*N(0, sigma2^2))/(1 + b)
+#        centered at (x, y)
+#     """
+#     dx, dy = x - ix, y - iy
+#     theta = np.radians(30)
+#     ab = 1.0/0.75                       # axis ratio
+#     c, s = np.cos(theta), np.sin(theta)
+#     u, v = c*dx - s*dy, s*dx + c*dy
 
-    return (math.exp(-0.5*(u**2 + (v*ab)**2)/sigma1**2) +
-            b*math.exp(-0.5*(u**2 + (v*ab)**2)/sigma2**2))/(1 + b)
+#     return (math.exp(-0.5*(u**2 + (v*ab)**2)/sigma1**2) +
+#             b*math.exp(-0.5*(u**2 + (v*ab)**2)/sigma2**2))/(1 + b)
 
 
-class SpatialModelPsfTestCase(object):
+#class SpatialModelPsfTestCase(object):
+class PsfMeasurement(object):
     """A test case for SpatialModelPsf"""
+
+    def __init__(self, exposure):
+        self.setExposure(exposure)
+
 
     def measure(self, footprintSet, exposure):
         """Measure a set of Footprints, returning a SourceCatalog"""
         catalog = afwTable.SourceCatalog(self.schema)
-        if display:
-            ds9.mtv(exposure, title="Original", frame=0)
+        #if display:
+        #    ds9.mtv(exposure, title="Original", frame=0)
 
         footprintSet.makeSources(catalog)
         print(len(catalog))
@@ -83,100 +88,101 @@ class SpatialModelPsfTestCase(object):
         self.measureSources.run(catalog, exposure)
         return catalog
 
-    def makeExposure(self):
-        self.width, self.height = 110, 301
-        self.mi = afwImage.MaskedImageF(afwGeom.ExtentI(self.width, self.height))
-        self.mi.set(0)
-        sd = 3                          # standard deviation of image
-        self.mi.getVariance().set(sd*sd)
-        self.mi.getMask().addMaskPlane("DETECTED")
+    # def makeExposure(self):
+    #     self.width, self.height = 110, 301
+    #     self.mi = afwImage.MaskedImageF(afwGeom.ExtentI(self.width, self.height))
+    #     self.mi.set(0)
+    #     sd = 3                          # standard deviation of image
+    #     self.mi.getVariance().set(sd*sd)
+    #     self.mi.getMask().addMaskPlane("DETECTED")
 
-        self.ksize = 31                      # size of desired kernel
+    #     self.ksize = 31                      # size of desired kernel
 
-        sigma1 = 1.75
-        sigma2 = 2*sigma1
+    #     sigma1 = 1.75
+    #     sigma2 = 2*sigma1
 
-        self.exposure = afwImage.makeExposure(self.mi)
-        self.exposure.setPsf(measAlg.DoubleGaussianPsf(self.ksize, self.ksize,
-                                                       1.5*sigma1, 1, 0.1))
-        crval = afwCoord.makeCoord(afwCoord.ICRS, 0.0*afwGeom.degrees, 0.0*afwGeom.degrees)
-        wcs = afwImage.makeWcs(crval, afwGeom.PointD(0, 0), 1.0, 0, 0, 1.0)
-        self.exposure.setWcs(wcs)
+    #     self.exposure = afwImage.makeExposure(self.mi)
+    #     self.exposure.setPsf(measAlg.DoubleGaussianPsf(self.ksize, self.ksize,
+    #                                                    1.5*sigma1, 1, 0.1))
+    #     crval = afwCoord.makeCoord(afwCoord.ICRS, 0.0*afwGeom.degrees, 0.0*afwGeom.degrees)
+    #     wcs = afwImage.makeWcs(crval, afwGeom.PointD(0, 0), 1.0, 0, 0, 1.0)
+    #     self.exposure.setWcs(wcs)
 
-        #
-        # Make a kernel with the exactly correct basis functions.  Useful for debugging
-        #
-        basisKernelList = afwMath.KernelList()
-        for sigma in (sigma1, sigma2):
-            basisKernel = afwMath.AnalyticKernel(self.ksize, self.ksize,
-                                                 afwMath.GaussianFunction2D(sigma, sigma))
-            basisImage = afwImage.ImageD(basisKernel.getDimensions())
-            basisKernel.computeImage(basisImage, True)
-            basisImage /= np.sum(basisImage.getArray())
+    #     #
+    #     # Make a kernel with the exactly correct basis functions.  Useful for debugging
+    #     #
+    #     basisKernelList = afwMath.KernelList()
+    #     for sigma in (sigma1, sigma2):
+    #         basisKernel = afwMath.AnalyticKernel(self.ksize, self.ksize,
+    #                                              afwMath.GaussianFunction2D(sigma, sigma))
+    #         basisImage = afwImage.ImageD(basisKernel.getDimensions())
+    #         basisKernel.computeImage(basisImage, True)
+    #         basisImage /= np.sum(basisImage.getArray())
 
-            if sigma == sigma1:
-                basisImage0 = basisImage
-            else:
-                basisImage -= basisImage0
+    #         if sigma == sigma1:
+    #             basisImage0 = basisImage
+    #         else:
+    #             basisImage -= basisImage0
 
-            basisKernelList.append(afwMath.FixedKernel(basisImage))
+    #         basisKernelList.append(afwMath.FixedKernel(basisImage))
 
-        order = 1                                # 1 => up to linear
-        spFunc = afwMath.PolynomialFunction2D(order)
+    #     order = 1                                # 1 => up to linear
+    #     spFunc = afwMath.PolynomialFunction2D(order)
 
-        exactKernel = afwMath.LinearCombinationKernel(basisKernelList, spFunc)
-        exactKernel.setSpatialParameters([[1.0, 0, 0],
-                                          [0.0, 0.5*1e-2, 0.2e-2]])
+    #     exactKernel = afwMath.LinearCombinationKernel(basisKernelList, spFunc)
+    #     exactKernel.setSpatialParameters([[1.0, 0, 0],
+    #                                       [0.0, 0.5*1e-2, 0.2e-2]])
 
-        rand = afwMath.Random()               # make these tests repeatable by setting seed
+    #     rand = afwMath.Random()               # make these tests repeatable by setting seed
 
-        addNoise = True
+    #     addNoise = True
 
-        if addNoise:
-            im = self.mi.getImage()
-            afwMath.randomGaussianImage(im, rand)  # N(0, 1)
-            im *= sd                              # N(0, sd^2)
-            del im
+    #     if addNoise:
+    #         im = self.mi.getImage()
+    #         afwMath.randomGaussianImage(im, rand)  # N(0, 1)
+    #         im *= sd                              # N(0, sd^2)
+    #         del im
 
-        xarr, yarr = [], []
+    #     xarr, yarr = [], []
 
-        for x, y in [(20, 20), (60, 20),
-                     (30, 35),
-                     (50, 50),
-                     (20, 90), (70, 160), (25, 265), (75, 275), (85, 30),
-                     (50, 120), (70, 80),
-                     (60, 210), (20, 210),
-                     ]:
-            xarr.append(x)
-            yarr.append(y)
+    #     for x, y in [(20, 20), (60, 20),
+    #                  (30, 35),
+    #                  (50, 50),
+    #                  (20, 90), (70, 160), (25, 265), (75, 275), (85, 30),
+    #                  (50, 120), (70, 80),
+    #                  (60, 210), (20, 210),
+    #                  ]:
+    #         xarr.append(x)
+    #         yarr.append(y)
 
-        for x, y in zip(xarr, yarr):
-            dx = rand.uniform() - 0.5   # random (centered) offsets
-            dy = rand.uniform() - 0.5
+    #     for x, y in zip(xarr, yarr):
+    #         dx = rand.uniform() - 0.5   # random (centered) offsets
+    #         dy = rand.uniform() - 0.5
 
-            k = exactKernel.getSpatialFunction(1)(x, y)  # functional variation of Kernel ...
-            b = (k*sigma1**2/((1 - k)*sigma2**2))       # ... converted double Gaussian's "b"
+    #         k = exactKernel.getSpatialFunction(1)(x, y)  # functional variation of Kernel ...
+    #         b = (k*sigma1**2/((1 - k)*sigma2**2))       # ... converted double Gaussian's "b"
 
-            #flux = 80000 - 20*x - 10*(y/float(height))**2
-            flux = 80000*(1 + 0.1*(rand.uniform() - 0.5))
-            I0 = flux*(1 + b)/(2*np.pi*(sigma1**2 + b*sigma2**2))
-            for iy in range(y - self.ksize//2, y + self.ksize//2 + 1):
-                if iy < 0 or iy >= self.mi.getHeight():
-                    continue
+    #         #flux = 80000 - 20*x - 10*(y/float(height))**2
+    #         flux = 80000*(1 + 0.1*(rand.uniform() - 0.5))
+    #         I0 = flux*(1 + b)/(2*np.pi*(sigma1**2 + b*sigma2**2))
+    #         for iy in range(y - self.ksize//2, y + self.ksize//2 + 1):
+    #             if iy < 0 or iy >= self.mi.getHeight():
+    #                 continue
 
-                for ix in range(x - self.ksize//2, x + self.ksize//2 + 1):
-                    if ix < 0 or ix >= self.mi.getWidth():
-                        continue
+    #             for ix in range(x - self.ksize//2, x + self.ksize//2 + 1):
+    #                 if ix < 0 or ix >= self.mi.getWidth():
+    #                     continue
 
-                    I = I0*psfVal(ix, iy, x + dx, y + dy, sigma1, sigma2, b)
-                    Isample = rand.poisson(I) if addNoise else I
-                    self.mi.getImage().set(ix, iy, self.mi.getImage().get(ix, iy) + Isample)
-                    self.mi.getVariance().set(ix, iy, self.mi.getVariance().get(ix, iy) + I)
+    #                 I = I0*psfVal(ix, iy, x + dx, y + dy, sigma1, sigma2, b)
+    #                 Isample = rand.poisson(I) if addNoise else I
+    #                 self.mi.getImage().set(ix, iy, self.mi.getImage().get(ix, iy) + Isample)
+    #                 self.mi.getVariance().set(ix, iy, self.mi.getVariance().get(ix, iy) + I)
 
     def setExposure(self, exposure):
         self.exposure = exposure
         self.mi = exposure.getMaskedImage()
         self.width, self.height = self.mi.getDimensions()
+        self.setUp()
 
     def setUp(self):
         config = SingleFrameMeasurementTask.ConfigClass()
@@ -201,14 +207,14 @@ class SpatialModelPsfTestCase(object):
                 print(e)
                 continue
 
-    def tearDown(self):
-        del self.cellSet
-        del self.exposure
-        del self.mi
-        del self.footprintSet
-        del self.catalog
-        del self.schema
-        del self.measureSources
+    # def tearDown(self):
+    #     del self.cellSet
+    #     del self.exposure
+    #     del self.mi
+    #     del self.footprintSet
+    #     del self.catalog
+    #     del self.schema
+    #     del self.measureSources
 
     def setupDeterminer(self, exposure):
         """Setup the starSelector and psfDeterminer"""
@@ -254,11 +260,11 @@ class SpatialModelPsfTestCase(object):
         np.sqrt(var.getArray(), var.getArray())  # inplace sqrt
         chi /= var
 
-        if display:
-            ds9.mtv(subtracted, title="Subtracted", frame=1)
-            ds9.mtv(chi, title="Chi", frame=2)
-            xc, yc = exposure.getWidth()//2, exposure.getHeight()//2
-            ds9.mtv(psf.computeImage(afwGeom.Point2D(xc, yc)), title="Psf %.1f,%.1f" % (xc, yc), frame=3)
+        # if display:
+        #     ds9.mtv(subtracted, title="Subtracted", frame=1)
+        #     ds9.mtv(chi, title="Chi", frame=2)
+        #     xc, yc = exposure.getWidth()//2, exposure.getHeight()//2
+        #     ds9.mtv(psf.computeImage(afwGeom.Point2D(xc, yc)), title="Psf %.1f,%.1f" % (xc, yc), frame=3)
 
         chi_min, chi_max = np.min(chi.getImage().getArray()), np.max(chi.getImage().getArray())
         if False:
@@ -268,7 +274,7 @@ class SpatialModelPsfTestCase(object):
         #    self.assertGreater(chi_min, -chi_lim)
         #    self.assertLess(chi_max, chi_lim)
 
-    def testPsfexDeterminer(self):
+    def run(self):
         """Test the (Psfex) psfDeterminer on subImages"""
 
         starSelector, psfDeterminer = self.setupDeterminer(self.exposure)
@@ -284,13 +290,13 @@ class SpatialModelPsfTestCase(object):
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 
-class TestMemory(lsst.utils.tests.MemoryTestCase):
-    pass
+# class TestMemory(lsst.utils.tests.MemoryTestCase):
+#     pass
 
 
-def setup_module(module):
-    lsst.utils.tests.init()
+# def setup_module(module):
+#     lsst.utils.tests.init()
 
-if __name__ == "__main__":
-    lsst.utils.tests.init()
-    unittest.main()
+# if __name__ == "__main__":
+#     lsst.utils.tests.init()
+#     unittest.main()
