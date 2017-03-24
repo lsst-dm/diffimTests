@@ -277,12 +277,35 @@ class ImageReducerSubtask(pipeBase.Task):
         return pipeBase.Struct(exposure=newExp)
 
     def _constructPsf(self, mapperResults, exposure):
-        """Construct a spatially-varying PSF based on PSFs from individual subExposures
+        """Construct a CoaddPsf based on PSFs from individual subExposures
+
+        Currently uses (and returns) a CoaddPsf. TBD if we want to
+        create a custom subclass of CoaddPsf to differentiate it.
+
+        Parameters
+        ----------
+        mapperResults : list
+            list of `pipeBase.Struct` returned by `ImageMapperSubtask.run`.
+            For this to work, each element of `mapperResults` must contain
+            a `subExposure` element, from which the component Psfs are
+            extracted (thus the reducerTask cannot have
+            `reduceOperation = 'none'`.
+        exposure : afwImage.Exposure
+            the original exposure which is used here solely for its
+            bounding-box.
+
+        Returns
+        -------
+        A `measAlg.CoaddPsf` constructed from the PSFs of the individual
+        subExposures.
+
         """
         schema = afwTable.ExposureTable.makeMinimalSchema()
         schema.addField("weight", type="D", doc="Coadd weight")
         mycatalog = afwTable.ExposureCatalog(schema)
 
+        # We're just using the exposure's WCS (assuming that the subExposures'
+        # WCSs are the same, which they better be!).
         wcsref = exposure.getWcs()
         for i, res in enumerate(mapperResults):
             subExp = res.subExposure
