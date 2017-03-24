@@ -394,10 +394,7 @@ class PsfMeasurement(object):
         var = subtracted.getVariance()
         np.sqrt(var.getArray(), var.getArray())  # inplace sqrt
         chi /= var
-
         chi_min, chi_max = np.min(chi.getImage().getArray()), np.max(chi.getImage().getArray())
-        if False:
-            print(chi_min, chi_max)
 
     def run(self):
         """Test the (Psfex) psfDeterminer on subImages"""
