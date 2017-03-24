@@ -12,6 +12,12 @@ except:
 from .decorrelation import fixEvenKernel
 
 
+def afwExp(exp):
+    if not isinstance(exp, afwImage.ExposureF):
+        exp = exp.asAfwExposure()
+    return exp
+
+
 def computeClippedAfwStats(im, numSigmaClip=3., numIter=3, maskIm=None):
     """! Utility function for sigma-clipped array statistics on an image or exposure.
     @param im An afw.Exposure, masked image, or image.

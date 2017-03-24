@@ -1,6 +1,12 @@
 import numpy as np
 import pandas as pd
 
+try:
+    import lsst.afw.image as afwImage
+    from .afw import afwExp
+except:
+    pass
+
 from .makeFakeImages import makeFakeImages
 from .exposure import Exposure
 from .zogy import computeZogy, computeZogyDiffimPsf, computeZogyScorr
@@ -54,6 +60,11 @@ class DiffimTest(object):
     # Ideally call runTest() first so the images are filled in.
     def doPlot(self, centroidCoord=None, include_Szogy=False, addedImgs=None, **kwargs):
         #fig = plt.figure(1, (12, 12))
+
+        def arr(exp):
+            exp = afwExp(exp)
+            return exp.getMaskedImage().getImage().getArray()
+
         imagesToPlot = [self.im1.im, self.im1.var, self.im2.im, self.im2.var]
         titles = ['Template', 'Template var', 'Science img', 'Science var']
         cx = cy = sz = None
@@ -63,27 +74,27 @@ class DiffimTest(object):
             if len(centroidCoord) == 3:
                 sz = centroidCoord[2]
         if self.D_AL is not None:
-            imagesToPlot.append(self.D_AL.im)
+            imagesToPlot.append(arr(self.D_AL))
             titles.append('A&L')
         if self.D_Zogy is not None:
             titles.append('Zogy')
-            imagesToPlot.append(self.D_Zogy.im)
+            imagesToPlot.append(arr(self.D_Zogy))
         if self.ALres is not None:
             titles.append('A&L(dec)')
-            imagesToPlot.append(self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray())
+            imagesToPlot.append(arr(self.ALres.decorrelatedDiffim))
             titles.append('A&L')
-            imagesToPlot.append(self.ALres.subtractedExposure.getMaskedImage().getImage().getArray())
+            imagesToPlot.append(arr(self.ALres.subtractedExposure))
         if self.D_Zogy is not None and self.ALres is not None:
             titles.append('A&L(dec) - Zogy')  # Plot difference of diffims
-            alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
+            alIm = arr(self.ALres.decorrelatedDiffim)
             if centroidCoord is not None:
                 alIm = alIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
             stats = computeClippedImageStats(alIm)
             print 'A&L(dec):', stats
             #alIm = (alIm - stats[0]) / stats[1]  # need to renormalize the AL image
-            stats = computeClippedImageStats(self.D_Zogy.im)
+            stats = computeClippedImageStats(arr(self.D_Zogy))
             print 'Zogy:', stats
-            zIm = self.D_Zogy.im
+            zIm = arr(self.D_Zogy)
             if centroidCoord is not None:
                 zIm = zIm[(cx-sz):(cx+sz), (cy-sz):(cy+sz)]
             #zIm = (zIm - stats[0]) / stats[1]
@@ -91,19 +102,21 @@ class DiffimTest(object):
             imagesToPlot.append(alIm - zIm)
         if self.ALres is not None:
             titles.append('A&L(dec) - A&L')  # Plot difference of diffims
-            alIm = self.ALres.decorrelatedDiffim.getMaskedImage().getImage().getArray()
-            zIm = self.ALres.subtractedExposure.getMaskedImage().getImage().getArray()
+            alIm = arr(self.ALres.decorrelatedDiffim)
+            zIm = arr(self.ALres.subtractedExposure)
             print 'A&L(dec) - A&L:', computeClippedImageStats(alIm - zIm)
             imagesToPlot.append(alIm - zIm)
         if include_Szogy and self.S_Zogy is not None:
             titles.append('S(Zogy)')
-            imagesToPlot.append(self.S_Zogy.im)
-            print 'Scorr:', computeClippedImageStats(self.S_Zogy.im)
+            S_Zogy = arr(self.S_Zogy)
+            imagesToPlot.append(S_Zogy)
+            print 'Scorr:', computeClippedImageStats(S_Zogy)
             titles.append('S(Zogy) var')
-            imagesToPlot.append(self.S_Zogy.var)
-            print 'Scorr_var:', computeClippedImageStats(self.S_Zogy.var)
+            S_Zogy_var = afwExp(self.S_Zogy).getMaskedImage().getVariance().getArray()
+            imagesToPlot.append(S_Zogy_var)
+            print 'Scorr_var:', computeClippedImageStats(S_Zogy_var)
             titles.append('S(Zogy)/S_var > 5')
-            imagesToPlot.append((self.S_Zogy.im / self.S_Zogy.var > 5.) * 10.0)
+            imagesToPlot.append((S_Zogy / S_Zogy_var > 5.) * 10.0)
         if addedImgs is not None:
             for i, img in enumerate(addedImgs):
                 titles.append('Added ' + str(i))
@@ -212,8 +225,8 @@ class DiffimTest(object):
     def doAlInStack(self, doWarping=False, doDecorr=True, doPreConv=False,
                     spatialBackgroundOrder=0, spatialKernelOrder=0):
         from .tasks import doAlInStack
-        im1 = self.im1.asAfwExposure()
-        im2 = self.im2.asAfwExposure()
+        im1 = afwExp(self.im1)
+        im2 = afwExp(self.im2)
 
         result = doAlInStack(im1, im2, doWarping=doWarping, doDecorr=doDecorr, doPreConv=doPreConv,
             spatialBackgroundOrder=spatialBackgroundOrder,
@@ -222,12 +235,16 @@ class DiffimTest(object):
         return result
 
     def doReMeasurePsfs(self, whichImages=[1, 2]):
-        self.psf1_orig = self.im1.psf
-        self.psf2_orig = self.im2.psf
         if 1 in whichImages:
-            self.im1.doMeasurePsf(self.im1.asAfwExposure())
+            if not isinstance(im1, afwImage.ExposureF):
+                self.psf1_orig = self.im1.psf
+                im1 = afwExp(self.im1)
+            self.im1.doMeasurePsf(im1)
         if 2 in whichImages:
-            self.im2.doMeasurePsf(self.im2.asAfwExposure())
+            if not isinstance(im2, afwImage.ExposureF):
+                self.psf2_orig = self.im2.psf
+                im2 = afwExp(self.im2)
+            self.im2.doMeasurePsf(im2)
 
     def reset(self):
         self.ALres = self.D_Zogy = self.D_AL = self.S_Zogy = None
@@ -253,38 +270,43 @@ class DiffimTest(object):
                 D_Zogy = self.D_Zogy
             if subMethod is 'AL':  # my clean-room (pure python, slow) version of A&L
                 try:
-                    self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
+                    if self.D_AL is None:
+                        self.doAL(spatialKernelOrder=0, spatialBackgroundOrder=1)
                     D_AL = self.D_AL
                 except Exception as e:
                     print(e)
                     D_AL = None
 
             # Run detection next
-            try:
-                if subMethod is 'ALstack':  # Note we DONT set it to 5.5 -- best for noise-free template.
-                    src_AL = doDetection(self.ALres.subtractedExposure)
-                    src['ALstack'] = src_AL
-                elif subMethod is 'ALstack_decorr':
-                    src_AL2 = doDetection(self.ALres.decorrelatedDiffim)
-                    src['ALstack_decorr'] = src_AL2
-                elif subMethod is 'Zogy':
-                    src_Zogy = doDetection(D_Zogy.asAfwExposure())
-                    src['Zogy'] = src_Zogy
-                elif subMethod is 'Zogy_S':  # 'pixel_stdev' doesn't work, so just divide the image by
-                    tmp_S = S_Zogy.clone()   # the variance and use a 'value' threshold.
-                    tmp_S.im /= tmp_S.var
-                    tmp_S.var /= tmp_S.var
-                    #src_SZogy = doDetection(S_ZOGY.asAfwExposure(),
-                    #                        thresholdType='pixel_stdev', doSmooth=False)
-                    src_SZogy = doDetection(tmp_S.asAfwExposure(),
-                                            thresholdType='value', doSmooth=False)
-                    src['SZogy'] = src_SZogy
-                elif subMethod is 'AL' and D_AL is not None:
-                    src_AL = doDetection(D_AL.asAfwExposure())
-                    src['AL'] = src_AL
-            except Exception as e:
-                print(e)
-                pass
+            #try:
+            if subMethod is 'ALstack':  # Note we DONT set it to 5.5 -- best for noise-free template.
+                src_AL = doDetection(self.ALres.subtractedExposure)
+                src['ALstack'] = src_AL
+            elif subMethod is 'ALstack_decorr':
+                src_AL2 = doDetection(self.ALres.decorrelatedDiffim)
+                src['ALstack_decorr'] = src_AL2
+            elif subMethod is 'Zogy':
+                D_Zogy = afwExp(D_Zogy)
+                src_Zogy = doDetection(D_Zogy)
+                src['Zogy'] = src_Zogy
+            elif subMethod is 'Zogy_S':  # 'pixel_stdev' doesn't work, so just divide the image by
+                S_Zogy = afwExp(S_Zogy)
+                tmp_S = S_Zogy.clone()   # the variance and use a 'value' threshold.
+                #tmp_S.im /= tmp_S.var
+                #tmp_S.var /= tmp_S.var
+                tmp_S_mi = tmp_S.getMaskedImage()
+                tmp_S_mi /= tmp_S.getMaskedImage().getVariance()
+                #src_SZogy = doDetection(S_ZOGY,
+                #                        thresholdType='pixel_stdev', doSmooth=False)
+                src_SZogy = doDetection(tmp_S, thresholdType='value', doSmooth=False)
+                src['SZogy'] = src_SZogy
+            elif subMethod is 'AL' and D_AL is not None:
+                D_AL = afwExp(D_AL)
+                src_AL = doDetection(D_AL)
+                src['AL'] = src_AL
+            #except Exception as e:
+            #    print(e)
+            #    pass
 
         # Compare detections to input sources and get true positives and false negatives
         changedCentroid = self.getCentroidsCatalog(transientsOnly=True)
@@ -311,7 +333,8 @@ class DiffimTest(object):
         return detections
 
     def getCentroidsCatalog(self, transientsOnly=False):
-        centroids = centroidsToCatalog(self.centroids, self.im1.asAfwExposure().getWcs(),
+        im1 = afwExp(self.im1)
+        centroids = centroidsToCatalog(self.centroids, im1.getWcs(),
                                        transientsOnly=transientsOnly)
         return centroids
 
@@ -319,11 +342,14 @@ class DiffimTest(object):
         if centroids is None:
             centroids = self.getCentroidsCatalog(transientsOnly=transientsOnly)
 
-        mc1, sources = doForcedPhotometry(centroids, self.im1.asAfwExposure(), asDF=asDF)
-        mc2, _ = doForcedPhotometry(centroids, self.im2.asAfwExposure(), asDF=asDF)
+        im1 = afwExp(self.im1)
+        im2 = afwExp(self.im2)
+        mc1, sources = doForcedPhotometry(centroids, im1, asDF=asDF)
+        mc2, _ = doForcedPhotometry(centroids, im1, asDF=asDF)
         mc_Zogy = mc_AL = mc_ALd = None
         if self.D_Zogy is not None:
-            mc_Zogy, _ = doForcedPhotometry(centroids, self.D_Zogy.asAfwExposure(), asDF=asDF)
+            D_Zogy = afwExp(self.D_Zogy)
+            mc_Zogy, _ = doForcedPhotometry(centroids, D_Zogy, asDF=asDF)
         if self.ALres is not None:
             mc_AL, _ = doForcedPhotometry(centroids, self.ALres.subtractedExposure, asDF=asDF)
             mc_ALd, _ = doForcedPhotometry(centroids, self.ALres.decorrelatedDiffim, asDF=asDF)

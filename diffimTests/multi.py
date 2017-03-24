@@ -5,7 +5,7 @@ from joblib import Parallel, delayed
 
 from .diffimTests import DiffimTest
 from .tasks import doMeasurePsf
-from .afw import afwPsfToArray, afwPsfToShape, arrayToAfwPsf
+from .afw import afwPsfToArray, afwPsfToShape, arrayToAfwPsf, afwExp
 from .psf import computeMoments, resizePsf
 
 
@@ -82,7 +82,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         # re-measure the PSF of the template, save the stats on the orig. and new PSF
         try:
             inputPsf1 = testObj.im1.psf.copy()
-            im1 = testObj.im1.asAfwExposure()
+            im1 = afwExp(testObj.im1)
             res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg=remeasurePsfs[0])
             psf1 = afwPsfToArray(res1.psf, im1)
             psf1 = resizePsf(psf1, inputPsf1.shape)
@@ -109,7 +109,7 @@ def runTest(flux, seed=66, n_varSources=50, n_sources=500, remeasurePsfs=[False,
         # re-measure the PSF of the science image, save the stats on the orig. and new PSF
         try:
             inputPsf2 = testObj.im2.psf.copy()
-            im2 = testObj.im2.asAfwExposure()
+            im2 = afwExp(testObj.im2)
             res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg=remeasurePsfs[1])
             psf2 = afwPsfToArray(res2.psf, im2)
             psf2 = resizePsf(psf2, inputPsf2.shape)
@@ -553,7 +553,7 @@ def runTestORIG(n_sources=500, seed=66, n_varSources=50, flux=1500., sky=300.,
 
         try:
             actualPsf1 = testObj.im1.psf.copy() #dit.makePsf(21, [1.6, 1.6], offset=[0., 0.], theta=0.)
-            im1 = testObj.im1.asAfwExposure()
+            im1 = afwExp(testObj.im1)
             res1 = doMeasurePsf(im1, detectThresh=5.0, measurePsfAlg='psfex')
             psf1 = afwPsfToArray(res1.psf, im1) #.computeImage()
             psf1a = psf1.copy() #/ np.abs(psf2.getArray()).sum()
@@ -573,7 +573,7 @@ def runTestORIG(n_sources=500, seed=66, n_varSources=50, flux=1500., sky=300.,
 
         try:
             actualPsf2 = testObj.im2.psf.copy() #dit.makePsf(21, [1.8, 2.2], offset=[0., 0.], theta=-45.)
-            im2 = testObj.im2.asAfwExposure()
+            im2 = afwExp(testObj.im2)
             res2 = doMeasurePsf(im2, detectThresh=5.0, measurePsfAlg='psfex')
             psf2 = afwPsfToArray(res2.psf, im2) #.computeImage()
             psf2a = psf2.copy() #/ np.abs(psf2.getArray()).sum()
