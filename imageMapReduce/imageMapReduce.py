@@ -724,7 +724,7 @@ class ImageMapReduceTask(pipeBase.Task):
                     self.boxes1.append(bb1)
             xoff += gridStepX
 
-    def _plotBoxes(self, fullBBox, skip=3):
+    def plotBoxes(self, fullBBox, skip=3):
         """Plot both grids of boxes using matplotlib.
 
         Will compute the grid via `_generateGrid` if
