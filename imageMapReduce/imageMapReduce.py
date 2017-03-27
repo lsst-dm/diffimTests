@@ -317,7 +317,7 @@ class ImageReducerSubtask(pipeBase.Task):
             mycatalog.append(record)
 
         # create the coaddpsf
-        psf = measAlg.CoaddPsf(catalog=mycatalog, coaddWcs=wcsref, weightFieldName='weight')
+        psf = measAlg.CoaddPsf(mycatalog, wcsref, 'weight')
         return psf
 
 

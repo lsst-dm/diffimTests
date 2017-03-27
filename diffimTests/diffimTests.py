@@ -294,8 +294,8 @@ class DiffimTest(object):
                 tmp_S = S_Zogy.clone()   # the variance and use a 'value' threshold.
                 #tmp_S.im /= tmp_S.var
                 #tmp_S.var /= tmp_S.var
-                tmp_S_mi = tmp_S.getMaskedImage()
-                tmp_S_mi /= tmp_S.getMaskedImage().getVariance()
+                tmp_S_i = tmp_S.getMaskedImage().getImage().getArray()
+                tmp_S_i[:, :] /= tmp_S.getMaskedImage().getVariance().getArray()[:, :]
                 #src_SZogy = doDetection(S_ZOGY,
                 #                        thresholdType='pixel_stdev', doSmooth=False)
                 src_SZogy = doDetection(tmp_S, thresholdType='value', doSmooth=False)

@@ -6,6 +6,8 @@ import lsst.afw.geom as afwGeom
 import lsst.afw.math as afwMath
 import lsst.meas.algorithms as measAlg
 import lsst.pipe.base as pipeBase
+import lsst.ip.diffim as ipDiffim
+import lsst.log
 
 from .imageMapReduce import (ImageMapReduceConfig, ImageMapperSubtask,
                              ImageMapperSubtaskConfig)
@@ -15,6 +17,7 @@ from . import decorrelation
 from . import zogy
 
 __all__ = ['ALdecMapReduceConfig', 'ALdecMapperSubtask',
+           'ALdecMapReduceConfig2', 'ALdecMapperSubtask2',  # stack prototype task classes
            'ZogyMapReduceConfig', 'ZogyMapperSubtask']
 
 
@@ -93,6 +96,46 @@ class ALdecMapReduceConfig(ImageMapReduceConfig):
     mapperSubtask = pexConfig.ConfigurableField(
         doc='A&L decorrelation subtask to run on each sub-image',
         target=ALdecMapperSubtask
+    )
+
+
+# This does EXACTLY the same as ALdecMapperSubtask, but uses the
+# DecorrelateALKernelTask instead of the test code here.
+class ALdecMapperSubtask2(ipDiffim.DecorrelateALKernelTask):
+    ConfigClass = ipDiffim.DecorrelateALKernelConfig
+    _DefaultName = 'diffimTests_ALdecMapperSubtask2'
+
+    def __init__(self, *args, **kwargs):
+        ipDiffim.DecorrelateALKernelTask.__init__(self, *args, **kwargs)
+
+    def run(self, subExp, expandedSubExp, fullBBox, **kwargs):
+        logLevel = self.log.getLevel()
+        self.log.setLevel(lsst.log.ERROR)  # Prevent too much log verbosity from DecorrelateALKernelTask.run
+        alTaskResult = kwargs.get('alTaskResult', None)
+        templateExposure = kwargs.get('template', None)  # input template
+        scienceExposure = kwargs.get('science', None)    # input science image
+        preConvKernel = kwargs.get('preConvKernel', None)
+
+        # subExp and expandedSubExp are subimages of the (un-decorrelated) diffim!
+        # So here we compute corresponding subimages of im1, and im2
+        subExp2 = afwImage.ExposureF(scienceExposure, expandedSubExp.getBBox())
+        subExp1 = afwImage.ExposureF(templateExposure, expandedSubExp.getBBox())
+
+        psfMatchingKernel = alTaskResult.psfMatchingKernel
+
+        res = ipDiffim.DecorrelateALKernelTask.run(self, subExp2, subExp1, expandedSubExp,
+                                                   psfMatchingKernel)
+        diffim = afwImage.ExposureF(res.correctedExposure, subExp.getBBox())
+        diffim.setPsf(res.correctedExposure.getPsf())
+        out = pipeBase.Struct(subExposure=diffim, decorrelationKernel=res.correctionKernel)
+        self.log.setLevel(logLevel)
+        return out
+
+
+class ALdecMapReduceConfig2(ImageMapReduceConfig):
+    mapperSubtask = pexConfig.ConfigurableField(
+        doc='A&L decorrelation subtask to run on each sub-image',
+        target=ALdecMapperSubtask2
     )
 
 
