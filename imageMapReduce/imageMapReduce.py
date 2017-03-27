@@ -292,13 +292,12 @@ class ImageReducerSubtask(pipeBase.Task):
             `reduceOperation = 'none'`.
         exposure : afwImage.Exposure
             the original exposure which is used here solely for its
-            bounding-box.
+            bounding-box and WCS.
 
         Returns
         -------
         A `measAlg.CoaddPsf` constructed from the PSFs of the individual
         subExposures.
-
         """
         schema = afwTable.ExposureTable.makeMinimalSchema()
         schema.addField("weight", type="D", doc="Coadd weight")
@@ -318,7 +317,7 @@ class ImageReducerSubtask(pipeBase.Task):
             mycatalog.append(record)
 
         # create the coaddpsf
-        psf = measAlg.CoaddPsf(mycatalog, wcsref, 'weight')
+        psf = measAlg.CoaddPsf(catalog=mycatalog, coaddWcs=wcsref, weightFieldName='weight')
         return psf
 
 
