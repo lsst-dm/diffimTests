@@ -356,37 +356,93 @@ class DecorrelateALKernelTask(pipeBase.Task):
 
 
 class DecorrelateALKernelMapperTask(DecorrelateALKernelTask):
+    """Task to be used as an ImageMapperSubtask for computing
+    A&L decorrelation on subimages on a grid across a A&L difference image.
+
+    This task subclasses DecorrelateALKernelTask in order to implement
+    all of that task's configuration parameters, as well as its `run` method.
+    """
     ConfigClass = DecorrelateALKernelConfig
     _DefaultName = 'ipDiffim_DecorrelateALKernelMappertask'
 
     def __init__(self, *args, **kwargs):
         DecorrelateALKernelTask.__init__(self, *args, **kwargs)
 
-    def run(self, subExp, expandedSubExp, fullBBox, **kwargs):
+    def run(self, subExposure, expandedSubExposure, fullBBox, **kwargs):
+        """Perform decorrelation operation on `subExposure`, using
+        `expandedSubExposure` to allow for invalid edge pixels arising from
+        convolutions.
+
+        This method performs A&L decorrelation on `subExposure` using
+        local measures for image variances and PSF. `subExposure` is a
+        sub-exposure of the non-decorrelated A&L diffim. It also
+        requires the corresponding sub-exposures of the template
+        (`template`) and science (`science`) exposures.
+
+        Parameters
+        ----------
+        subExposure : afw.Exposure
+            the sub-exposure of the diffim
+        expandedSubExposure : afw.Exposure
+            the expanded sub-exposure upon which to operate
+        fullBBox : afwGeom.BoundingBox
+            the bounding box of the original exposure
+        template : afw.Exposure
+            the corresponding sub-exposure of the template exposure
+        science : afw.Exposure
+            the corresponding sub-exposure of the science exposure
+        alTaskResult : pipeBase.Struct
+            the result of A&L image differencing on `science` and
+            `template`, importantly containing the resulting
+            `psfMatchingKernel`. Can be `None`, only if
+            `psfMatchingKernel` is not `None`.
+        psfMatchingKernel : Alternative parameter for passing the
+            A&L `psfMatchingKernel` directly.
+        kwargs :
+            additional keyword arguments propagated from
+            `ImageMapReduceTask.run`.
+
+        Returns
+        -------
+        A `pipeBase.Struct containing the result of the `subExposure`
+        processing, labelled 'subExposure'. It also returns the
+        'decorrelationKernel', although that currently is not used.
+
+        Notes
+        -----
+        This `run` method accepts parameters identical to those of
+        `ImageMapperSubtask.run`, since it is called from the
+        `ImageMapperTask`.  See that class for more information.
+        """
         logLevel = self.log.getLevel()
         self.log.setLevel(lsst.log.ERROR)  # Prevent too much log verbosity from DecorrelateALKernelTask.run
-        alTaskResult = kwargs.get('alTaskResult', None)
         templateExposure = kwargs.get('template', None)  # input template
         scienceExposure = kwargs.get('science', None)    # input science image
+        alTaskResult = kwargs.get('alTaskResult', None)
+        psfMatchingKernel = kwargs.get('psfMatchingKernel', None)
         preConvKernel = kwargs.get('preConvKernel', None)
 
         # subExp and expandedSubExp are subimages of the (un-decorrelated) diffim!
         # So here we compute corresponding subimages of im1, and im2
-        subExp2 = afwImage.ExposureF(scienceExposure, expandedSubExp.getBBox())
-        subExp1 = afwImage.ExposureF(templateExposure, expandedSubExp.getBBox())
+        subExp2 = afwImage.Exposure(scienceExposure, expandedSubExposure.getBBox(),
+            dtype=type(scienceExposure.getMaskedImage().getImage().getArray()[0, 0]))
+        subExp1 = afwImage.Exposure(templateExposure, expandedSubExposure.getBBox(),
+            dtype=type(templateExposure.getMaskedImage().getImage().getArray()[0, 0]))
 
-        psfMatchingKernel = alTaskResult.psfMatchingKernel
+        psfMatchingKernel = alTaskResult.psfMatchingKernel if alTaskResult is not None else psfMatchingKernel
 
-        res = DecorrelateALKernelTask.run(self, subExp2, subExp1, expandedSubExp,
+        res = DecorrelateALKernelTask.run(self, subExp2, subExp1, expandedSubExposure,
                                           psfMatchingKernel)
-        diffim = afwImage.ExposureF(res.correctedExposure, subExp.getBBox())
-        diffim.setPsf(res.correctedExposure.getPsf())
+        diffim = res.correctedExposure.Factory(res.correctedExposure, subExposure.getBBox())
         out = pipeBase.Struct(subExposure=diffim, decorrelationKernel=res.correctionKernel)
         self.log.setLevel(logLevel)
         return out
 
 
 class DecorrelateALKernelMapperConfig(ImageMapReduceConfig):
+    """Configuration parameters for the ImageMapReduceTask to be used
+       for A&L decorrelation.
+    """
     mapperSubtask = pexConfig.ConfigurableField(
         doc='A&L decorrelation subtask to run on each sub-image',
         target=DecorrelateALKernelMapperTask

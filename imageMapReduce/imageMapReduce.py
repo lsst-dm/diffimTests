@@ -247,7 +247,7 @@ class ImageReducerSubtask(pipeBase.Task):
                     isinstance(item, afwImage.ExposureU) or isinstance(item, afwImage.ExposureD)):
                 raise TypeError("""Expecting an Exposure type, got %s.
                                    Consider using `reduceOperation="none".""" % str(type(item)))
-            subExp = afwImage.ExposureF(newExp, item.getBBox())
+            subExp = newExp.Factory(newExp, item.getBBox())
             subMI = subExp.getMaskedImage()
             patchMI = item.getMaskedImage()
             isNotNan = ~(np.isnan(patchMI.getImage().getArray()) |
@@ -484,7 +484,7 @@ class ImageMapReduceTask(pipeBase.Task):
 
         Parameters
         ----------
-        exposure : afwImage.ExposureF
+        exposure : afwImage.Exposure
             the full exposure to process
         kwargs :
             additional keyword arguments to be passed to
@@ -509,7 +509,7 @@ class ImageMapReduceTask(pipeBase.Task):
 
         Parameters
         ----------
-        exposure : afwImage.ExposureF
+        exposure : afwImage.Exposure
             the original exposure which is used as the template
         doClone : boolean
             if True, clone the subimages before passing to subtask;
@@ -530,8 +530,8 @@ class ImageMapReduceTask(pipeBase.Task):
         self.log.info("Processing %d sub-exposures", len(self.boxes0))
         mapperResults = []
         for box0, box1 in zip(self.boxes0, self.boxes1):
-            subExp = afwImage.ExposureF(exposure, box0)
-            expandedSubExp = afwImage.ExposureF(exposure, box1)
+            subExp = exposure.Factory(exposure, box0)
+            expandedSubExp = exposure.Factory(exposure, box1)
             if doClone:
                 subExp = subExp.clone()
                 expandedSubExp = expandedSubExp.clone()
