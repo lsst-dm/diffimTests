@@ -28,14 +28,14 @@ import lsst.utils.tests
 import lsst.afw.image as afwImage
 import lsst.afw.math as afwMath
 import lsst.afw.geom as afwGeom
-import lsst.pex.config as pexConfig
-import lsst.meas.algorithms as measAlg
-import lsst.pipe.base as pipeBase
 import lsst.daf.base as dafBase
+import lsst.meas.algorithms as measAlg
+import lsst.pex.config as pexConfig
+import lsst.pipe.base as pipeBase
 
-from diffimTests.imageMapReduce import (ImageMapReduceTask, ImageMapReduceConfig,
-                                        ImageMapperSubtask, ImageMapperSubtaskConfig,
-                                        ImageReducerSubtask, ImageReducerSubtaskConfig)
+from lsst.ip.diffim.imageMapReduce import (ImageMapReduceTask, ImageMapReduceConfig,
+                                           ImageMapperSubtask, ImageMapperSubtaskConfig,
+                                           ImageReducerSubtask, ImageReducerSubtaskConfig)
 
 
 def setup_module(module):
@@ -67,7 +67,7 @@ def makeWcs(offset=0):
 
 def getPsfMoments(psfArray):
     # Borrowed and modified from meas_algorithms/testCoaddPsf
-    sumx2 = sumy2 = sumy = sumx = sum = 0.0
+    sumx2 = sumy2 = sumy = sumx = sumf = 0.0
     for x in range(psfArray.shape[0]):
         for y in range(psfArray.shape[1]):
             f = psfArray[x, y]
@@ -75,12 +75,12 @@ def getPsfMoments(psfArray):
             sumy2 += y*y*f
             sumx += x*f
             sumy += y*f
-            sum += f
-    xbar = sumx/sum
-    ybar = sumy/sum
-    mxx = sumx2 - 2*xbar*sumx + xbar*xbar*sum
-    myy = sumy2 - 2*ybar*sumy + ybar*ybar*sum
-    return sum, xbar, ybar, mxx, myy
+            sumf += f
+    xbar = sumx/sumf
+    ybar = sumy/sumf
+    mxx = sumx2 - 2*xbar*sumx + xbar*xbar*sumf
+    myy = sumy2 - 2*ybar*sumy + ybar*ybar*sumf
+    return sumf, xbar, ybar, mxx, myy
 
 
 def getPsfSecondMoments(psfArray):

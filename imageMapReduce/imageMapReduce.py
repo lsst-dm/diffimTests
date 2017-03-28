@@ -69,7 +69,7 @@ processing individual sub-exposures. It is called from
 `ImageMapReduceTask.run`, and may return a new, processed sub-exposure
 which is to be "stitched" back into a new resulting larger exposure
 (depending on the configured `ImageMapReduceTask.mapperSubtask`);
-otherwise if it does not return an afw.Exposure, then the results are
+otherwise if it does not return an lsst.afw.image.Exposure, then the results are
 passed back directly to the caller.
 
 `ImageReducerSubtask` will either stitch the `mapperResults` list of
@@ -99,7 +99,7 @@ class ImageMapperSubtask(with_metaclass(abc.ABCMeta, pipeBase.Task)):
     sub-exposure which can be be "stitched" back into a new resulting
     larger exposure (depending on the configured
     `ImageReducerSubtask`); otherwise if it does not return an
-    afw.Exposure, then the
+    lsst.afw.image.Exposure, then the
     `ImageReducerSubtask.config.reducerSubtask.reduceOperation`
     should be set to 'none' and the result will be propagated
     as-is.
@@ -122,16 +122,16 @@ class ImageMapperSubtask(with_metaclass(abc.ABCMeta, pipeBase.Task)):
         This method may return a new, processed sub-exposure which can
         be be "stitched" back into a new resulting larger exposure
         (depending on the paired, configured `ImageReducerSubtask`);
-        otherwise if it does not return an afw.Exposure, then the
+        otherwise if it does not return an lsst.afw.image.Exposure, then the
         `ImageReducerSubtask.config.mapperSubtask.reduceOperation`
         should be set to 'none' and the result will be propagated
         as-is.
 
         Parameters
         ----------
-        subExposure : afw.Exposure
+        subExposure : lsst.afw.image.Exposure
             the sub-exposure upon which to operate
-        expandedSubExposure : afw.Exposure
+        expandedSubExposure : lsst.afw.image.Exposure
             the expanded sub-exposure upon which to operate
         fullBBox : afwGeom.BoundingBox
             the bounding box of the original exposure
@@ -141,9 +141,9 @@ class ImageMapperSubtask(with_metaclass(abc.ABCMeta, pipeBase.Task)):
 
         Returns
         -------
-        A `pipeBase.Struct containing the result of the `subExposure` processing,
+        A `lsst.pipe.base.Struct containing the result of the `subExposure` processing,
         which may itself be of any type. See above for details. If it is an
-        afwImage.Exposure (processed sub-exposure), then the name in the Struct
+        lsst.afw.image.Exposure (processed sub-exposure), then the name in the Struct
         should be 'subExposure'. This is implemented here as a pass-through
         example only.
         """
@@ -188,7 +188,7 @@ class ImageReducerSubtask(pipeBase.Task):
         (if `self.config.reduceOperation` is 'none').
 
         If `self.config.reduceOperation` is not 'none', then expect
-        that the `pipeBase.Struct`s in the `mapperResults` list
+        that the `lsst.pipe.base.Struct`s in the `mapperResults` list
         contain sub-exposures named 'subExposure', to be stitched back
         into a single Exposure with the same dimensions, PSF, and mask
         as the input `exposure`. Otherwise, the `mapperResults` list
@@ -197,8 +197,8 @@ class ImageReducerSubtask(pipeBase.Task):
         Parameters
         ----------
         mapperResults : list
-            list of `pipeBase.Struct` returned by `ImageMapperSubtask.run`.
-        exposure : afwImage.Exposure
+            list of `lsst.pipe.base.Struct` returned by `ImageMapperSubtask.run`.
+        exposure : lsst.afw.image.Exposure
             the original exposure which is cloned to use as the
             basis for the resulting exposure (if
             self.config.mapperSubtask.reduceOperation is not 'none')
@@ -208,18 +208,21 @@ class ImageReducerSubtask(pipeBase.Task):
 
         Returns
         -------
-        A `pipeBase.Struct` containing either an `afw.Exposure` (named 'exposure')
-        or a list (named 'result'), depending on `config.reduceOperation`.
+        A `lsst.pipe.base.Struct` containing either an `lsst.afw.image.Exposure`
+        (named 'exposure') or a list (named 'result'), depending on
+        `config.reduceOperation`.
 
         Notes
         -----
-        And currently known issues:
         1. This currently correctly handles overlapping sub-exposures.
            For overlapping sub-exposures, use `config.reduceOperation='average'`.
         2. This correctly handles varying PSFs, constructing the resulting
            exposure's PSF via CoaddPsf (DM-9629).
-        3. To be done: correct handling of masks
-        4. This logic currently makes *two* copies of the original exposure
+
+        Known issues
+        ------------
+        1. To be done: correct handling of masks (nearly there)
+        2. This logic currently makes *two* copies of the original exposure
            (one here and one in `mapperSubtask.run()`). Possibly of concern
            for large images on memory-constrained systems.
         """
@@ -231,8 +234,8 @@ class ImageReducerSubtask(pipeBase.Task):
         newMI = newExp.getMaskedImage()
 
         reduceOp = self.config.reduceOperation
-        weights = None
         if reduceOp == 'copy':
+            weights = None
             newMI.getImage()[:, :] = np.nan
             newMI.getVariance()[:, :] = np.nan
         else:
@@ -262,9 +265,9 @@ class ImageReducerSubtask(pipeBase.Task):
                 subMI.getVariance().getArray()[isNotNan] += patchMI.getVariance().getArray()[isNotNan]
                 subMI.getMask().getArray()[:, :] |= patchMI.getMask().getArray()
                 if reduceOp == 'average':
-                    # wsubim is a view into the `weights` Image
-                    wsubim = afwImage.ImageI(weights, item.getBBox())
-                    wsubim.getArray()[isNotNan] += 1
+                    # wtsView is a view into the `weights` Image
+                    wtsView = afwImage.ImageI(weights, item.getBBox())
+                    wtsView.getArray()[isNotNan] += 1
 
         if reduceOp == 'average':
             wts = weights.getArray().astype(np.float)
@@ -288,18 +291,18 @@ class ImageReducerSubtask(pipeBase.Task):
         Parameters
         ----------
         mapperResults : list
-            list of `pipeBase.Struct` returned by `ImageMapperSubtask.run`.
+            list of `lsst.pipe.base.Struct` returned by `ImageMapperSubtask.run`.
             For this to work, each element of `mapperResults` must contain
             a `subExposure` element, from which the component Psfs are
             extracted (thus the reducerTask cannot have
             `reduceOperation = 'none'`.
-        exposure : afwImage.Exposure
+        exposure : lsst.afw.image.Exposure
             the original exposure which is used here solely for its
             bounding-box and WCS.
 
         Returns
         -------
-        A `measAlg.CoaddPsf` constructed from the PSFs of the individual
+        A `lsst.meas.algorithms.CoaddPsf` constructed from the PSFs of the individual
         subExposures.
         """
         schema = afwTable.ExposureTable.makeMinimalSchema()
@@ -311,6 +314,8 @@ class ImageReducerSubtask(pipeBase.Task):
         wcsref = exposure.getWcs()
         for i, res in enumerate(mapperResults):
             subExp = res.subExposure
+            if subExp.getWcs() != wcsref:
+                raise ValueError('Wcs of subExposure is different from exposure')
             record = mycatalog.getTable().makeRecord()
             record.setPsf(subExp.getPsf())
             record.setWcs(subExp.getWcs())
@@ -487,7 +492,7 @@ class ImageMapReduceTask(pipeBase.Task):
 
         Parameters
         ----------
-        exposure : afwImage.Exposure
+        exposure : lsst.afw.image.Exposure
             the full exposure to process
         kwargs :
             additional keyword arguments to be passed to
@@ -512,18 +517,18 @@ class ImageMapReduceTask(pipeBase.Task):
 
         Parameters
         ----------
-        exposure : afwImage.Exposure
+        exposure : lsst.afw.image.Exposure
             the original exposure which is used as the template
         doClone : boolean
             if True, clone the subimages before passing to subtask;
             in that case, the sub-exps do not have to be considered as read-only
         kwargs :
             additional keyword arguments to be passed to
-            `mapperSubtask.run`
+            `mapperSubtask.run` and `self._generateGrid`, including `forceEvenSized`.
 
         Returns
         -------
-        a list of `pipeBase.Struct`s as returned by `mapperSubtask.run`.
+        a list of `lsst.pipe.base.Struct` as returned by `mapperSubtask.run`.
         """
         if self.boxes0 is None:
             self._generateGrid(exposure, **kwargs)  # possibly pass `forceEvenSized`
@@ -531,6 +536,8 @@ class ImageMapReduceTask(pipeBase.Task):
             raise ValueError('Bounding boxes list and expanded bounding boxes list are of different lengths')
 
         self.log.info("Processing %d sub-exposures", len(self.boxes0))
+        self.log.info("Mapper sub-task: %s", self.mapperSubtask._DefaultName)
+        self.log.info("Reducer sub-task: %s", self.reducerSubtask._DefaultName)
         mapperResults = []
         for box0, box1 in zip(self.boxes0, self.boxes1):
             subExp = exposure.Factory(exposure, box0)
@@ -552,16 +559,16 @@ class ImageMapReduceTask(pipeBase.Task):
         Parameters
         ----------
         mapperResults : list
-            list of `pipeBase.Struct`, each of which was produced by
+            list of `lsst.pipe.base.Struct`, each of which was produced by
             `config.mapperSubtask`
-        exposure : afwImage.Exposure
+        exposure : lsst.afw.image.Exposure
             the original exposure
         **kwargs :
             additional keyword arguments
 
         Returns
         -------
-        Output of `reducerSubtask.run` which is a `pipeBase.Struct`.
+        Output of `reducerSubtask.run` which is a `lsst.pipe.base.Struct`.
         """
         result = self.reducerSubtask.run(mapperResults, exposure, **kwargs)
         return result
@@ -582,12 +589,15 @@ class ImageMapReduceTask(pipeBase.Task):
 
         Parameters
         ----------
-        exposure : `afwImage.Exposure`
+        exposure : lsst.afw.image.Exposure
             input exposure whose full bounding box is to be evenly gridded.
         forceEvenSized : boolean
             force grid elements to have even-valued x- and y- dimensions?
             (Potentially useful if doing Fourier transform of subExposures.)
         """
+        # kwargs are ignored, but necessary to enable optional passing of
+        # `forceEvenSized` from `_runMapper`.
+
         # Extract the config parameters for conciseness.
         gridSizeX = self.config.gridSizeX
         gridSizeY = self.config.gridSizeY
@@ -734,7 +744,7 @@ class ImageMapReduceTask(pipeBase.Task):
 
         Parameters
         ----------
-        exposure : afwImage.Exposure
+        exposure : lsst.afw.image.Exposure
             Exposure whose bounding box is gridded by this task.
         skip : int
             Plot every skip-ped box (help make plots less confusing)

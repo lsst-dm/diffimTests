@@ -363,7 +363,7 @@ class DecorrelateALKernelMapperTask(DecorrelateALKernelTask):
     all of that task's configuration parameters, as well as its `run` method.
     """
     ConfigClass = DecorrelateALKernelConfig
-    _DefaultName = 'ipDiffim_DecorrelateALKernelMappertask'
+    _DefaultName = 'ip_diffim_decorrelateALKernelMapper'
 
     def __init__(self, *args, **kwargs):
         DecorrelateALKernelTask.__init__(self, *args, **kwargs)
@@ -424,10 +424,8 @@ class DecorrelateALKernelMapperTask(DecorrelateALKernelTask):
 
         # subExp and expandedSubExp are subimages of the (un-decorrelated) diffim!
         # So here we compute corresponding subimages of im1, and im2
-        subExp2 = afwImage.Exposure(scienceExposure, expandedSubExposure.getBBox(),
-            dtype=type(scienceExposure.getMaskedImage().getImage().getArray()[0, 0]))
-        subExp1 = afwImage.Exposure(templateExposure, expandedSubExposure.getBBox(),
-            dtype=type(templateExposure.getMaskedImage().getImage().getArray()[0, 0]))
+        subExp2 = scienceExposure.Factory(scienceExposure, expandedSubExposure.getBBox())
+        subExp1 = templateExposure.Factory(templateExposure, expandedSubExposure.getBBox())
 
         psfMatchingKernel = alTaskResult.psfMatchingKernel if alTaskResult is not None else psfMatchingKernel
 
