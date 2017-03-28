@@ -255,10 +255,12 @@ class ImageReducerSubtask(pipeBase.Task):
             if reduceOp == 'copy':
                 subMI.getImage().getArray()[isNotNan] = patchMI.getImage().getArray()[isNotNan]
                 subMI.getVariance().getArray()[isNotNan] = patchMI.getVariance().getArray()[isNotNan]
+                subMI.getMask().getArray()[:, :] |= patchMI.getMask().getArray()
 
             if reduceOp == 'sum' or reduceOp == 'average':  # much of these two options is the same
                 subMI.getImage().getArray()[isNotNan] += patchMI.getImage().getArray()[isNotNan]
                 subMI.getVariance().getArray()[isNotNan] += patchMI.getVariance().getArray()[isNotNan]
+                subMI.getMask().getArray()[:, :] |= patchMI.getMask().getArray()
                 if reduceOp == 'average':
                     # wsubim is a view into the `weights` Image
                     wsubim = afwImage.ImageI(weights, item.getBBox())
@@ -268,6 +270,7 @@ class ImageReducerSubtask(pipeBase.Task):
             wts = weights.getArray().astype(np.float)
             newMI.getImage().getArray()[:, :] /= wts
             newMI.getVariance().getArray()[:, :] /= wts
+            # TBD: set mask to something for pixels where wts == 0. Shouldn't happen.
 
         # Not sure how to construct a PSF when reduceOp=='copy'...
         if reduceOp == 'sum' or reduceOp == 'average':

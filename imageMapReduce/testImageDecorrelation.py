@@ -350,8 +350,15 @@ class DiffimCorrectionTest(lsst.utils.tests.TestCase):
         self._testDecorrelation(expected_var, corrected_diffExp)
         # Also compare the diffim generated here vs. the non-ImageMapReduce one
         corrected_diffExp_OLD = self._runDecorrelationTask(diffExp, mKernel)
-        self.assertFloatsAlmostEqual(corrected_diffExp.getMaskedImage().getImage().getArray(),
-                                     corrected_diffExp_OLD.getMaskedImage().getImage().getArray())
+        self.assertImagesNearlyEqual(corrected_diffExp.getMaskedImage().getImage(),
+                                     corrected_diffExp_OLD.getMaskedImage().getImage())
+        self.assertImagesNearlyEqual(corrected_diffExp.getMaskedImage().getVariance(),
+                                     corrected_diffExp_OLD.getMaskedImage().getVariance())
+        self.assertMasksEqual(corrected_diffExp.getMaskedImage().getMask(),
+                              corrected_diffExp_OLD.getMaskedImage().getMask())
+        # Is this the same as the above? Let's just be complete.
+        self.assertMaskedImagesNearlyEqual(corrected_diffExp.getMaskedImage(),
+                                           corrected_diffExp_OLD.getMaskedImage())
 
     def testDiffimCorrection_mapReduced(self):
         """Test decorrelated diffim when using the imageMapReduce task.
