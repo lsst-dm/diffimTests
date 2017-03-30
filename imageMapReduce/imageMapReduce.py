@@ -165,7 +165,10 @@ class ImageReducerSubtaskConfig(pexConfig.Config):
             "sum": """add pixels from overlaps (probably never wanted; used for testing)
                        into correct location in new exposure""",
             "average": """same as copy, but also average pixels from overlapped regions
-                       (NaNs ignored)"""
+                       (NaNs ignored)""",
+            "coaddPsf": """Instead of constructing an Exposure, take a list of returned
+                       PSFs and use CoaddPsf to construct a single PSF that covers the
+                       entire input exposure""",
         }
     )
 
@@ -228,6 +231,11 @@ class ImageReducerSubtask(pipeBase.Task):
         # No-op; simply pass mapperResults directly to ImageMapReduceTask.run
         if self.config.reduceOperation == 'none':
             return pipeBase.Struct(result=mapperResults)
+
+        if self.config.reduceOperation == 'coaddPsf':
+            # Each element of `mapperResults` should contain 'psf' and 'bbox'
+            coaddPsf = self._constructPsf(mapperResults, exposure)
+            return pipeBase.Struct(result=coaddPsf)
 
         newExp = exposure.clone()
         newMI = newExp.getMaskedImage()
@@ -312,13 +320,18 @@ class ImageReducerSubtask(pipeBase.Task):
         # WCSs are the same, which they better be!).
         wcsref = exposure.getWcs()
         for i, res in enumerate(mapperResults):
-            subExp = res.subExposure
-            if subExp.getWcs() != wcsref:
-                raise ValueError('Wcs of subExposure is different from exposure')
             record = mycatalog.getTable().makeRecord()
-            record.setPsf(subExp.getPsf())
-            record.setWcs(subExp.getWcs())
-            record.setBBox(subExp.getBBox())
+            if 'subExposure' in res.getDict():
+                subExp = res.subExposure
+                if subExp.getWcs() != wcsref:
+                    raise ValueError('Wcs of subExposure is different from exposure')
+                record.setPsf(subExp.getPsf())
+                record.setWcs(subExp.getWcs())
+                record.setBBox(subExp.getBBox())
+            elif 'psf' in res.getDict():
+                record.setPsf(res.psf)
+                record.setWcs(wcsref)
+                record.setBBox(res.bbox)
             record['weight'] = 1.0
             record['id'] = i
             mycatalog.append(record)
