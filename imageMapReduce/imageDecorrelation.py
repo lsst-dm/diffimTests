@@ -34,10 +34,10 @@ import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
 import lsst.log
 
-from .imageMapReduce import ImageMapReduceConfig
+from .imageMapReduce import (ImageMapReduceConfig, ImageMapperSubtask)
 
 __all__ = ("DecorrelateALKernelTask", "DecorrelateALKernelConfig",
-           "DecorrelateALKernelMapperTask", "DecorrelateALKernelMapperConfig")
+           "DecorrelateALKernelMapperSubtask", "DecorrelateALKernelMapReduceConfig")
 
 
 class DecorrelateALKernelConfig(pexConfig.Config):
@@ -185,9 +185,6 @@ class DecorrelateALKernelTask(pipeBase.Task):
         @note Still TBD (ticket DM-6580): understand whether the convolution is correctly modifying
         the variance plane of the new subtractedExposure.
         """
-        self.log.info("Starting.")
-        kimg = None
-
         spatialKernel = psfMatchingKernel
         kimg = afwImage.ImageD(spatialKernel.getDimensions())
         bbox = subtractedExposure.getBBox()
@@ -195,23 +192,20 @@ class DecorrelateALKernelTask(pipeBase.Task):
             xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
         if ycen is None:
             ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
-        self.log.info("Using matching kernel computed at (%d, %d)" % (xcen, ycen))
+        self.log.info("Using matching kernel computed at (%d, %d)", xcen, ycen)
         spatialKernel.computeImage(kimg, True, xcen, ycen)
 
         if svar is None:
             svar = self.computeVarianceMean(exposure)
-        self.log.info("Variance (science): %f" % svar)
         if tvar is None:
             tvar = self.computeVarianceMean(templateExposure)
-        self.log.info("Variance (template): %f" % tvar)
+        self.log.info("Variance (science, template): (%f, %f)", svar, tvar)
 
         var = self.computeVarianceMean(subtractedExposure)
-        self.log.info("Variance (uncorrected diffim): %f" % var)
+        self.log.info("Variance (uncorrected diffim): %f", var)
 
         corrKernel = DecorrelateALKernelTask._computeDecorrelationKernel(kimg.getArray(), svar, tvar)
-        self.log.info("Convolving.")
         correctedExposure, corrKern = DecorrelateALKernelTask._doConvolve(subtractedExposure, corrKernel)
-        self.log.info("Updating correctedExposure and its PSF.")
 
         # Compute the subtracted exposure's updated psf
         psf = subtractedExposure.getPsf().computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
@@ -221,10 +215,9 @@ class DecorrelateALKernelTask(pipeBase.Task):
         psfcK = afwMath.FixedKernel(psfcI)
         psfNew = measAlg.KernelPsf(psfcK)
         correctedExposure.setPsf(psfNew)
-        self.log.info("Complete.")
 
         var = self.computeVarianceMean(correctedExposure)
-        self.log.info("Variance (corrected diffim): %f" % var)
+        self.log.info("Variance (corrected diffim): %f", var)
 
         return pipeBase.Struct(correctedExposure=correctedExposure, correctionKernel=corrKern)
 
@@ -355,8 +348,8 @@ class DecorrelateALKernelTask(pipeBase.Task):
         return outExp, kern
 
 
-class DecorrelateALKernelMapperTask(DecorrelateALKernelTask):
-    """Task to be used as an ImageMapperSubtask for computing
+class DecorrelateALKernelMapperSubtask(DecorrelateALKernelTask, ImageMapperSubtask):
+    """Task to be used as an ImageMapperSubtask for performing
     A&L decorrelation on subimages on a grid across a A&L difference image.
 
     This task subclasses DecorrelateALKernelTask in order to implement
@@ -368,7 +361,9 @@ class DecorrelateALKernelMapperTask(DecorrelateALKernelTask):
     def __init__(self, *args, **kwargs):
         DecorrelateALKernelTask.__init__(self, *args, **kwargs)
 
-    def run(self, subExposure, expandedSubExposure, fullBBox, **kwargs):
+    def run(self, subExposure, expandedSubExposure, fullBBox,
+            template, science, alTaskResult=None, psfMatchingKernel=None,
+            preConvKernel=None, **kwargs):
         """Perform decorrelation operation on `subExposure`, using
         `expandedSubExposure` to allow for invalid edge pixels arising from
         convolutions.
@@ -414,34 +409,34 @@ class DecorrelateALKernelMapperTask(DecorrelateALKernelTask):
         `ImageMapperSubtask.run`, since it is called from the
         `ImageMapperTask`.  See that class for more information.
         """
-        logLevel = self.log.getLevel()
-        self.log.setLevel(lsst.log.ERROR)  # Prevent too much log verbosity from DecorrelateALKernelTask.run
-        templateExposure = kwargs.get('template', None)  # input template
-        scienceExposure = kwargs.get('science', None)    # input science image
-        alTaskResult = kwargs.get('alTaskResult', None)
-        psfMatchingKernel = kwargs.get('psfMatchingKernel', None)
-        preConvKernel = kwargs.get('preConvKernel', None)
+        templateExposure = template  # input template
+        scienceExposure = science  # input science image
+        if alTaskResult is None and psfMatchingKernel is None:
+            raise RuntimeError('Both alTaskResult and psfMatchingKernel cannot be None')
+        psfMatchingKernel = alTaskResult.psfMatchingKernel if alTaskResult is not None else psfMatchingKernel
 
         # subExp and expandedSubExp are subimages of the (un-decorrelated) diffim!
-        # So here we compute corresponding subimages of im1, and im2
+        # So here we compute corresponding subimages of templateExposure and scienceExposure
         subExp2 = scienceExposure.Factory(scienceExposure, expandedSubExposure.getBBox())
         subExp1 = templateExposure.Factory(templateExposure, expandedSubExposure.getBBox())
 
-        psfMatchingKernel = alTaskResult.psfMatchingKernel if alTaskResult is not None else psfMatchingKernel
-
+        # Prevent too much log INFO verbosity from DecorrelateALKernelTask.run
+        logLevel = self.log.getLevel()
+        self.log.setLevel(lsst.log.WARN)
         res = DecorrelateALKernelTask.run(self, subExp2, subExp1, expandedSubExposure,
                                           psfMatchingKernel)
+        self.log.setLevel(logLevel)  # reset the log level
+
         diffim = res.correctedExposure.Factory(res.correctedExposure, subExposure.getBBox())
         out = pipeBase.Struct(subExposure=diffim, decorrelationKernel=res.correctionKernel)
-        self.log.setLevel(logLevel)
         return out
 
 
-class DecorrelateALKernelMapperConfig(ImageMapReduceConfig):
-    """Configuration parameters for the ImageMapReduceTask to be used
-       for A&L decorrelation.
+class DecorrelateALKernelMapReduceConfig(ImageMapReduceConfig):
+    """Configuration parameters for the ImageMapReduceTask to direct it to use
+       DecorrelateALKernelMapperSubtask as its mapperSubtask for A&L decorrelation.
     """
     mapperSubtask = pexConfig.ConfigurableField(
         doc='A&L decorrelation subtask to run on each sub-image',
-        target=DecorrelateALKernelMapperTask
+        target=DecorrelateALKernelMapperSubtask
     )

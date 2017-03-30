@@ -33,8 +33,13 @@ import lsst.meas.algorithms as measAlg
 import lsst.daf.base as dafBase
 
 from lsst.ip.diffim.imageDecorrelation import (DecorrelateALKernelTask,
-                                               DecorrelateALKernelMapperConfig)
+                                               DecorrelateALKernelMapReduceConfig)
 from lsst.ip.diffim.imageMapReduce import ImageMapReduceTask
+
+try:
+    type(verbose)
+except NameError:
+    verbose = False
 
 
 def setup_module(module):
@@ -142,6 +147,13 @@ def makeFakeImages(xim=None, yim=None, svar=0.04, tvar=0.04, psf1=3.3, psf2=2.2,
     im2_psf = singleGaussian2d(x0im, y0im, offset[0], offset[1], psf2[0], psf2[1], theta=theta2)
 
     def makeWcs(offset=0):
+        """ Make a fake Wcs
+
+        Parameters
+        ----------
+        offset : float
+          offset the Wcs by this many pixels.
+        """
         # taken from $AFW_DIR/tests/testMakeWcs.py
         metadata = dafBase.PropertySet()
         metadata.set("SIMPLE", "T")
@@ -265,7 +277,8 @@ class DiffimCorrectionTest(lsst.utils.tests.TestCase):
 
         # Expected (ideal) variance of difference image
         expected_var = self.svar + self.tvar
-        print('EXPECTED VARIANCE:', expected_var)
+        if verbose:
+            print('EXPECTED VARIANCE:', expected_var)
 
         # Create the diffim (uncorrected)
         # Uncorrected diffim exposure - variance plane is wrong (too low)
@@ -284,7 +297,8 @@ class DiffimCorrectionTest(lsst.utils.tests.TestCase):
         # Uncorrected diffim exposure - variance plane is wrong (too low)
         mn = self._computeVarianceMean(diffExp.getMaskedImage())
         self.assertLess(mn, expected_var)
-        print('UNCORRECTED VARIANCE:', var, mn)
+        if verbose:
+            print('UNCORRECTED VARIANCE:', var, mn)
 
         return diffExp, mKernel, expected_var
 
@@ -306,7 +320,8 @@ class DiffimCorrectionTest(lsst.utils.tests.TestCase):
 
         # Check statistics of variance plane in corrected diffim
         mn = self._computeVarianceMean(corrected_diffExp.getMaskedImage())
-        print('CORRECTED VARIANCE:', var, mn)
+        if verbose:
+            print('CORRECTED VARIANCE:', var, mn)
         self.assertClose(mn, expected_var, rtol=0.02)
         self.assertClose(var, mn, rtol=0.05)
 
@@ -318,8 +333,8 @@ class DiffimCorrectionTest(lsst.utils.tests.TestCase):
         corrected_diffExp = self._runDecorrelationTask(diffExp, mKernel)
         self._testDecorrelation(expected_var, corrected_diffExp)
 
-    def testDiffimCorrection_same_variance(self):
-        """Test decorrelated diffim from images with different variances.
+    def testDiffimCorrection(self):
+        """Test decorrelated diffim from images with different combinations of variances.
         """
         # Same variance
         self._testDiffimCorrection(svar=0.04, tvar=0.04)
@@ -331,7 +346,7 @@ class DiffimCorrectionTest(lsst.utils.tests.TestCase):
     def _runDecorrelationTaskMapReduced(self, diffExp, mKernel):
         """ Run decorrelation using the imageMapReducer.
         """
-        config = DecorrelateALKernelMapperConfig()
+        config = DecorrelateALKernelMapReduceConfig()
         config.borderSizeX = config.borderSizeY = 3
         config.reducerSubtask.reduceOperation = 'average'
         task = ImageMapReduceTask(config=config)
@@ -350,13 +365,6 @@ class DiffimCorrectionTest(lsst.utils.tests.TestCase):
         self._testDecorrelation(expected_var, corrected_diffExp)
         # Also compare the diffim generated here vs. the non-ImageMapReduce one
         corrected_diffExp_OLD = self._runDecorrelationTask(diffExp, mKernel)
-        self.assertImagesNearlyEqual(corrected_diffExp.getMaskedImage().getImage(),
-                                     corrected_diffExp_OLD.getMaskedImage().getImage())
-        self.assertImagesNearlyEqual(corrected_diffExp.getMaskedImage().getVariance(),
-                                     corrected_diffExp_OLD.getMaskedImage().getVariance())
-        self.assertMasksEqual(corrected_diffExp.getMaskedImage().getMask(),
-                              corrected_diffExp_OLD.getMaskedImage().getMask())
-        # Is this the same as the above? Let's just be complete.
         self.assertMaskedImagesNearlyEqual(corrected_diffExp.getMaskedImage(),
                                            corrected_diffExp_OLD.getMaskedImage())
 
