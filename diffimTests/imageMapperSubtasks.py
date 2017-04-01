@@ -3,8 +3,8 @@ import numpy as np
 import lsst.pex.config as pexConfig
 import lsst.afw.image as afwImage
 import lsst.afw.geom as afwGeom
-#import lsst.afw.math as afwMath
-#import lsst.meas.algorithms as measAlg
+import lsst.afw.math as afwMath
+import lsst.meas.algorithms as measAlg
 import lsst.pipe.base as pipeBase
 import lsst.ip.diffim as ipDiffim
 import lsst.log
@@ -234,7 +234,7 @@ class SpatialDecorrelateALKernelMapperSubtask(ipDiffim.DecorrelateALKernelTask, 
 
     def run(self, subExposure, expandedSubExposure, fullBBox,
             template, science, alTaskResult=None, psfMatchingKernel=None,
-            preConvKernel=None, **kwargs):
+            preConvKernel=None, returnDiffimPsf=False, **kwargs):
         """Perform decorrelation operation on `subExposure`, using
         `expandedSubExposure` to allow for invalid edge pixels arising from
         convolutions.
@@ -296,16 +296,35 @@ class SpatialDecorrelateALKernelMapperSubtask(ipDiffim.DecorrelateALKernelTask, 
         #self.log.setLevel(lsst.log.WARN)
         #res = ipDiffim.DecorrelateALKernelTask.run(self, subExp2, subExp1, expandedSubExposure,
         #                                           psfMatchingKernel)
-        svar = ipDiffim.DecorrelateALKernel.computeVarianceMean(subExp2)
-        tvar = ipDiffim.DecorrelateALKernel.computeVarianceMean(subExp1)
+        svar = ipDiffim.DecorrelateALKernelTask.computeVarianceMean(self, subExp2)
+        tvar = ipDiffim.DecorrelateALKernelTask.computeVarianceMean(self, subExp1)
 
-        kern = ipDiffim.DecorrelateALKernel._computeDecorrelationKernel(psfMatchingKernel,
-                                                                        svar=svar, tvar=tvar)
-        #self.log.setLevel(logLevel)  # reset the log level
+        kimg = afwImage.ImageD(psfMatchingKernel.getDimensions())
+        bbox = subExposure.getBBox()
+        xcen = (bbox.getBeginX() + bbox.getEndX()) / 2.
+        ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
+        psfMatchingKernel.computeImage(kimg, True, xcen, ycen)
+        kernel = ipDiffim.DecorrelateALKernelTask._computeDecorrelationKernel(kappa=kimg.getArray(),
+                                                                              svar=svar, tvar=tvar)
+        if not returnDiffimPsf:
+            kernelImg = afwImage.ImageD(kernel.shape[0], kernel.shape[1])
+            kernelImg.getArray()[:, :] = kernel
+            kern = afwMath.FixedKernel(kernelImg)
+            maxloc = np.unravel_index(np.argmax(kernel), kernel.shape)
+            kern.setCtrX(maxloc[0])
+            kern.setCtrY(maxloc[1])
+            psf = measAlg.KernelPsf(kern)
 
-        #diffim = res.correctedExposure.Factory(res.correctedExposure, subExposure.getBBox())
-        #out = pipeBase.Struct(subExposure=diffim, decorrelationKernel=res.correctionKernel)
-        out = pipeBase.Struct(psf=kern, bbox=subExposure.getBBox())
+        else:  # Compute the subtracted exposure's updated psf
+            psf = subExposure.getPsf().computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
+            psfc = ipDiffim.DecorrelateALKernelTask.computeCorrectedDiffimPsf(kernel, psf,
+                                                                              svar=svar, tvar=tvar)
+            psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
+            psfcI.getArray()[:, :] = psfc
+            kern = afwMath.FixedKernel(psfcI)
+
+        psf = measAlg.KernelPsf(kern)
+        out = pipeBase.Struct(psf=psf, bbox=subExposure.getBBox())
         return out
 
 
