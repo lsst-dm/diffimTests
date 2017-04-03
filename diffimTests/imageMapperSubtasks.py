@@ -305,7 +305,8 @@ class SpatialDecorrelateALKernelMapperSubtask(ipDiffim.DecorrelateALKernelTask, 
         ycen = (bbox.getBeginY() + bbox.getEndY()) / 2.
         psfMatchingKernel.computeImage(kimg, True, xcen, ycen)
         kernel = ipDiffim.DecorrelateALKernelTask._computeDecorrelationKernel(kappa=kimg.getArray(),
-                                                                              svar=svar, tvar=tvar)
+                                                                            svar=svar, tvar=tvar)
+
         if not returnDiffimPsf:
             kernelImg = afwImage.ImageD(kernel.shape[0], kernel.shape[1])
             kernelImg.getArray()[:, :] = kernel
@@ -313,12 +314,10 @@ class SpatialDecorrelateALKernelMapperSubtask(ipDiffim.DecorrelateALKernelTask, 
             maxloc = np.unravel_index(np.argmax(kernel), kernel.shape)
             kern.setCtrX(maxloc[0])
             kern.setCtrY(maxloc[1])
-            psf = measAlg.KernelPsf(kern)
 
         else:  # Compute the subtracted exposure's updated psf
             psf = subExposure.getPsf().computeImage(afwGeom.Point2D(xcen, ycen)).getArray()
-            psfc = ipDiffim.DecorrelateALKernelTask.computeCorrectedDiffimPsf(kernel, psf,
-                                                                              svar=svar, tvar=tvar)
+            psfc = ipDiffim.DecorrelateALKernelTask.computeCorrectedDiffimPsf(kernel, psf, svar=svar, tvar=tvar)
             psfcI = afwImage.ImageD(psfc.shape[0], psfc.shape[1])
             psfcI.getArray()[:, :] = psfc
             kern = afwMath.FixedKernel(psfcI)
@@ -344,12 +343,6 @@ class SpatialDecorrelateALKernelMapReduceConfig(ImageMapReduceConfig):
         allowed={
             "none": """simply return a list of values and don't re-map results into
                        a new image (noop operation)""",
-            "copy": """copy pixels directly from subimage into correct location in
-                       new exposure (potentially non-deterministic for overlaps)""",
-            "sum": """add pixels from overlaps (probably never wanted; used for testing)
-                       into correct location in new exposure""",
-            "average": """same as copy, but also average pixels from overlapped regions
-                       (NaNs ignored)""",
             "coaddPsf": """Instead of constructing an Exposure, take a list of returned
                        PSFs and use CoaddPsf to construct a single PSF that covers the
                        entire input exposure""",
