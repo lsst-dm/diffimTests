@@ -144,7 +144,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
 
         # Psf and image for template img (index 1)
         template = kwargs.get('template')
-        subExp1 = afwImage.ExposureF(template, expandedSubExp.getBBox())
+        subExp1 = template.Factory(template, expandedSubExp.getBBox())
         subim1 = subExp1.getMaskedImage()
         subarr1 = subim1.getImage().getArray()
         subvar1 = subim1.getVariance().getArray()
@@ -169,7 +169,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
             psf1 = np.pad(psf1, ((0, 0), (1, 1)), mode='constant')
 
         psf1b = psf1; psf2b = psf2
-        if True and psf1.shape[0] == 41:   # it's a measured psf (hack!) Note this *really* helps for measured psfs.
+        if False and psf1.shape[0] == 41:   # it's a measured psf (hack!) Note this *really* helps for measured psfs.
             psf1b = psf1.copy()
             psf1b[psf1b < 0] = 0
             psf1b[0:10, :] = psf1b[:, 0:10] = psf1b[31:41, :] = psf1b[:, 31:41] = 0
@@ -190,7 +190,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
         if not doScorr:
             D_zogy, var_zogy = zogy.computeZogy(subarr1, subarr2, subvar1, subvar2,
                                                 psf1b, psf2b, sig1=sig1, sig2=sig2,
-                                                inImageSpace=imageSpace)
+                                                inImageSpace=imageSpace, padSize=7)
 
             tmpIM.getImage().getArray()[:, :] = D_zogy
             tmpIM.getVariance().getArray()[:, :] = var_zogy
@@ -205,7 +205,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
             tmpIM.getVariance().getArray()[:, :] = S_var
 
         # need to eventually compute diffim PSF and set it here.
-        out = afwImage.ExposureF(tmpExp, subExp.getBBox())
+        out = tmpExp.Factory(tmpExp, subExp.getBBox())
 
         return pipeBase.Struct(subExposure=out)
 

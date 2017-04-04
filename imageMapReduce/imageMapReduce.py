@@ -668,6 +668,8 @@ class ImageMapReduceTask(pipeBase.Task):
             gridSizeX = gridStepX
             gridSizeY = gridStepY
 
+        print('Grid parameters:', gridSizeX, gridSizeY, gridStepX, gridStepY, borderSizeX, borderSizeY)
+
         # first "main" box at 0,0
         bbox0 = afwGeom.Box2I(afwGeom.Point2I(bbox.getBegin()), afwGeom.Extent2I(gridSizeX, gridSizeY))
         # first expanded box
