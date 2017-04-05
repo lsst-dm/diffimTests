@@ -277,9 +277,12 @@ class ImageReducerSubtask(pipeBase.Task):
                     wtsView.getArray()[isNotNan] += 1
 
         if reduceOp == 'average':
+            self.log.info('AVERAGE: Maximum overlap: %d', weights.getArray().max())
             wts = weights.getArray().astype(np.float)
             newMI.getImage().getArray()[:, :] /= wts
             newMI.getVariance().getArray()[:, :] /= wts
+            wtsZero = wts == 0.
+            newMI.getImage().getArray()[wtsZero] = newMI.getVariance().getArray()[wtsZero] = np.nan
             # TBD: set mask to something for pixels where wts == 0. Shouldn't happen. (DM-10009)
 
         # Not sure how to construct a PSF when reduceOp=='copy'...

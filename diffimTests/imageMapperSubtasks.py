@@ -169,7 +169,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
             psf1 = np.pad(psf1, ((0, 0), (1, 1)), mode='constant')
 
         psf1b = psf1; psf2b = psf2
-        if False and psf1.shape[0] == 41:   # it's a measured psf (hack!) Note this *really* helps for measured psfs.
+        if True and psf1.shape[0] == 41:   # it's a measured psf (hack!) Note this *really* helps for measured psfs.
             psf1b = psf1.copy()
             psf1b[psf1b < 0] = 0
             psf1b[0:10, :] = psf1b[:, 0:10] = psf1b[31:41, :] = psf1b[:, 31:41] = 0
@@ -222,6 +222,9 @@ class ZogyMapReduceConfig(ImageMapReduceConfig):
 class SpatialDecorrelateALKernelMapperSubtask(ipDiffim.DecorrelateALKernelTask, ImageMapperSubtask):
     """Task to be used as an ImageMapperSubtask for performing
     A&L decorrelation on subimages on a grid across a A&L difference image.
+
+    THIS IS DESIGNED TO JUST RETURN A CoaddPsf INTENDED FOR CONVOLUTION
+    WITH THE DIFFIM, BUT THAT IS NOT POSSIBLE.
 
     This task subclasses DecorrelateALKernelTask in order to implement
     all of that task's configuration parameters, as well as its `run` method.
