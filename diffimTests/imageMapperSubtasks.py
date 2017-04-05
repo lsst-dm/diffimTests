@@ -131,6 +131,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
         sigmas = kwargs.get('sigmas', None)
         imageSpace = kwargs.get('inImageSpace', False)
         doScorr = kwargs.get('Scorr', False)
+        padSize = kwargs.get('padSize', 7)
 
         # Psf and image for science img (index 2)
         subExp2 = subExp
@@ -190,7 +191,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
         if not doScorr:
             D_zogy, var_zogy = zogy.computeZogy(subarr1, subarr2, subvar1, subvar2,
                                                 psf1b, psf2b, sig1=sig1, sig2=sig2,
-                                                inImageSpace=imageSpace, padSize=7)
+                                                inImageSpace=imageSpace, padSize=padSize)
 
             tmpIM.getImage().getArray()[:, :] = D_zogy
             tmpIM.getVariance().getArray()[:, :] = var_zogy
@@ -199,7 +200,7 @@ class ZogyMapperSubtask(ImageMapperSubtask):
             S, S_var, Pd, Fd = zogy.computeZogyScorr(subarr1, subarr2, subvar1, subvar2,
                                                      psf1b, psf2b, sig1=sig1, sig2=sig2,
                                                      xVarAst=0., yVarAst=0.,
-                                                     inImageSpace=imageSpace, padSize=7)
+                                                     inImageSpace=imageSpace, padSize=padSize)
 
             tmpIM.getImage().getArray()[:, :] = S
             tmpIM.getVariance().getArray()[:, :] = S_var
