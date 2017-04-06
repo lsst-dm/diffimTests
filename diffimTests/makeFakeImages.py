@@ -33,8 +33,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
                    psf_yvary_factor=0., varFlux1=0, varFlux2=np.repeat(620., 10), im2background=0.,
                    n_sources=500, templateNoNoise=False, skyLimited=False, sourceFluxRange=(500., 30000.),
                    variablesNearCenter=False, variablesAvoidBorder=2.1, avoidAllOverlaps=0.,
-                   sourceFluxDistrib='powerlaw', psfSize=21, seed=66, fast=True, verbose=False,
-                   **kwargs):
+                   sourceFluxDistrib='powerlaw', saturation=None, bad_columns=None, psfSize=21, seed=66,
+                   fast=True, verbose=False, **kwargs):
     if seed is not None:  # use None if you set the seed outside of this func.
         np.random.seed(seed)
 
@@ -91,8 +91,10 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
             tries += 1
 
         fluxes = samples[0:n_sources]
-        #fluxes *= sourceFluxRange[1] / fluxes.max()
+        fluxes *= sourceFluxRange[1] / fluxes.max()
+        fluxes -= (fluxes.min() - sourceFluxRange[0])
 
+    print("HERE:",fluxes.max(), fluxes.min())
     #fluxes = np.sort(fluxes)[::-1]
 
     # Place the stars
@@ -276,6 +278,20 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
     # Don't include any astrometric "error" in the PSF, see how well the diffim algo. handles it.
     im2_psf = makePsf(psfType=psfType[1], sigma=psf2, theta=theta2, psfSize=psfSize)
     centroids = np.column_stack((xposns + imSize[0]//2, yposns + imSize[1]//2, fluxes, fluxes2))
+
+    if saturation is not None and saturation > 0:
+        if verbose:
+            print (im1 > saturation).sum(), 'saturated pixels (template)'
+            print (im2 > saturation).sum(), 'saturated pixels (science)'
+        im1[im1 > saturation] = saturation
+        im2[im2 > saturation] = saturation
+
+    if bad_columns is not None:
+        for b in bad_columns:
+            if saturation is None or saturation <= 0:
+                saturation = 5000.
+            im1[:, b] = var_im1[:, b] = saturation
+            im2[:, b+5] = var_im2[:, b] = saturation  # assume a 5-pixel shift
 
     out = {'im1': im1,
            'im2': im2,

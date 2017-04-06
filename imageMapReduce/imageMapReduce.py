@@ -277,8 +277,9 @@ class ImageReducerSubtask(pipeBase.Task):
                     wtsView.getArray()[isNotNan] += 1
 
         if reduceOp == 'average':
-            self.log.info('AVERAGE: Maximum overlap: %d', weights.getArray().max())
             wts = weights.getArray().astype(np.float)
+            self.log.info('AVERAGE: Maximum overlap: %f', wts.max())
+            self.log.info('AVERAGE: Average overlap: %f', np.nanmean(wts))
             newMI.getImage().getArray()[:, :] /= wts
             newMI.getVariance().getArray()[:, :] /= wts
             wtsZero = wts == 0.
