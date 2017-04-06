@@ -206,9 +206,17 @@ class ZogyMapperSubtask(ImageMapperSubtask):
             tmpIM.getVariance().getArray()[:, :] = S_var
 
         # need to eventually compute diffim PSF and set it here.
-        out = tmpExp.Factory(tmpExp, subExp.getBBox())
+        outExp = tmpExp.Factory(tmpExp, subExp.getBBox())
 
-        return pipeBase.Struct(subExposure=out)
+        out = pipeBase.Struct(subExposure=outExp)
+        returnInputs = kwargs.get('returnInputs', False)
+        if returnInputs:
+            out = pipeBase.Struct(subExposure=outExp,
+                                  subarr1=subarr1, subarr2=subarr2,
+                                  subvar1=subvar1, subvar2=subvar2,
+                                  psf1=psf1b, psf2=psf2b,
+                                  sig1=sig1, sig2=sig2)
+        return out
 
 
 class ZogyMapReduceConfig(ImageMapReduceConfig):

@@ -443,6 +443,12 @@ class ImageMapReduceConfig(pexConfig.Config):
         default=True
     )
 
+    returnSubImages = pexConfig.Field(
+        dtype=bool,
+        doc="""Return the input subExposures alongside the processed ones (for debugging)""",
+        default=False
+    )
+
     ignoreMaskPlanes = pexConfig.ListField(
         dtype=str,
         doc="""Mask planes to ignore for sigma-clipped statistics""",
@@ -562,6 +568,10 @@ class ImageMapReduceTask(pipeBase.Task):
                 subExp = subExp.clone()
                 expandedSubExp = expandedSubExp.clone()
             result = self.mapperSubtask.run(subExp, expandedSubExp, exposure.getBBox(), **kwargs)
+            if self.config.returnSubImages:
+                toAdd = pipeBase.Struct(inputSubExposure=subExp,
+                                        inputExpandedSubExposure=expandedSubExp)
+                result.mergeItems(toAdd, 'inputSubExposure', 'inputExpandedSubExposure')
             mapperResults.append(result)
 
         return mapperResults

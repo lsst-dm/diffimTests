@@ -112,7 +112,7 @@ def computeZogyImageSpace(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None
     Pr_hat, Pn_hat, denom, padded_psf1, padded_psf2, Fd = (prereqs[key] for key in
         ['Pr_hat', 'Pn_hat', 'denom', 'Pr', 'Pn', 'Fd'])
 
-    delta = 0. #.1
+    delta = 0.  #1
     Kr_hat = (Pr_hat + delta) / (denom + delta)
     Kn_hat = (Pn_hat + delta) / (denom + delta)
     Kr = np.fft.ifft2(Kr_hat).real
@@ -122,6 +122,16 @@ def computeZogyImageSpace(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None
         ps = padSize #// 2
         Kn = Kn[ps:-ps, ps:-ps]
         Kr = Kr[ps:-ps, ps:-ps]
+
+    # if True and im1_psf.shape[0] == 41:   # it's a measured psf (hack!) This *really* helps for measured psfs.
+    #     # filter the wings of Kn, Kr (see notebook #15)
+    #     Knsum = Kn.mean()
+    #     Kn[0:10, :] = Kn[:, 0:10] = Kn[31:41, :] = Kn[:, 31:41] = 0
+    #     Kn *= Knsum / Kn.mean()
+    #     Krsum = Kr.mean()
+    #     Kr[0:10, :] = Kr[:, 0:10] = Kr[31:41, :] = Kr[:, 31:41] = 0
+    #     Kr *= Krsum / Kr.mean()
+
 
     # Note these are reverse-labelled, this is CORRECT!
     im1c = scipy.ndimage.filters.convolve(im1, Kn, mode='constant', cval=np.nan)
