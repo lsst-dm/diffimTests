@@ -56,11 +56,11 @@ def computeZogyPrereqs(im1, im2, im1_psf, im2_psf, sig1=None, sig2=None, Fr=1., 
     sigR = sig1
     sigN = sig2
     Pr_hat = np.fft.fft2(Pr)
-    #Pr_hat2 = np.conj(Pr_hat) * Pr_hat
+    Pr_hat2 = np.conj(Pr_hat) * Pr_hat
     Pn_hat = np.fft.fft2(Pn)
-    #Pn_hat2 = np.conj(Pn_hat) * Pn_hat
-    denom = np.sqrt((sigN**2 * Fr**2 * np.abs(Pr_hat)**2) + (sigR**2 * Fn**2 * np.abs(Pn_hat)**2))
-    #denom = np.sqrt((sigN**2 * Fr**2 * Pr_hat2) + (sigR**2 * Fn**2 * Pn_hat2))
+    Pn_hat2 = np.conj(Pn_hat) * Pn_hat
+    #denom = np.sqrt((sigN**2 * Fr**2 * np.abs(Pr_hat)**2) + (sigR**2 * Fn**2 * np.abs(Pn_hat)**2))
+    denom = np.sqrt((sigN**2 * Fr**2 * Pr_hat2) + (sigR**2 * Fn**2 * Pn_hat2))
     Fd = Fr*Fn / np.sqrt(sigN**2 * Fr**2 + sigR**2 * Fn**2)
 
     output = {#'sigR': sigR, 'sigN': sigN,
@@ -118,20 +118,21 @@ def computeZogyImageSpace(im1, im2, im1_var, im2_var, im1_psf=None, im2_psf=None
     Kr = np.fft.ifft2(Kr_hat).real
     Kn = np.fft.ifft2(Kn_hat).real
 
-    if padSize > 0:
-        ps = padSize #// 2
-        Kn = Kn[ps:-ps, ps:-ps]
-        Kr = Kr[ps:-ps, ps:-ps]
+    # Uncommenting this block makes it slightly faster, but ~25% worse artifacts:
+    # if padSize > 0:
+    #     ps = padSize #// 2
+    #     Kn = Kn[ps:-ps, ps:-ps]
+    #     Kr = Kr[ps:-ps, ps:-ps]
 
+    # Uncommenting this block makes it also slightly faster (zeros are ignored in convolution) but a bit worse:
     # if True and im1_psf.shape[0] == 41:   # it's a measured psf (hack!) This *really* helps for measured psfs.
     #     # filter the wings of Kn, Kr (see notebook #15)
     #     Knsum = Kn.mean()
-    #     Kn[0:10, :] = Kn[:, 0:10] = Kn[31:41, :] = Kn[:, 31:41] = 0
+    #     Kn[0:5, :] = Kn[:, 0:5] = Kn[36:41, :] = Kn[:, 36:41] = 0
     #     Kn *= Knsum / Kn.mean()
     #     Krsum = Kr.mean()
-    #     Kr[0:10, :] = Kr[:, 0:10] = Kr[31:41, :] = Kr[:, 31:41] = 0
+    #     Kr[0:5, :] = Kr[:, 0:5] = Kr[36:41, :] = Kr[:, 36:41] = 0
     #     Kr *= Krsum / Kr.mean()
-
 
     # Note these are reverse-labelled, this is CORRECT!
     im1c = scipy.ndimage.filters.convolve(im1, Kn, mode='constant', cval=np.nan)
@@ -198,12 +199,12 @@ def computeZogyScorrFourierSpace(im1, im2, im1_var, im2_var, im1_psf, im2_psf,
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
-    #Pn_hat2 = np.conj(Pn_hat) * Pn_hat
-    #Kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * Pn_hat2 / denom**2.
-    Kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
-    #Pr_hat2 = np.conj(Pr_hat) * Pr_hat
-    #Kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * Pr_hat2 / denom**2.
-    Kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
+    Pn_hat2 = np.conj(Pn_hat) * Pn_hat
+    Kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * Pn_hat2 / denom**2.
+    #Kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
+    Pr_hat2 = np.conj(Pr_hat) * Pr_hat
+    Kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * Pr_hat2 / denom**2.
+    #Kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
 
     Kr_hat2 = np.fft.fft2(np.fft.ifft2(Kr_hat)**2)
     Kn_hat2 = np.fft.fft2(np.fft.ifft2(Kn_hat)**2)
@@ -246,8 +247,10 @@ def computeZogyScorrImageSpace(D, im1, im2, im1_var, im2_var, im1_psf, im2_psf,
 
     # Adjust the variance planes of the two images to contribute to the final detection
     # (eq's 26-29).
-    kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
-    kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
+    #kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat)**2. / denom**2.
+    kr_hat = Fr * Fn**2. * np.conj(Pr_hat) * np.abs(Pn_hat*np.conj(Pn_hat)) / denom**2.
+    #kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat)**2. / denom**2.
+    kn_hat = Fn * Fr**2. * np.conj(Pn_hat) * np.abs(Pr_hat*np.conj(Pr_hat)) / denom**2.
 
     kr = np.fft.ifft2(kr_hat).real
     kr = np.roll(np.roll(kr, -1, 0), -1, 1)
