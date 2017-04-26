@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.signal
+#import scipy.signal
 
 from .utils import computeClippedImageStats
 from .exposure import Exposure

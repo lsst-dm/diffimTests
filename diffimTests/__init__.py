@@ -52,4 +52,4 @@ from . import multi
 #from . import decorrelation
 from .imageMapReduce import *
 from .imageMapperSubtasks import *
-
+from .zogyTask import *

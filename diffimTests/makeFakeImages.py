@@ -94,7 +94,7 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
         fluxes *= sourceFluxRange[1] / fluxes.max()
         fluxes -= (fluxes.min() - sourceFluxRange[0])
 
-    print("HERE:",fluxes.max(), fluxes.min())
+    print 'Flux range:', fluxes.max(), fluxes.min()
     #fluxes = np.sort(fluxes)[::-1]
 
     # Place the stars
@@ -281,8 +281,8 @@ def makeFakeImages(imSize=(512, 512), sky=[300., 300.], psf1=[1.6, 1.6], psf2=[1
 
     if saturation is not None and saturation > 0:
         if verbose:
-            print (im1 > saturation).sum(), 'saturated pixels (template)'
-            print (im2 > saturation).sum(), 'saturated pixels (science)'
+            print (im1 >= saturation).sum(), 'saturated pixels (template)'
+            print (im2 >= saturation).sum(), 'saturated pixels (science)'
         im1[im1 > saturation] = saturation
         im2[im2 > saturation] = saturation
 
