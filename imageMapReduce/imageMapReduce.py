@@ -567,12 +567,19 @@ class ImageMapReduceTask(pipeBase.Task):
             if doClone:
                 subExp = subExp.clone()
                 expandedSubExp = expandedSubExp.clone()
-            result = self.mapperSubtask.run(subExp, expandedSubExp, exposure.getBBox(), **kwargs)
-            if self.config.returnSubImages:
-                toAdd = pipeBase.Struct(inputSubExposure=subExp,
-                                        inputExpandedSubExposure=expandedSubExp)
-                result.mergeItems(toAdd, 'inputSubExposure', 'inputExpandedSubExposure')
-            mapperResults.append(result)
+            result = None
+            try:
+                result = self.mapperSubtask.run(subExp, expandedSubExp, exposure.getBBox(), **kwargs)
+            except Exception as e:
+                self.log.warn("Exception raised on box %s", str(box0))
+
+            if result is not None:
+                if self.config.returnSubImages:
+                    toAdd = pipeBase.Struct(inputSubExposure=subExp,
+                                            inputExpandedSubExposure=expandedSubExp)
+                    result.mergeItems(toAdd, 'inputSubExposure', 'inputExpandedSubExposure')
+
+                mapperResults.append(result)
 
         return mapperResults
 
