@@ -299,7 +299,8 @@ def doMeasurePsf(exp, measurePsfAlg='psfex', detectThresh=10.0, startSize=0.01, 
 class PsfMeasurement(object):
     """A test case for SpatialModelPsf"""
 
-    def __init__(self, exposure):
+    def __init__(self, exposure, detectThresh=100):
+        self.detectThresh = detectThresh
         self.setExposure(exposure)
 
     def measure(self, footprintSet, exposure):
@@ -329,7 +330,8 @@ class PsfMeasurement(object):
         bbox = afwGeom.BoxI(afwGeom.PointI(0, 0), afwGeom.ExtentI(self.width, self.height))
         self.cellSet = afwMath.SpatialCellSet(bbox, 100)
 
-        self.footprintSet = afwDetection.FootprintSet(self.mi, afwDetection.Threshold(100), "DETECTED")
+        self.footprintSet = afwDetection.FootprintSet(self.mi, afwDetection.Threshold(self.detectThresh),
+                                                      "DETECTED")
 
         self.catalog = self.measure(self.footprintSet, self.exposure)
 

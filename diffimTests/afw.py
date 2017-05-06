@@ -115,7 +115,7 @@ def afwPsfToArray(psf, img=None, coord=None, centroid=None):
         xcen = ycen = 256.
     out = None
     try:
-        img = psf.computeImage(afwGeom.Point2D(xcen, ycen))
+        img = psf.computeKernelImage(afwGeom.Point2D(xcen, ycen))
         if centroid is not None:
             img = Psf.recenterKernelImage(img, afwGeom.Point2D(centroid[0], centroid[1]))
         out = img.getArray()
@@ -181,7 +181,7 @@ def performALZCExposureCorrection(templateExposure, exposure, subtractedExposure
     # Compute the subtracted exposure's updated psf
     psf = afwPsfToArray(subtractedExposure.getPsf(), subtractedExposure)  # .computeImage().getArray()
     psfc = computeCorrectedDiffimPsf(corrKernel, psf, svar=sig1squared, tvar=sig2squared)
-    psfcI = afwImage.ImageD(subtractedExposure.getPsf().computeImage().getBBox())
+    psfcI = afwImage.ImageD(subtractedExposure.getPsf().computeKernelImage().getBBox())
     psfcI.getArray()[:, :] = psfc
     psfcK = afwMath.FixedKernel(psfcI)
     psfNew = measAlg.KernelPsf(psfcK)

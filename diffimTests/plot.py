@@ -70,6 +70,13 @@ def plotImageGrid(images, nrows_ncols=None, extent=None, clim=None, interpolatio
                 ii = img
             else:
                 ii = ii.computeImage()
+        if hasattr(ii, 'computeKernelImage'):
+            if hasattr(ii, 'getDimensions'):
+                img = afwImage.ImageD(ii.getDimensions())
+                ii.computeKernelImage(img, doNormalize=False)
+                ii = img
+            else:
+                ii = ii.computeImage()
         if hasattr(ii, 'getImage'):
             ii = ii.getImage()
         if hasattr(ii, 'getMaskedImage'):
