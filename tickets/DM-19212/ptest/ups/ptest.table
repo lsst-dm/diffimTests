@@ -1,0 +1,28 @@
+setupRequired(daf_base)
+setupRequired(daf_persistence)
+setupRequired(pex_config)
+setupRequired(geom)
+setupRequired(log)
+setupRequired(ndarray)
+setupRequired(cfitsio)
+setupRequired(numpy)
+setupRequired(minuit2)
+setupRequired(eigen)
+setupRequired(gsl)
+setupRequired(fftw)
+setupRequired(sphgeom)
+setupRequired(utils)
+setupRequired(astropy)
+setupRequired(pybind11)
+setupRequired(astshim)
+setupOptional(matplotlib)
+
+setupOptional(afwdata)
+
+envPrepend(PATH, ${PRODUCT_DIR}/bin)
+
+envPrepend(LD_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
+envPrepend(DYLD_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
+envPrepend(LSST_LIBRARY_PATH, ${PRODUCT_DIR}/lib)
+
+envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)

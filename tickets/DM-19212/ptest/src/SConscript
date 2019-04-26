@@ -1,0 +1,23 @@
+from lsst.sconsUtils import state
+
+
+# Set our source files
+source_files = Glob('*.cc', '*.h')
+
+# Set our required libraries
+libraries = ['pthread','afw','daf_base','pex_exceptions']
+#library_paths = ''
+
+env = state.env
+
+for x in ('-O0','-O1','-O2','-O3'):
+    try:
+        env['CCFLAGS'].remove(x)
+    except ValueError:
+        pass
+	
+# Set our g++ compiler flags
+env.Append(CCFLAGS=['-pthread','-Og'])
+
+# Tell SCons the program to build
+env.Program('ptest', source_files, LIBS = libraries)

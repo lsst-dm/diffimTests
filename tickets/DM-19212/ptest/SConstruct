@@ -1,0 +1,4 @@
+from lsst.sconsUtils import scripts
+
+scripts.BasicSConstruct("ptest",defaultTargets="src/ptest")
+
