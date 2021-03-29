@@ -41,6 +41,40 @@ def makeEllipseQuartersMaskArray(shape, yR, xR):
     return Z
 
 
+def makeRectQuartersMaskArray(shape, yR, xR):
+    """Create a boolean array marking True the rectangular region of yR and xR.
+
+    Origins are in the corners as in DFT space.
+
+    Parameters
+    ----------
+    shape : `tuple` of `int`
+        2 element tuple for the resulting array (y,x) dimensions.
+
+    yR, xR : `float` greater than 0.
+        Semi-major and minor axes of the ellipse region in array index units.
+        yR and xR must satisfy yR + 2 <= shape[0] and xR + 2 <= shape[1].
+
+    Returns
+    -------
+    resultArray : `numpy.ndarray` of dtype `bool`
+
+    Notes
+    -----
+    In accordance with the DFT interpretation of the corners, (0, 0) is the
+    origin and the other corner points are already one pixel off this origin.
+    Pixels equal to the radius are set to True inclusively.
+    """
+    iY = int(np.ceil(yR))
+    iX = int(np.ceil(xR))
+    Z = np.zeros(shape, dtype=bool)
+    Z[:iY, :iX] = True
+    Z[-1:-iY:-1, -1:-iX:-1] = True
+    Z[:iY, -1:-iX:-1] = True
+    Z[-1:-iY:-1, :iX] = True
+    return Z
+
+
 def calculateCutFrequencies(wSig1, wSig2, var1, var2, F1=1., F2=1., limit=0.999):
     """Estimate the radius where fc1,fc2 solutions approach their limit values.
 
